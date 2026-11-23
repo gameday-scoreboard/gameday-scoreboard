@@ -83,6 +83,10 @@ struct Settings {
   std::string town;
   bool wxon{false};
   int wxunit{0};
+  // The Flights page (flights.h): its distance step, facing, receiver and
+  // adsb.lol key, which the state gives back only as flkey_set.
+  int flrad{kFlRadiusDefault}, flface{0};
+  std::string flrx, flkey;
   int msgevery{kMsgEveryDefault};
   int pregame{kPregameDefault};
   NightPrefs night{night_defaults()};
@@ -198,6 +202,13 @@ void load(Settings &s, JsonObjectConst o) {
   num("msgevery", s.msgevery);
   num("pregame", s.pregame);
   num("wxunit", s.wxunit);
+  num("flrad", s.flrad);
+  num("flface", s.flface);
+  if (o["flrx"].is<const char *>())
+    s.flrx = o["flrx"].as<const char *>();
+  // A case starts with a key set by its own value; the state has only flkey_set.
+  if (o["flkey"].is<const char *>())
+    s.flkey = o["flkey"].as<const char *>();
   if (o["hook"].is<const char *>())
     s.hook = o["hook"].as<const char *>();
   if (o["msg"].is<const char *>())
@@ -471,6 +482,10 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
       break;
     case SetKind::WXON: s.wxon = op.on; break;
     case SetKind::WXUNIT: s.wxunit = op.value; break;
+    case SetKind::FL_RADIUS: s.flrad = op.value; break;
+    case SetKind::FL_FACE: s.flface = op.value; break;
+    case SetKind::FL_RX: s.flrx = op.text; break;
+    case SetKind::FL_KEY: s.flkey = op.text; break;
     case SetKind::NIGHT: s.night.on = op.on ? 1 : 0; break;
     case SetKind::NIGHT_START: s.night.start = (uint16_t) op.value; break;
     case SetKind::NIGHT_END: s.night.end = (uint16_t) op.value; break;
@@ -612,6 +627,10 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["town"] = s.town;
   doc["wxon"] = s.wxon;
   doc["wxunit"] = s.wxunit;
+  doc["flrad"] = s.flrad;
+  doc["flface"] = s.flface;
+  doc["flrx"] = s.flrx;
+  doc["flkey_set"] = !s.flkey.empty();
   doc["night"] = s.night.on != 0;
   doc["nightstart"] = night_time_text(s.night.start);
   doc["nightend"] = night_time_text(s.night.end);
@@ -796,7 +815,8 @@ void test_parse_set() {
          "after clock");
   SCHECK(parse_set("after", "off", op, kFavMax) && op.value == (int) After::OFF, "after off");
   SCHECK(parse_set("after", "scoreboard", op, kFavMax) && op.value == (int) After::SCOREBOARD, "after scoreboard");
-  SCHECK(!parse_set("after", "effects", op, kFavMax), "after effects isn't in this firmware");
+  SCHECK(parse_set("after", "effects", op, kFavMax) && op.value == (int) After::EFFECTS, "after effects");
+  SCHECK(!parse_set("after", "fx", op, kFavMax), "after takes the word effects, not fx");
 
   // Every key handle_set_ forwards decodes to something.
   for (const char *key : kSetKeys) {
@@ -841,7 +861,7 @@ void test_scan_leagues() {
 
 // A panel in Favorites with none set runs Live games over every league.
 void test_no_team() {
-  SCHECK(keys(no_team_leagues()) == "nfl,ncaa,mlb,mls,epl,nba,wnba,mcbb,nhl", "every league, kLeagues order");
+  SCHECK(keys(no_team_leagues()) == "nfl,ncaa,mlb,mls,epl,nba,wnba,mcbb,wcbb,nhl", "every league, kLeagues order");
   SCHECK(no_team_leagues().size() == kLeagueCount, "one entry per league");
   SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE, no_team_leagues())) == keys(no_team_leagues()),
          "the no-team default's scan reads every league");

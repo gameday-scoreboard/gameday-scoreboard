@@ -302,6 +302,22 @@ button { font: inherit; color: inherit; }
 }
 .card label.fl { display: block; font-size: 14px; margin: 4px 0 6px; }
 .card label.fl small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; line-height: 1.35; }
+.nethead { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin: 4px 0 6px; }
+.nethead .fl { font-size: 14px; }
+.nethead .fl small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; line-height: 1.35; }
+.nethead .btn { flex: none; }
+#netNearby { margin-bottom: 12px; }
+.netpick {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%;
+  padding: 11px 0; background: none; border: 0; border-top: 1px solid var(--rule);
+  color: var(--text); font: inherit; font-size: 14px; text-align: left; cursor: pointer;
+}
+.netpick:first-child { border-top: 0; }
+.netpick > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.netpick small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+.netpick .val { flex: none; color: var(--muted); font-size: 12px; }
+.netpick.on { color: var(--accent); }
+.netpick.on::after { content: "\2713"; flex: none; color: var(--accent); }
 /* panel picker */
 .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .panelpick {

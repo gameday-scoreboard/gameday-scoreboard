@@ -472,6 +472,10 @@ class HaTracker {
     return this->update(cur, ctx);
   }
 
+  // Forgets every game, so the next read of each fires nothing: what
+  // happened while nobody was following (showing.h) stays unreported.
+  void clear() { this->seen_.clear(); }
+
  private:
   struct Seen {
     std::string event_id;

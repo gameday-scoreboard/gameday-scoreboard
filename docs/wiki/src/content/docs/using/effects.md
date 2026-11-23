@@ -5,9 +5,9 @@ sidebar:
   order: 13
 ---
 
-**Effects** fills the whole panel with a moving pattern, one of 52 from the [WLED](https://kno.wled.ge) project, in place of the scoreboard: a slow plasma for the shelf, falling snow in December, fireworks at a party. It is the third page under **Showing**, next to the Scoreboard and the Clock. The panel keeps following your games underneath, so the moment you go back to the Scoreboard the board is up to date, and the device page, the app, Home Assistant and the remote all keep working while a pattern runs.
+**Effects** fills the whole panel with a moving pattern, one of 52 from the [WLED](https://kno.wled.ge) project, in place of the scoreboard: a slow plasma for the shelf, falling snow in December, fireworks at a party. It is the third page under **Showing**, next to the Scoreboard and the Clock. While a pattern you picked runs, the panel stops reading scores: it shows nothing from ESPN, so it reads nothing and sends Home Assistant nothing about games. Go back to the Scoreboard and it says **Looking for** your team, or the live games it follows, for the second or two it takes to catch up. The device page, the app, Home Assistant and the remote all keep working while a pattern runs. Effects that **After the game** puts up between games keep watching for your next game, so the scoreboard comes back in time.
 
-Nothing plays an effect unless you pick it. Every time the panel starts it shows the Scoreboard, and the panel never switches to Effects on its own.
+Nothing plays an effect unless you pick it. Every time the panel starts it shows the Scoreboard, and the panel never switches to Effects on its own unless you set **After the game** to **Show effects** (see [Between games](#between-games)).
 
 ## Turning it on
 
@@ -20,6 +20,24 @@ On the [device page](/using/device-page/)'s Home tab, under the board:
 Set **Showing** back to **Scoreboard** (or **Clock**) to get the board back. **Brightness**, **Panel on** and the [night schedule](/using/brightness-and-clock/#night-schedule) work on an effect the same as on the board.
 
 In [Home Assistant](/using/home-assistant/), **Select Page** has the same **Effects** option, **Page Next** and **Page Previous** step through it, and **Effect**, **Effect Palette**, **Effect Speed** and **Effect Intensity** set the pattern, so an automation can put a pattern up for a party and the Scoreboard back at bedtime. In the [Game Day app](/get-started/the-app/), the same controls show under **Showing** when it is on **Effects**.
+
+## Between games
+
+The panel can play an effect by itself whenever no game of yours is on, and go back to the scoreboard for the next one. It's off on a new panel. To turn it on:
+
+1. Set **Showing** to **Effects** and pick the effect, palette, speed and intensity you want (see [Turning it on](#turning-it-on)), then set **Showing** back to **Scoreboard**.
+2. On the device page's Display tab, under **Screen**, set **After the game** to **Show effects**.
+
+From then on, once your game's final has been up a while (30 minutes, 10 for baseball), the panel switches **Showing** to **Effects** and plays that effect. It does the same whenever no game of your team or your favorites is on and the next one isn't close, so a panel with no game coming up for months plays it instead of the off-season clock and "No upcoming game". It goes back to the scoreboard by itself:
+
+- at the **Turns on** time before your next game starts (it shows above **After the game**, 15 minutes to start), or when a game of yours goes live, and stays there through the game and its final.
+- when you pick a team, a mode or your favorites, press a [remote](/using/remote/) button that follows something or picks a page, or pick another page under **Showing**. The panel stays on what you picked, and the effect comes back after your next game's final.
+
+While it's between games, the effect steps aside for a few seconds, then comes back, for the cards you turned on under **Between games** that keep their turns: your own [countdown](/using/countdowns/), the [weather](/using/weather/) and the [message card](/using/messages/). The countdown to your next game waits until the scoreboard is back.
+
+Anything on the [list below](#what-the-panel-does-while-an-effect-runs) still takes the screen. After a banner, the night schedule's screen-off, **Panel on** off, the heat or power mark, or a Wi-Fi or internet problem, the effect comes back once it's over. Starting the effect by itself never turns night mode off or lights a panel that's off.
+
+It only takes over while **Showing** is on **Scoreboard**: with the Clock, the Smart board or Effects picked under **Showing**, the panel stays on that page. In Live games, a game on the board that isn't your team's keeps the board.
 
 ## Effect playlists
 

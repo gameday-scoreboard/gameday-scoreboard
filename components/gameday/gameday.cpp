@@ -122,6 +122,12 @@ RTC_NOINIT_ATTR static WakeRtc wake_rtc;  // NOLINT(cppcoreguidelines-avoid-non-
 // ESPN's edge returns 403 to most unfamiliar agents, ESPHome's own among
 // them, but accepts curl.
 static const char *const USER_AGENT = "curl/8.0";
+// adsb.lol and adsbdb ask callers to say who they are.
+#ifdef ESPHOME_PROJECT_VERSION
+static const char *const FL_USER_AGENT = "GameDayScoreboard/" ESPHOME_PROJECT_VERSION " (+https://gameday-scoreboard.com)";
+#else
+static const char *const FL_USER_AGENT = "GameDayScoreboard (+https://gameday-scoreboard.com)";
+#endif
 
 static const uint32_t MINUTE = 60 * 1000;
 static const uint32_t SCHEDULE_INTERVAL = 6 * 60 * MINUTE;
@@ -518,6 +524,7 @@ void GamedayComponent::setup() {
   this->load_nick_();
   this->load_hook_();
   this->load_wx_();
+  this->load_fl_();
   this->pref6_ = global_preferences->make_preference<Prefs6>(fnv1_hash("gameday_prefs6_v1"));
   if (!this->pref6_.load(&this->prefs6_) || this->prefs6_.auto_update > 1)
     this->prefs6_ = Prefs6{};
@@ -650,6 +657,7 @@ void GamedayComponent::set_favorites_(const std::vector<std::pair<uint8_t, uint3
 void GamedayComponent::favorites_changed_(bool first_pick, const std::vector<League> &live_before) {
   bool was_fav_mode = this->favorites_mode_();
   const ::espn::Team *fallback_before = this->fallback_team_();
+  this->fx_between_end_("the favorites changed");
   this->rebuild_favorites_(true);
   if (this->prefs2_.mode == (uint8_t) Mode::FAVORITES && (was_fav_mode || this->favorites_mode_())) {
     // The list changed under the mode: drop the board and let the next
@@ -1113,8 +1121,103 @@ void GamedayComponent::set_fx_controls(select::Select *effect, select::Select *p
     const FxState *f = this->fx_state_;
     if (f != nullptr && f->page != nullptr && strcmp(f->page->option_at(i), "Effects") != 0)
       this->stop_fx_list_("Showing left Effects");
+    // Effects between games: the panel's own change, a yield (the effect
+    // comes back when its reason ends), or somebody picking a page, which
+    // ends the effect between games until after the next game's final.
+    if (this->fx_own_change_)
+      return;
+    this->fx_ours_ = false;
+    if (this->fx_yielding_ || !this->wake_fx_ || this->wake_state_.held)
+      return;
+    ESP_LOGI(TAG, "After the game: %s picked under Showing, so no effects until the next game's final",
+             f != nullptr && f->page != nullptr ? f->page->option_at(i) : "a page");
+    this->wake_state_.held = true;
+    this->defer([this]() { this->wake_tick_(); });
   });
   this->fx_changed_();
+}
+
+// ---- Effects between games (wake.h, After::EFFECTS) -----------------------------
+
+bool GamedayComponent::fx_page_is_(const char *name) const {
+  const FxState *f = this->fx_state_;
+  if (f == nullptr || f->page == nullptr)
+    return false;
+  auto at = f->page->active_index();
+  return at.has_value() && strcmp(f->page->option_at(*at), name) == 0;
+}
+
+// The page manager publishes the new page before this returns, so the page
+// callbacks see fx_own_change_.
+void GamedayComponent::fx_set_page_(const char *name) {
+  this->fx_own_change_ = true;
+  this->fx_().page->make_call().set_option(name).perform();
+  this->fx_own_change_ = false;
+}
+
+// Puts the Effects page up over the Scoreboard when an effect should play
+// between games, and takes it down when not. Only over the Scoreboard: a
+// Clock, Smart board or Effects somebody picked under Showing stays. Only
+// the page the panel put up comes down by itself.
+void GamedayComponent::fx_between_tick_() {
+  const uint32_t now = millis();
+  if (now - this->fx_between_ms_ < 250)
+    return;
+  this->fx_between_ms_ = now;
+  const FxState *f = this->fx_state_;
+  if (f == nullptr || f->page == nullptr || !this->clock_set_())
+    return;  // before pages/effects.yaml set up, or no clock to say what is between games
+  ::espn::FxBetween in;
+  in.between = this->wake_fx_;
+  in.board_ready = this->board_ready_;
+  in.power_on = this->power_on_ && this->display_on();
+  in.screen_on = this->guard_brightness(255) != 0;
+  in.wifi = network::is_connected();
+  in.trouble = ::espn::msg_trouble(this->misses_, this->captive_,
+                                   ::espn::clock_late(this->clock_set_(), this->since_join_ms_()));
+  in.mark = this->guard_mark() != 0;
+  in.banner = this->say_up_(now);
+  in.card_turn = this->msg_shown_ ||
+                 this->countdown_card_((int64_t) this->time_->timestamp_now()) != ::espn::CountdownCard::NONE;
+  const bool want = ::espn::fx_between_want(in);
+  if (want == this->fx_want_)
+    return;
+  this->fx_want_ = want;
+  if (want) {
+    if (!this->fx_page_is_("Scoreboard"))
+      return;
+    ESP_LOGI(TAG, "After the game: an effect between games");
+    this->fx_ours_ = true;
+    this->fx_set_page_("Effects");
+    // The page's own checks (pages/effects.yaml gd_fx_start) can still
+    // send it back, which clears fx_ours_ through the page callback.
+    return;
+  }
+  if (this->fx_ours_ && this->fx_page_is_("Effects")) {
+    const char *why = !in.between       ? "the next game is near or one is live"
+                      : in.card_turn    ? "a card's turn"
+                      : in.banner       ? "a banner"
+                      : !in.screen_on   ? "the night schedule's screen-off"
+                      : !in.power_on    ? "the panel is off"
+                      : in.mark         ? "the heat or power mark"
+                      : !in.wifi        ? "Wi-Fi lost"
+                      : in.trouble      ? "the board's trouble line"
+                                        : "the board isn't ready";
+    ESP_LOGI(TAG, "After the game: effects off for %s", why);
+    this->fx_set_page_("Scoreboard");
+  }
+  this->fx_ours_ = false;
+}
+
+void GamedayComponent::fx_between_end_(const char *why) {
+  if (!this->wake_fx_ || this->wake_state_.held)
+    return;
+  ESP_LOGI(TAG, "After the game: %s, so no effects until the next game's final", why);
+  this->wake_state_.held = true;
+  if (this->fx_ours_ && this->fx_page_is_("Effects"))
+    this->fx_set_page_("Scoreboard");
+  this->fx_ours_ = false;
+  this->wake_tick_();
 }
 
 void GamedayComponent::set_fx_lists_(const std::string &text) {
@@ -1402,9 +1505,15 @@ void GamedayComponent::keep_favorite_(uint8_t league, uint32_t id) {
 }
 
 void GamedayComponent::remote_show_(::espn::RemoteKind page, const ::espn::RemoteTarget &fx) {
-  if (page == ::espn::RemoteKind::SCOREBOARD && (this->wake_clock_ || this->wake_smart_) && !this->wake_state_.held) {
+  if (page == ::espn::RemoteKind::SCOREBOARD &&
+      (this->wake_clock_ || this->wake_smart_ || this->wake_fx_ || this->wake_fl_ || this->wake_wxp_) &&
+      !this->wake_state_.held) {
     ESP_LOGI(TAG, "After the game: the remote asked for the scoreboard, so no %s until the next game's final",
-             this->wake_clock_ ? "clock" : "Smart board");
+             this->wake_clock_   ? "clock"
+             : this->wake_smart_ ? "Smart board"
+             : this->wake_fl_    ? "Flights"
+             : this->wake_wxp_   ? "Weather"
+                                 : "effects");
     this->wake_state_.held = true;
     this->wake_tick_();
   }
@@ -2207,6 +2316,8 @@ void GamedayComponent::loop() {
   if (this->logos_.loop())
     this->fire_action_("logo_ready");  // gameday-common.yaml redraws the logos
   this->fx_tick_();  // the effect playlist's next effect, when one is due
+  this->showing_tick_();  // a picked page stops the reads below (showing.h)
+  this->standby_tick_();  // a dark screen stops them too, but for what could light it
   if (this->logo_held_ && this->logo_hold_done_())
     this->draw_(this->last_fields_);
   if (millis() - this->auto_update_ms_ >= AUTO_UPDATE_TICK) {
@@ -2244,6 +2355,9 @@ void GamedayComponent::loop() {
   this->news_tick_();
   this->season_tick_();
   this->picture_tick_();
+  this->fx_between_tick_();  // after the cards' ticks, so a card's turn takes the screen at once
+  this->fl_tick_();
+  this->wxp_tick_();
   // The game events' clock-driven part (the reminder before the start), and
   // the webhook's posts. Before the demo's early return too.
   if (millis() - this->ha_tick_ms_ >= 15000) {
@@ -2258,7 +2372,7 @@ void GamedayComponent::loop() {
     return;
 #endif
   // The finals rotation turns its cards on its own clock, fetch or no fetch.
-  if (this->recap_on_ && !this->demo_playing_())
+  if (this->recap_on_ && !this->demo_playing_() && !this->standby_ && this->showing_ != ::espn::Showing::PICKED)
     this->recap_tick_();
   this->countdown_tick_();
   if (this->busy_) {
@@ -2294,6 +2408,17 @@ void GamedayComponent::loop() {
           this->news_fail_ms_ = this->gave_up_ms_;
         if (this->job_.need_season)
           this->season_entry_(this->job_.season_league, this->job_.season_id, true)->fail_ms = this->gave_up_ms_;
+        if (this->job_.need_fl == 2) {
+          this->fl_fail_ms_ = this->gave_up_ms_;
+          this->fl_backoff_ms_ = this->fl_fail_.fail(false, 0, random_uint32());
+          this->fl_err_ = ::espn::FlErr::NET;
+        } else if (this->job_.need_fl == 1) {
+          this->fl_rx_fails_ = ::espn::miss_count_after(this->fl_rx_fails_);
+          this->fl_err_ = ::espn::FlErr::NET;
+        } else if (this->job_.need_fl == 3) {
+          this->fl_route_fail_ms_ = this->gave_up_ms_;
+          this->fl_route_backoff_ms_ = this->fl_route_fail_.fail(false, 0, random_uint32());
+        }
         if (this->job_.need_wx >= 3) {
           this->kick_fail_ms_ = this->gave_up_ms_;
           this->kick_backoff_ms_ = this->kick_fail_.fail(false, 0, random_uint32());
@@ -2337,45 +2462,68 @@ void GamedayComponent::loop() {
   // the rest, and the new pick waited behind it.
   const bool board_due = (int32_t) (millis() - this->next_fetch_ms_) >= 0;
   const bool side_wait = ::espn::board_first(millis(), this->board_first_ms_, board_due);
+  // A page somebody picked under Showing has nothing from ESPN on it: no
+  // reads at all until the Scoreboard is back (showing.h), but the clock
+  // the Clock page needs still comes from ESPN when the time servers fail.
+  // A dark screen reads no cards either, and only the game reads that could
+  // light it again (standby_read_due_()).
+  const bool picked = this->showing_ == ::espn::Showing::PICKED;
+  const bool paused = picked || this->standby_;
   if (this->board_first_ms_ != 0 && millis() - this->board_first_ms_ >= ::espn::kBoardFirstMs)
     this->board_first_ms_ = 0;
   // The message card's list, between ESPN reads and outside their timing,
   // but never sooner after a written-off worker than the next ESPN read is.
-  if (this->msg_read_due_ && !side_wait && network::is_connected() &&
+  if (this->msg_read_due_ && !paused && !side_wait && network::is_connected() &&
       (this->gave_up_ms_ == 0 || millis() - this->gave_up_ms_ >= RETRY_INTERVAL)) {
     this->start_msg_job_();
     return;
   }
   // The Top 25 card's poll, the same way.
-  if (this->top25_read_due_ && !side_wait && network::is_connected() && this->clock_set_() &&
+  if (this->top25_read_due_ && !paused && !side_wait && network::is_connected() && this->clock_set_() &&
       (this->gave_up_ms_ == 0 || millis() - this->gave_up_ms_ >= RETRY_INTERVAL)) {
     this->start_top25_job_();
     return;
   }
   // The news card's headlines, the same way.
-  if (this->news_read_due_ && !side_wait && network::is_connected() &&
+  if (this->news_read_due_ && !paused && !side_wait && network::is_connected() &&
       (this->gave_up_ms_ == 0 || millis() - this->gave_up_ms_ >= RETRY_INTERVAL)) {
     this->start_news_job_();
     return;
   }
   // A team's season schedule for the schedule and recap cards, the same way.
-  if (this->season_read_due_ && !side_wait && network::is_connected() &&
+  if (this->season_read_due_ && !paused && !side_wait && network::is_connected() &&
       (this->gave_up_ms_ == 0 || millis() - this->gave_up_ms_ >= RETRY_INTERVAL)) {
     this->start_season_job_();
     return;
+  }
+  // The Flights page's reads, only while it is up on a lit screen, one at a
+  // time like the rest. On a picked page there are no ESPN reads to keep out
+  // of the way of; up After the game, they wait for a gap between ESPN's
+  // reads as the weather's do.
+  if (this->fl_on_ && network::is_connected() &&
+      (paused || (!side_wait && ::espn::wx_gap_ok(this->espn_quiet_ms_()))) &&
+      (this->gave_up_ms_ == 0 || millis() - this->gave_up_ms_ >= RETRY_INTERVAL)) {
+    const uint8_t fl = this->fl_due_();
+    if (fl != 0) {
+      this->start_fl_job_(fl);
+      return;
+    }
   }
   // The weather's lookup and forecast reads, the same way: between ESPN
   // reads, never alongside one, and not while a game the panel follows is
   // live. They also wait while the next ESPN read is near, so even a read
   // that runs to its timeout is done before ESPN's turn (wx_gap_).
-  if (!side_wait && network::is_connected() && ::espn::wx_gap_ok(this->espn_quiet_ms_()) &&
+  // A town typed on the device page is looked up on a picked page too, and
+  // the Weather page has its forecast read whatever has it up.
+  if ((!paused || this->wx_lookup_due_ || this->wxp_on_) && network::is_connected() &&
+      (paused || (!side_wait && ::espn::wx_gap_ok(this->espn_quiet_ms_()))) &&
       (this->gave_up_ms_ == 0 || millis() - this->gave_up_ms_ >= RETRY_INTERVAL)) {
     if (this->wx_due_()) {
       this->start_wx_job_();
       return;
     }
     // The next game's kickoff forecast, when ESPN's event has none.
-    uint8_t kick = this->kick_due_();
+    uint8_t kick = paused ? 0 : this->kick_due_();
     if (kick != 0) {
       this->start_kick_job_(kick);
       return;
@@ -2402,6 +2550,13 @@ void GamedayComponent::loop() {
              this->clock_approx_ ? " (from ESPN)" : "");
     this->publish_selects_();
   }
+  // A picked Weather page reads the owner's games for its bottom row, as
+  // seldom as a dark screen does (standby_read_due_()).
+  const bool watch = picked && this->wxp_watch_() && !this->standby_;
+  if ((picked && !watch) || ((this->standby_ || watch) && !this->standby_read_due_()))
+    return;
+  if (this->standby_ || watch)
+    this->standby_ms_ = millis();
   this->start_job_();
 }
 
@@ -3137,13 +3292,37 @@ void GamedayComponent::wake_tick_() {
   const bool live_other = this->live_mode_() && !this->live_fallback_;
   const bool clock = ::espn::wake_clock(this->wake_, this->wake_state_, in) && !live_other;
   const bool smart = ::espn::wake_smart(this->wake_, this->wake_state_, in) && !live_other;
-  const bool changed =
-      clock != this->wake_clock_ || smart != this->wake_smart_ || was_asleep != this->wake_state_.asleep;
+  const bool fx = ::espn::wake_effects(this->wake_, this->wake_state_, in) && !live_other;
+  const bool flights = ::espn::wake_flights(this->wake_, this->wake_state_, in) && !live_other;
+  const bool weather = ::espn::wake_weather(this->wake_, this->wake_state_, in) && !live_other;
+  const bool changed = clock != this->wake_clock_ || smart != this->wake_smart_ || fx != this->wake_fx_ ||
+                       flights != this->wake_fl_ || weather != this->wake_wxp_ || was_asleep != this->wake_state_.asleep;
+  if (fx != this->wake_fx_) {
+    // fx_between_tick_ puts the page up or takes it down on its next check.
+    ESP_LOGI(TAG, fx ? "After the game: effects until the next game is near"
+                     : "After the game: back to the scoreboard");
+    this->wake_fx_ = fx;
+    // The next game's countdown waits while the effect has the screen.
+    if (this->board_ready_)
+      this->emit_({});
+  }
   if (smart != this->wake_smart_) {
     ESP_LOGI(TAG, smart ? "After the game: the Smart board until the next game is near"
                         : "After the game: back to the scoreboard");
     this->wake_smart_ = smart;
     this->fire_action_("smartboard");
+  }
+  if (flights != this->wake_fl_) {
+    ESP_LOGI(TAG, flights ? "After the game: Flights until the next game is near"
+                          : "After the game: back to the scoreboard");
+    this->wake_fl_ = flights;
+    this->fire_action_("flights");
+  }
+  if (weather != this->wake_wxp_) {
+    ESP_LOGI(TAG, weather ? "After the game: the Weather page until the next game is near"
+                          : "After the game: back to the scoreboard");
+    this->wake_wxp_ = weather;
+    this->fire_action_("weather");
   }
   if (clock != this->wake_clock_) {
     ESP_LOGI(TAG, clock ? "After the game: the clock until the next game is near"
@@ -3312,6 +3491,18 @@ void GamedayComponent::update_state_changed_() {
 // covers the live modes and their fallback, or any favorite's in Favorite
 // teams.
 bool GamedayComponent::followed_game_live_() const {
+  // A picked page reads nothing (showing.h), so a game it left live would
+  // stay live forever: night mode lighting the panel all night for it, and
+  // the automatic update waiting for its end. The picked Weather page is the
+  // exception: it reads the owner's games for its bottom row.
+  const bool watch = this->wxp_watch_();
+  if (this->showing_ == ::espn::Showing::PICKED && !watch)
+    return false;
+  // Dark, a game read more than 5 minutes ago is no longer known to be on:
+  // the owner turned the panel off during it, and the standby reads skip it.
+  // The same on the Weather page, whose reads are as seldom.
+  if ((this->standby_ || watch) && millis() - this->game_read_ms_ > 5 * 60 * 1000)
+    return false;
   if (this->game_.valid && this->game_.state == GameState::IN)
     return true;
   if (this->favorites_mode_())
@@ -3485,8 +3676,10 @@ void GamedayComponent::reset_game_() {
   this->no_game_confirmed_ = false;
 }
 
-void GamedayComponent::restart_board_() {
+void GamedayComponent::restart_board_(bool keep_cards, bool owner_pick) {
   this->reset_game_();
+  if (!keep_cards)
+    this->rebuild_favorites_(false);
   this->scan_live_sides_.clear();  // until the next scan
   this->generation_++;  // a scan in flight read what the board followed before
   this->board_changed_(true);
@@ -3494,8 +3687,141 @@ void GamedayComponent::restart_board_() {
   this->fire_action_("board_pending");  // the boot screen holds (gameday-common.yaml)
   this->end_backoff_wait_();
   this->schedule_next_(0);
+  if (!owner_pick)
+    return;
   // Somebody changed what the panel follows, so they are looking at it.
   this->fire_action_("user_pick");
+  this->fx_between_end_("a new pick");
+}
+
+// ---- Showing (showing.h) --------------------------------------------------------
+
+::espn::Showing GamedayComponent::showing_now_() const {
+  const FxState *f = this->fx_state_;
+  const char *page = nullptr;
+  if (f != nullptr && f->page != nullptr) {
+    auto at = f->page->active_index();
+    if (at.has_value())
+      page = f->page->option_at(*at);
+  }
+  return ::espn::showing_now(page, this->fx_ours_, this->sb_pinned_ != nullptr && *this->sb_pinned_,
+                             this->fl_pinned_ != nullptr && *this->fl_pinned_,
+                             this->wxp_pinned_ != nullptr && *this->wxp_pinned_);
+}
+
+void GamedayComponent::showing_tick_() {
+  const ::espn::Showing now = this->showing_now_();
+  if (now == this->showing_)
+    return;
+  // Power off and the night's screen-off put the Scoreboard page up from a
+  // picked Effects page (pages/effects.yaml, gd_fx_yield). Nobody sees it
+  // while the screen is dark, so the page stays picked until it lights.
+  const bool lit = this->power_on_ && this->display_on() && this->guard_brightness(255) != 0;
+  if (this->showing_ == ::espn::Showing::PICKED && now == ::espn::Showing::BOARD && !lit)
+    return;
+  const ::espn::Showing was = this->showing_;
+  this->showing_ = now;
+  if (now == ::espn::Showing::PICKED) {
+    ESP_LOGI(TAG, "Showing %s: no ESPN reads and no game states to Home Assistant until the Scoreboard is back",
+             ::espn::showing_word(now));
+    return;
+  }
+  if (now == ::espn::Showing::AUTO) {
+    ESP_LOGI(TAG, "Showing %s: no game states to Home Assistant until the Scoreboard is back",
+             ::espn::showing_word(now));
+    return;
+  }
+  if (was != ::espn::Showing::PICKED) {
+    ESP_LOGI(TAG, "Back on the Scoreboard from %s", ::espn::showing_word(was));
+    return;
+  }
+  // Nothing was read while the picked page was up, so every card is as old as
+  // the page: start over as a team change does, the boot screen's "Looking
+  // for" up until the first fresh read, and no old score on the board.
+  ESP_LOGI(TAG, "Back on the Scoreboard from a picked page: reading everything again");
+  this->ha_tracker_.clear();
+  this->board_ready_ = false;
+  this->board_pending_ms_ = millis() == 0 ? 1 : millis();
+  this->restart_board_(false, false);
+}
+
+std::string GamedayComponent::looking_for() const {
+  const char *team = nullptr;
+  if (!this->live_mode_()) {
+    const int held = this->held_fav_();
+    int listed = 0;
+    for (const auto &e : this->fav_) {
+      if (held >= 0 ? (int) e.slot - 1 == held : !this->fav_off_(e)) {
+        team = e.team->name;
+        listed++;
+      }
+    }
+    if (listed != 1)
+      team = nullptr;
+  }
+  return ::espn::looking_for(this->live_mode_(), this->live_word_(), team);
+}
+
+void GamedayComponent::standby_tick_() {
+  const uint32_t now = millis();
+  if (now - this->standby_tick_ms_ < 1000)
+    return;
+  this->standby_tick_ms_ = now;
+  const bool dark = this->screen_dark();
+  if (dark == this->standby_)
+    return;
+  this->standby_ = dark;
+  this->fire_action_("screen");  // pages/guard.yaml pauses or resumes LVGL
+  if (dark) {
+    this->standby_ms_ = now;  // what the panel knew was fresh a moment ago
+    ESP_LOGI(TAG, "Screen dark: no cards, side reads or game states to Home Assistant, and only the reads "
+                  "that could light it again");
+    return;
+  }
+  // The board is as old as the dark: start over as a team change does, with
+  // the boot screen's "Looking for", no old score on the board, and no event
+  // for a score from while it was dark. A return from a picked page this
+  // same loop already did (showing_tick_), and a page After the game put
+  // up has no board to show.
+  if (this->showing_ != ::espn::Showing::BOARD || !this->board_ready_) {
+    ESP_LOGI(TAG, "Screen lit");
+    return;
+  }
+  ESP_LOGI(TAG, "Screen lit: reading everything again");
+  this->ha_tracker_.clear();
+  this->board_ready_ = false;
+  this->board_pending_ms_ = now == 0 ? 1 : now;
+  this->restart_board_(false, false);
+}
+
+// While dark, a read only when it could light the screen again (showing.h,
+// standby_every_ms).
+bool GamedayComponent::standby_read_due_() const {
+  // Lit, this is the picked Weather page's watch on the owner's games.
+  const bool watch = !this->standby_ && this->wxp_watch_();
+  const bool night_dark = this->power_on_ && this->display_on();
+  if (!watch && !night_dark && !this->wake_.on)
+    return false;
+  if (!this->clock_set_() || this->time_ == nullptr)
+    return true;
+  const int64_t epoch = (int64_t) this->time_->timestamp_now();
+  const int64_t kick = this->owner_next_kick_(epoch);
+  // A game last read live, however long ago: the next read says whether it
+  // still is.
+  bool live = this->game_.valid && this->game_.state == GameState::IN;
+  if (this->favorites_mode_())
+    for (const auto &e : this->fav_)
+      live = live || (!this->fav_off_(e) && e.game.valid && e.game.state == GameState::IN);
+  if (watch) {
+    // The Weather page counts from the last game read that came in, so one
+    // put up (or back after a restart) with nothing read lately reads at
+    // once; at most one try a minute while reads fail.
+    const uint32_t now = millis(), every = ::espn::weather_watch_every_ms(live, epoch, kick, this->wake_.lead);
+    return (this->standby_ms_ == 0 || now - this->standby_ms_ >= 60u * 1000u) &&
+           (this->game_read_ms_ == 0 || now - this->game_read_ms_ >= every);
+  }
+  const uint32_t every = ::espn::standby_every_ms(night_dark, this->wake_.on, epoch, kick, this->wake_.lead);
+  return every != 0 && millis() - this->standby_ms_ >= every;
 }
 
 void GamedayComponent::board_changed_(bool board_cleared) {
@@ -3513,7 +3839,7 @@ void GamedayComponent::board_changed_(bool board_cleared) {
 
 ::espn::JobKind GamedayComponent::job_kind_() const {
   const Job &j = this->job_;
-  if (j.need_msg || j.need_top25 || j.need_news || j.need_wx != 0 || j.need_clock)
+  if (j.need_msg || j.need_top25 || j.need_news || j.need_wx != 0 || j.need_fl != 0 || j.need_clock)
     return ::espn::JobKind::SIDE;
   if (j.need_season)
     return ::espn::JobKind::SEASON;
@@ -4280,6 +4606,10 @@ void GamedayComponent::run_job_() {
     this->run_wx_job_();
     return;
   }
+  if (j.need_fl != 0) {
+    this->run_fl_job_();
+    return;
+  }
   if (j.need_clock) {
     // Any status will do, a 404 or a 503 carries the date just the same.
     std::vector<http_request::Header> headers = {{"User-Agent", USER_AGENT}};
@@ -4433,6 +4763,9 @@ void GamedayComponent::run_job_() {
 // Main loop: fold the worker's result into the component state and render.
 void GamedayComponent::apply_job_() {
   Job &j = this->job_;
+  const ::espn::JobKind kind = this->job_kind_();
+  if (kind == ::espn::JobKind::BOARD || kind == ::espn::JobKind::FAV_TEAM)
+    this->game_read_ms_ = millis();
   if (j.need_msg) {
     this->apply_msg_job_();  // whatever the board follows, the card is the same
     return;
@@ -4451,6 +4784,10 @@ void GamedayComponent::apply_job_() {
   }
   if (j.need_wx != 0) {
     this->apply_wx_job_();  // a forecast is the same whatever the board follows
+    return;
+  }
+  if (j.need_fl != 0) {
+    this->apply_fl_job_();  // the sky is the same whatever the board follows
     return;
   }
   if (j.need_clock) {
@@ -5057,6 +5394,7 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
     f.status_text = ::espn::with_score_log(f.status_text, g.state == GameState::POST ? g.headline : "",
                                            this->score_log_.lines(g.event_id));
   const GameSnapshot &ha = this->ha_game_();
+  f.ha_quiet = this->showing_ != ::espn::Showing::BOARD || this->standby_;
   f.ha_status_text = ::espn::ha_status_text(ha, kickoff_of(ha));
   f.ha_last_play = ha.last_play;
   if (ha.valid && ha.state != GameState::NOT_FOUND) {
@@ -5349,7 +5687,7 @@ void GamedayComponent::clock_next_line_(UpdateFields &f, const GameSnapshot &g) 
   bool custom = this->card_on(::espn::Card::CUSTOM) && start != 0 && now < start + ::espn::kDayS;
   // After the game's clock keeps the screen between games; the owner's own
   // countdown and the weather still get their turns.
-  bool next = this->countdown_on() && !this->wake_clock_ && g.valid && g.state == GameState::PRE && !g.time_tbd &&
+  bool next = this->countdown_on() && !this->wake_clock_ && !this->wake_fx_ && g.valid && g.state == GameState::PRE && !g.time_tbd &&
               g.kickoff_epoch > now;
   bool weather = this->wx_card_ready_();
   if (this->live_mode_() && !this->live_fallback_) {
@@ -5499,10 +5837,68 @@ bool GamedayComponent::wx_due_() const {
     return false;
   if (this->wx_lookup_due_)
     return true;
-  if (!this->weather_on() || !this->wx_place_known_() || !this->clock_set_() || this->demo_playing_() ||
-      this->followed_game_live_())
+  // The Weather page on screen reads it with the card off, and during a
+  // live game (its bottom row has the score; the read is one small one each
+  // half hour, and waits for a gap between ESPN's).
+  if (!(this->weather_on() || this->wxp_on_) || !this->wx_place_known_() || !this->clock_set_() ||
+      this->demo_playing_() || (this->followed_game_live_() && !this->wxp_on_))
     return false;
   return this->wx_reread_ || this->wx_read_ms_ == 0 || now - this->wx_read_ms_ >= ::espn::kWxReadMs;
+}
+
+// Whether the Weather page is up on a lit screen: only then is the forecast
+// read for it (with the card off, or a game live) and, picked under Showing,
+// the owner's games for its bottom row.
+void GamedayComponent::wxp_tick_() {
+  const uint32_t now = millis();
+  if (now - this->wxp_tick_ms_ < 250)
+    return;
+  this->wxp_tick_ms_ = now;
+  bool on = false;
+  const FxState *f = this->fx_state_;
+  if (f != nullptr && f->page != nullptr) {
+    auto at = f->page->active_index();
+    const char *page = at.has_value() ? f->page->option_at(*at) : nullptr;
+    on = page != nullptr && strcmp(page, "Weather") == 0;
+  }
+  on = on && this->power_on_ && this->display_on() && this->guard_brightness(255) != 0;
+  if (on == this->wxp_on_)
+    return;
+  this->wxp_on_ = on;
+  ESP_LOGI(TAG, on ? "Weather page: up" : "Weather page: down");
+  this->rebuild_state_(&this->last_fields_);
+}
+
+void GamedayComponent::weather_view(::espn::WxPageView &v, bool wide) const {
+  ::espn::WxPageIn in;
+  in.town = this->wx_.town[0] != '\0';
+  in.not_found = this->wx_lookup_status_ == 200 && !this->wx_place_known_();
+  in.fresh = this->wx_forecast_.valid && this->wx_read_ms_ != 0 && millis() - this->wx_read_ms_ < ::espn::kWxFreshMs;
+  in.failing = this->wx_fail_ms_ != 0;
+  in.fahrenheit = this->wx_fahrenheit_();
+  in.wide = wide;
+  if (this->clock_set_() && this->time_ != nullptr) {
+    const ESPTime t = this->time_->now();
+    in.now_min = ::espn::wx_days_from_civil(t.year, t.month, t.day_of_month) * 1440 + t.hour * 60 + t.minute;
+    in.epoch = (int64_t) t.timestamp;
+  }
+  // The owner's live games for the bottom row: every favorite's in Favorite
+  // teams, else the board's when it is the owner's (Live games' own team, or
+  // a game of theirs on its board).
+  if (this->followed_game_live_()) {
+    if (this->favorites_mode_()) {
+      for (const auto &e : this->fav_)
+        if (in.n_live < 2 && !this->fav_off_(e) && e.game.valid && e.game.state == GameState::IN)
+          in.live[in.n_live++] = &e.game;
+    } else if (this->game_.valid && this->game_.state == GameState::IN) {
+      const GameSnapshot &g = this->game_;
+      const uint8_t league = this->schedule_.league;
+      if (!this->live_mode_() || this->live_fallback_ || this->owner_team_(league, g.team_id) ||
+          this->owner_team_(league, g.opp_id))
+        in.live[in.n_live++] = &g;
+    }
+  }
+  ::espn::wx_page_compose(in, this->wx_forecast_, v);
 }
 
 // After midnight the forecast's first day is yesterday's: move it on a day,
@@ -5881,6 +6277,361 @@ void GamedayComponent::day_tick_() {
   ESP_LOGI(TAG, "New local day, redrawing the kickoff labels");
   this->redraw_board_();
 }
+
+// ---- The Flights page (flights.h, flights_page.h) -----------------------------
+
+// Built for size, as flights.h is.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC push_options
+#pragma GCC optimize("Os")
+#endif
+
+void GamedayComponent::load_fl_() {
+  this->fl_pref_ = global_preferences->make_preference<PrefsFl>(fnv1_hash("gameday_fl_v1"));
+  if (!this->fl_pref_.load(&this->fl_)) {
+    this->fl_ = PrefsFl{};
+    this->fl_.rad = ::espn::kFlRadiusDefault;
+  }
+  // A later firmware's blob, or damage, goes back to the defaults field by field.
+  if (this->fl_.rad >= ::espn::kFlRadiusSteps)
+    this->fl_.rad = ::espn::kFlRadiusDefault;
+  if (this->fl_.face > 8)
+    this->fl_.face = 0;
+  this->fl_.rx[::espn::kFlTextMax] = '\0';
+  this->fl_.key[::espn::kFlTextMax] = '\0';
+  if (!::espn::fl_text_ok(this->fl_.rx))
+    memset(this->fl_.rx, 0, sizeof(this->fl_.rx));
+  if (!::espn::fl_text_ok(this->fl_.key))
+    memset(this->fl_.key, 0, sizeof(this->fl_.key));
+}
+
+void GamedayComponent::set_fl_(const PrefsFl &p) {
+  if (memcmp(&p, &this->fl_, sizeof(p)) == 0)
+    return;
+  const bool rx = strcmp(p.rx, this->fl_.rx) != 0, key = strcmp(p.key, this->fl_.key) != 0;
+  const bool rad = p.rad != this->fl_.rad;
+  this->fl_ = p;
+  if (rx) {
+    // A new receiver gets its own tries, starting now.
+    this->fl_rx_fails_ = 0;
+    this->fl_rx_ms_ = 0;
+    ESP_LOGI(TAG, "Flights: receiver %s", p.rx[0] != '\0' ? p.rx : "none, adsb.lol only");
+  }
+  if (key) {
+    // A new key can lift a limit, so adsb.lol is asked again now.
+    this->fl_fail_ms_ = 0;
+    this->fl_fail_.clear();
+    this->fl_lol_ms_ = 0;
+    ESP_LOGI(TAG, "Flights: adsb.lol key %s", p.key[0] != '\0' ? "set" : "cleared");
+  }
+  if (rad) {
+    // Read the new distance now; until then the page draws the planes within it.
+    this->fl_rx_ms_ = 0;
+    this->fl_lol_ms_ = 0;
+  }
+  char radius[16];
+  this->fl_radius_text_(radius, sizeof(radius));
+  ESP_LOGI(TAG, "Flights: within %s, facing %s", radius,
+           p.face == 0 ? "any way" : ::espn::compass8((p.face - 1) * 45.0f));
+  this->fl_pref_.save(&this->fl_);
+  this->sync_prefs_();
+  this->rebuild_state_(&this->last_fields_);
+}
+
+void GamedayComponent::fl_radius_text_(char *out, size_t n) const {
+  const bool metric = this->fl_metric_();
+  snprintf(out, n, "%u %s", (unsigned) (metric ? ::espn::kFlRadiusKm[this->fl_.rad] : ::espn::kFlRadiusMi[this->fl_.rad]),
+           metric ? "km" : "mi");
+}
+
+uint32_t GamedayComponent::fl_wait_s_() const {
+  if (this->fl_fail_ms_ == 0)
+    return 0;
+  const uint32_t since = millis() - this->fl_fail_ms_;
+  return since < this->fl_backoff_ms_ ? (this->fl_backoff_ms_ - since) / 1000 : 0;
+}
+
+int GamedayComponent::fl_card_index_() const {
+  if (this->fl_card_[0] == '\0')
+    return -1;
+  const ::espn::Sky &sky = this->fl_data_.sky;
+  for (uint8_t i = 0; i < sky.n; i++)
+    if (strcmp(sky.p[i].hex, this->fl_card_) == 0)
+      return i;
+  return -1;
+}
+
+const GamedayComponent::FlRouteSlot *GamedayComponent::fl_route_slot_(const char *call) const {
+  if (!::espn::airline_call(call))
+    return nullptr;
+  const uint32_t now = millis();
+  for (const auto &r : this->fl_data_.routes) {
+    if (r.call[0] == '\0' || strcmp(r.call, call) != 0)
+      continue;
+    return now - r.at_ms < (r.route.found ? ::espn::kFlRouteHitMs : ::espn::kFlRouteMissMs) ? &r : nullptr;
+  }
+  return nullptr;
+}
+
+// Whether the Flights page is up on a lit screen: only then does it read.
+void GamedayComponent::fl_tick_() {
+  const uint32_t now = millis();
+  if (now - this->fl_tick_ms_ < 250)
+    return;
+  this->fl_tick_ms_ = now;
+  bool on = false;
+  const FxState *f = this->fx_state_;
+  if (f != nullptr && f->page != nullptr) {
+    auto at = f->page->active_index();
+    const char *page = at.has_value() ? f->page->option_at(*at) : nullptr;
+    on = page != nullptr && strcmp(page, "Flights") == 0;
+  }
+  on = on && this->power_on_ && this->display_on() && this->guard_brightness(255) != 0;
+  if (on == this->fl_on_)
+    return;
+  this->fl_on_ = on;
+  this->fl_on_ms_ = now;
+  ESP_LOGI(TAG, on ? "Flights: up, reading the planes near home" : "Flights: down, no more reads");
+  this->rebuild_state_(&this->last_fields_);
+}
+
+// Main loop: the read due now, if any. The receiver first, every 10 s; after
+// two failures in a row adsb.lol takes over and the receiver is tried once
+// a minute until it answers. adsb.lol every 60 s, 30 s with a key, and not
+// while a failure's wait runs. Then the card's plane's route, when adsbdb
+// hasn't been asked about its callsign lately.
+uint8_t GamedayComponent::fl_due_() {
+  if (this->busy_ || !this->wx_place_known_() || this->demo_playing_())
+    return 0;
+  const uint32_t now = millis();
+  if (this->fl_.rx[0] != '\0') {
+    const uint32_t gap = this->fl_receiver_() ? ::espn::kFlReceiverMs : ::espn::kFlReceiverRetryMs;
+    if (this->fl_rx_ms_ == 0 || now - this->fl_rx_ms_ >= gap)
+      return 1;
+  }
+  if (!this->fl_receiver_()) {
+    const bool waiting = this->fl_fail_ms_ != 0 && now - this->fl_fail_ms_ < this->fl_backoff_ms_;
+    const uint32_t gap = this->fl_.key[0] != '\0' ? ::espn::kFlLolKeyMs : ::espn::kFlLolMs;
+    if (!waiting && (this->fl_lol_ms_ == 0 || now - this->fl_lol_ms_ >= gap))
+      return 2;
+  }
+  if (this->fl_read_ms_ == 0 || now - this->fl_read_ms_ >= ::espn::kFlStaleMs)
+    return 0;
+  const int card = this->fl_card_index_();
+  if (card < 0)
+    return 0;
+  const char *call = this->fl_data_.sky.p[card].call;
+  if (!::espn::airline_call(call) || this->fl_route_slot_(call) != nullptr)
+    return 0;
+  if (this->fl_route_ms_ != 0 && now - this->fl_route_ms_ < ::espn::kFlRouteGapMs)
+    return 0;
+  if (this->fl_route_fail_ms_ != 0 && now - this->fl_route_fail_ms_ < this->fl_route_backoff_ms_)
+    return 0;
+  return 3;
+}
+
+void GamedayComponent::start_fl_job_(uint8_t kind) {
+  ::espn::reset_in_place(this->job_);
+  Job &j = this->job_;
+  j.generation = this->generation_;
+  j.need_fl = kind;
+  const uint32_t now = millis() == 0 ? 1 : millis();
+  if (kind == 3) {
+    const int card = this->fl_card_index_();
+    if (card >= 0)
+      memcpy(j.fl_call, this->fl_data_.sky.p[card].call, sizeof(j.fl_call));
+    j.fl_url = ::espn::route_url(j.fl_call);
+    this->fl_route_ms_ = now;
+  } else {
+    j.fl_lat = this->wx_.lat;
+    j.fl_lon = this->wx_.lon;
+    j.fl_radius_km = this->fl_radius_km_();
+    if (kind == 1) {
+      j.fl_url = ::espn::receiver_url(this->fl_.rx);
+      this->fl_rx_ms_ = now;
+    } else {
+      j.fl_url = ::espn::point_url(j.fl_lat, j.fl_lon, ::espn::radius_nm_for(j.fl_radius_km));
+      j.fl_key = this->fl_.key;
+      this->fl_lol_ms_ = now;
+    }
+  }
+  this->start_worker_();
+}
+
+// Worker task.
+void GamedayComponent::run_fl_job_() {
+  Job &j = this->job_;
+  static const char *const kWhat[] = {"", "the receiver", "adsb.lol", "adsbdb"};
+  const char *what = kWhat[j.need_fl < 4 ? j.need_fl : 0];
+  if (j.fl_url.empty())
+    return;
+  std::vector<http_request::Header> headers = {{"User-Agent", FL_USER_AGENT}, {"Accept", "application/json"}};
+  if (!j.fl_key.empty())
+    headers.push_back({"x-api-key", j.fl_key});
+  ESP_LOGD(TAG, "Flights: reading %s", what);
+  auto container = this->http_->get(j.fl_url, headers, {"retry-after", "x-ratelimit-reset"});
+  if (container == nullptr) {
+    ESP_LOGW(TAG, "Flights: no answer from %s", what);
+    return;
+  }
+  j.fl_status = container->status_code;
+  if (container->status_code != 200) {
+    if (j.need_fl == 3 && container->status_code == 404) {
+      j.fl_ok = true;  // adsbdb doesn't know the callsign: a Route not found
+    } else {
+      ESP_LOGW(TAG, "Flights: HTTP %d from %s", container->status_code, what);
+      if (::espn::is_throttle_status(container->status_code)) {
+        j.fl_wait_ms = ::espn::parse_retry_after_ms(container->get_response_header("retry-after"));
+        if (j.fl_wait_ms == 0)
+          j.fl_wait_ms = ::espn::parse_retry_after_ms(container->get_response_header("x-ratelimit-reset"));
+      }
+    }
+    container->end();
+    return;
+  }
+  ContainerReader reader(container, this->fl_bytes_);
+  struct Source : ::espn::WxSource {
+    explicit Source(ContainerReader &r) : r(r) {}
+    int read() override { return this->r.read(); }
+    size_t readBytes(char *dst, size_t n) override { return this->r.readBytes(dst, n); }
+    ContainerReader &r;
+  } source(reader);
+  const bool ok = j.need_fl == 3 ? ::espn::parse_route_from(source, j.fl_route)
+                                 : ::espn::parse_sky_from(source, j.fl_lat, j.fl_lon, j.fl_radius_km, j.fl_sky);
+  container->end();
+  if (!ok) {
+    ESP_LOGW(TAG, "Flights: %s's answer didn't parse after %u bytes", what, (unsigned) reader.total());
+    return;
+  }
+  j.fl_ok = true;
+}
+
+void GamedayComponent::apply_fl_job_() {
+  Job &j = this->job_;
+  const uint32_t now = millis() == 0 ? 1 : millis();
+  if (j.need_fl == 3) {
+    if (!j.fl_ok) {
+      this->fl_route_fail_ms_ = now;
+      this->fl_route_backoff_ms_ =
+          this->fl_route_fail_.fail(::espn::is_throttle_status(j.fl_status), j.fl_wait_ms, random_uint32());
+      ESP_LOGW(TAG, "Flights: route lookup failed, next in %us", (unsigned) (this->fl_route_backoff_ms_ / 1000));
+      return;
+    }
+    this->fl_route_fail_ms_ = 0;
+    this->fl_route_fail_.clear();
+    FlData &d = this->fl_data_;
+    FlRouteSlot *slot = nullptr;
+    for (auto &r : d.routes)
+      if (strcmp(r.call, j.fl_call) == 0)
+        slot = &r;
+    if (slot == nullptr) {
+      slot = &d.routes[d.route_next];
+      d.route_next = (uint8_t) ((d.route_next + 1) % ::espn::kFlRouteCache);
+    }
+    memcpy(slot->call, j.fl_call, sizeof(slot->call));
+    slot->at_ms = now;
+    slot->route = j.fl_route;
+    if (j.fl_route.found)
+      ESP_LOGI(TAG, "Flights: %s is listed %s to %s", j.fl_call, j.fl_route.from, j.fl_route.to);
+    else
+      ESP_LOGI(TAG, "Flights: adsbdb has no route for %s", j.fl_call);
+    return;
+  }
+  const bool rx = j.need_fl == 1;
+  if (!j.fl_ok) {
+    this->fl_err_ = j.fl_status == 0     ? ::espn::FlErr::NET
+                    : j.fl_status == 429 ? ::espn::FlErr::LIMIT
+                                         : ::espn::FlErr::HTTP;
+    if (rx) {
+      this->fl_rx_fails_ = ::espn::miss_count_after(this->fl_rx_fails_);
+      ESP_LOGW(TAG, "Flights: the receiver failed %u time(s) in a row%s", (unsigned) this->fl_rx_fails_,
+               this->fl_rx_fails_ == ::espn::kFlReceiverFails ? ", adsb.lol until it answers again" : "");
+    } else {
+      this->fl_fail_ms_ = now;
+      if (j.fl_status == 429 && j.fl_wait_ms > 0) {
+        // A daily limit can run for hours, past the backoff's hour: wait what it says.
+        this->fl_fail_.fail(true, 0, 0);
+        this->fl_backoff_ms_ = std::min(j.fl_wait_ms, ::espn::kFlLimitMaxMs);
+      } else {
+        this->fl_backoff_ms_ =
+            this->fl_fail_.fail(::espn::is_throttle_status(j.fl_status), j.fl_wait_ms, random_uint32());
+      }
+      ESP_LOGW(TAG, "Flights: adsb.lol failed %u time(s) in a row, next try in %us", (unsigned) this->fl_fail_.streak,
+               (unsigned) (this->fl_backoff_ms_ / 1000));
+    }
+    this->rebuild_state_(&this->last_fields_);
+    return;
+  }
+  if (rx) {
+    if (this->fl_rx_fails_ >= ::espn::kFlReceiverFails)
+      ESP_LOGI(TAG, "Flights: the receiver answers again");
+    this->fl_rx_fails_ = 0;
+  } else {
+    this->fl_fail_ms_ = 0;
+    this->fl_fail_.clear();
+  }
+  this->fl_err_ = ::espn::FlErr::NONE;
+  if (j.fl_lat != this->wx_.lat || j.fl_lon != this->wx_.lon ||
+      j.fl_radius_km != this->fl_radius_km_())
+    return;  // the town or the distance changed meanwhile; the next read is for the new ones
+  ::espn::Sky &sky = this->fl_data_.sky;
+  sky = j.fl_sky;
+  this->fl_read_ms_ = now;
+  const int card = ::espn::pick_card(sky, this->fl_card_, this->fl_.face);
+  if (card >= 0)
+    memcpy(this->fl_card_, sky.p[card].hex, sizeof(this->fl_card_));
+  else
+    this->fl_card_[0] = '\0';
+  ESP_LOGD(TAG, "Flights: %u heard within the distance from %s, the card %s", (unsigned) sky.heard,
+           rx ? "the receiver" : "adsb.lol", card >= 0 ? ::espn::plane_label(sky.p[card]) : "none");
+  this->rebuild_state_(&this->last_fields_);
+}
+
+void GamedayComponent::flights_view(::espn::FlView &v, bool wide) const {
+  const uint32_t now = millis();
+  ::espn::FlPageIn in;
+  in.home = this->wx_place_known_();
+  in.fresh = this->fl_read_ms_ != 0 && now - this->fl_read_ms_ < ::espn::kFlStaleMs;
+  in.err = this->fl_err_;
+  in.wait_s = this->fl_wait_s_();
+  char radius[16];
+  this->fl_radius_text_(radius, sizeof(radius));
+  in.radius = radius;
+  in.metric = this->fl_metric_();
+  in.wide = wide;
+  in.list_turn = ((now - this->fl_on_ms_) / ::espn::kFlTurnMs) % 2 == 1;
+  // The read's planes moved on to now (a copy: the read stays as it came),
+  // nearest first, within the distance as it is set now.
+  ::espn::Sky sky;
+  int card = -1;
+  const ::espn::Route *route = nullptr;
+  if (in.home && in.fresh) {
+    const float secs = (float) (now - this->fl_read_ms_) / 1000.0f;
+    const float radius_km = this->fl_radius_km_();
+    const ::espn::Sky &read = this->fl_data_.sky;
+    for (uint8_t i = 0; i < read.n; i++) {
+      ::espn::Plane p = read.p[i];
+      ::espn::plane_advance(p, secs, this->wx_.lat, this->wx_.lon);
+      if (p.dist_km <= radius_km)
+        ::espn::detail::sky_insert(sky, p);
+    }
+    for (uint8_t i = 0; i < sky.n && this->fl_card_[0] != '\0'; i++)
+      if (strcmp(sky.p[i].hex, this->fl_card_) == 0)
+        card = i;
+    if (card < 0)
+      card = ::espn::pick_card(sky, nullptr, this->fl_.face);
+    if (card >= 0) {
+      const FlRouteSlot *r = this->fl_route_slot_(sky.p[card].call);
+      if (r != nullptr && ::espn::route_fits(r->route, sky.p[card]))
+        route = &r->route;
+    }
+  }
+  ::espn::fl_compose(in, sky, card, route, v);
+}
+
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC pop_options
+#endif
 
 // ---- finals rotation ------------------------------------------------------------
 
@@ -6360,7 +7111,9 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   doc["wake"] = this->wake_.on != 0;
   doc["wakelead"] = this->wake_.lead;
   doc["after"] = ::espn::after_word(this->wake_.after);
-  doc["wake_now"] = ::espn::wake_word(this->wake_state_.asleep, this->wake_clock_, this->wake_smart_);
+  doc["wake_now"] =
+      ::espn::wake_word(this->wake_state_.asleep, this->wake_clock_, this->wake_smart_, this->wake_fx_, this->wake_fl_,
+                        this->wake_wxp_);
 #if defined(USE_UPDATE)
   // Left out where nothing can be installed (the demo build), so the page
   // and the app hide the switch.
@@ -6408,6 +7161,9 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   // game the panel follows is live, so the read waits for it to end.
   doc["town"] = (const char *) this->wx_.town;
   doc["wxon"] = this->weather_on();
+  // The Weather page (weather_page.h) is up on a lit screen, so the forecast
+  // is read for it with the card off too.
+  doc["wxpage"] = this->wxp_on_;
   doc["wxunit"] = this->wx_.unit;
   const bool wx_f = this->wx_fahrenheit_();
   if (this->wx_.town[0] != '\0') {
@@ -6421,7 +7177,7 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
       uint32_t since = millis() - this->wx_fail_ms_;
       wx["wait_s"] = since < this->wx_backoff_ms_ ? (this->wx_backoff_ms_ - since) / 1000 : 0;
     }
-    if (this->weather_on() && this->followed_game_live_())
+    if (this->weather_on() && this->followed_game_live_() && !this->wxp_on_)
       wx["held"] = true;
     if (this->wx_forecast_.valid) {
       const ::espn::WxForecast &f = this->wx_forecast_;
@@ -6467,6 +7223,35 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
         }
       }
     }
+  }
+  // The Flights page (flights.h): its settings, the adsb.lol key only as
+  // whether one is set, and fl, what the page is doing. on: it is up on a
+  // lit screen, so it reads. src: where its planes come from now,
+  // "receiver" or "adsblol". n: the planes it has from the last read (the
+  // nearest 16), heard: all of them within the distance. read_s: seconds
+  // since that read, -1 for none since the start. wait_s: what is left of
+  // adsb.lol's wait after a failure. err: the last read's failure, "none",
+  // "net" (no answer), "limit" (adsb.lol's limit) or "http". place: the
+  // weather town it centers on, "" for none. radius: the distance as the
+  // page says it.
+  doc["flrad"] = this->fl_.rad;
+  doc["flface"] = this->fl_.face;
+  doc["flrx"] = (const char *) this->fl_.rx;
+  doc["flkey_set"] = this->fl_.key[0] != '\0';
+  {
+    const bool fresh = this->fl_read_ms_ != 0 && millis() - this->fl_read_ms_ < ::espn::kFlStaleMs;
+    char radius[16];
+    this->fl_radius_text_(radius, sizeof(radius));
+    JsonObject fl = doc["fl"].to<JsonObject>();
+    fl["on"] = this->fl_on_;
+    fl["src"] = this->fl_receiver_() ? "receiver" : "adsblol";
+    fl["n"] = fresh ? this->fl_data_.sky.n : 0;
+    fl["heard"] = fresh ? this->fl_data_.sky.heard : 0;
+    fl["read_s"] = this->fl_read_ms_ != 0 ? (int32_t) ((millis() - this->fl_read_ms_) / 1000) : -1;
+    fl["wait_s"] = this->fl_wait_s_();
+    fl["err"] = ::espn::fl_err_word(this->fl_err_);
+    fl["place"] = (const char *) this->wx_.place;
+    fl["radius"] = (const char *) radius;
   }
   // The game events (ha_events.h): the webhook's address, "" for none, the
   // reminder's lead in minutes, and with an address, how the posts went:
@@ -6719,6 +7504,15 @@ void GamedayComponent::wifi_tick_() {
 #endif
 }
 
+std::string GamedayComponent::ages_json_() const {
+  const uint32_t now = millis();
+  const int32_t wx = this->wx_read_ms_ != 0 ? (int32_t) ((now - this->wx_read_ms_) / 1000) : -1;
+  const int32_t fl = this->fl_read_ms_ != 0 ? (int32_t) ((now - this->fl_read_ms_) / 1000) : -1;
+  char buf[80];
+  ::espn::ages_json(buf, sizeof(buf), wx, fl, this->fl_wait_s_());
+  return buf;
+}
+
 std::string GamedayComponent::wifi_json_() {
   const uint32_t now_s = (uint32_t) (esp_timer_get_time() / 1000000);
   std::lock_guard<std::mutex> lock(this->wifi_mutex_);
@@ -6748,6 +7542,7 @@ void GamedayComponent::say(const std::string &text, int secs, uint8_t mark) {
   this->say_text_ = board_lines(::espn::message_clean(text, ::espn::kMsgTextMax, true));
   this->say_secs_ = ::espn::clamp_say_secs(secs);
   this->say_mark_ = mark;
+  this->say_ms_ = millis();
   if (this->say_text_.empty())
     ESP_LOGI(TAG, "Banner down");
   else
@@ -6847,6 +7642,11 @@ std::string GamedayComponent::ha_league_() const {
 // From every board update and every so often from loop(): the reminder
 // before the start goes by the clock, not by a read.
 void GamedayComponent::ha_track_() {
+  // Off the Scoreboard nothing goes to Home Assistant (showing.h). Back on
+  // it from a picked page, the tracker starts fresh (showing_tick_), so a
+  // score from while it was away never fires.
+  if (this->showing_ != ::espn::Showing::BOARD || this->standby_)
+    return;
   // The finals rotation turns through other games' cards, none of them followed.
   if (this->recap_on_ && !this->demo_playing_())
     return;
@@ -7141,6 +7941,9 @@ void GamedayComponent::msg_show_(const std::string &page) {
 
 // Not over a live game, the demo, a splash or the panel's trouble line.
 bool GamedayComponent::card_between_(uint32_t now) const {
+  // Nobody sees a card on a dark screen or under a picked page.
+  if (this->standby_ || this->showing_ == ::espn::Showing::PICKED)
+    return false;
   const bool trouble = ::espn::msg_trouble(this->misses_, this->captive_,
                                            ::espn::clock_late(this->clock_set_(), this->since_join_ms_()));
   return !this->demo_playing_() && this->last_fields_.game_state != "IN" && !trouble &&
@@ -7911,6 +8714,8 @@ void GamedayComponent::handleRequest(AsyncWebServerRequest *request) {
       body.append(health.data(), health.size());
       body += ",\"wifi\":";
       body.append(wifi.data(), wifi.size());
+      body += ",\"ages\":";
+      body += this->ages_json_();
       body += '}';
     }
     request->send(200, "application/json", body.c_str());
@@ -8099,6 +8904,16 @@ void GamedayComponent::handle_wifi_(AsyncWebServerRequest *request) {
     o["connected"] = e.connected;
     o["seen"] = e.seen;
   }
+  // What the last scan found, for the Add network form to pick from.
+  JsonArray nearby = doc["nearby"].to<JsonArray>();
+  // n is a copy that ends with the call: as a char * its name is copied in.
+  nets->each_nearby([&nearby](saved_networks::Nearby &n) {
+    JsonObject o = nearby.add<JsonObject>();
+    o["ssid"] = static_cast<char *>(n.ssid);
+    o["rssi"] = n.rssi;
+    if (n.open)
+      o["open"] = true;
+  });
   doc["max"] = (int) saved_networks::SavedNetworks::max();
   doc["scanning"] = nets->scanning();
   const std::string switching = nets->switching_ssid();
@@ -8131,7 +8946,8 @@ void GamedayComponent::apply_set_(const std::vector<std::pair<std::string, std::
   for (const auto &p : kv) {
     ::espn::SetOp op;
     if (!::espn::parse_set(p.first, p.second, op, FAV_MAX)) {
-      ESP_LOGW(TAG, "Ignoring %s=%s", p.first.c_str(), p.second.c_str());
+      ESP_LOGW(TAG, "Ignoring %s=%s", p.first.c_str(),
+               ::espn::set_key_secret(p.first.c_str()) ? "(hidden)" : p.second.c_str());
       continue;
     }
     ops.push_back(std::move(op));
@@ -8171,6 +8987,7 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops, bool an
   this->load_night_();
   ::espn::NightPrefs night = this->night_;
   ::espn::WakePrefs wake = this->wake_;
+  PrefsFl fl = this->fl_;
   // list= with lists= names the playlist playing after the change (a rename
   // loses it by name); it doesn't switch to Favorite teams, as list= alone does.
   // sport= picking a sport row takes over list= in the same request (the
@@ -8408,6 +9225,20 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops, bool an
       case ::espn::SetKind::AFTER:
         wake.after = (uint8_t) op.value;
         break;
+      case ::espn::SetKind::FL_RADIUS:
+        fl.rad = (uint8_t) op.value;
+        break;
+      case ::espn::SetKind::FL_FACE:
+        fl.face = (uint8_t) op.value;
+        break;
+      case ::espn::SetKind::FL_RX:
+        memset(fl.rx, 0, sizeof(fl.rx));
+        memcpy(fl.rx, op.text.data(), std::min(op.text.size(), sizeof(fl.rx) - 1));
+        break;
+      case ::espn::SetKind::FL_KEY:
+        memset(fl.key, 0, sizeof(fl.key));
+        memcpy(fl.key, op.text.data(), std::min(op.text.size(), sizeof(fl.key) - 1));
+        break;
     }
   }
   if (::espn::night_keep_hours(night, this->night_))
@@ -8415,6 +9246,7 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops, bool an
              ::espn::night_clock12(night.start).c_str(), ::espn::night_clock12(night.end).c_str());
   this->set_night_(night);
   this->set_wake_(wake);
+  this->set_fl_(fl);
   if (hook_url_set || pregame >= 0)
     this->set_hook_(hook_url_set ? &hook_url : nullptr, pregame);
   if (wx_on >= 0)

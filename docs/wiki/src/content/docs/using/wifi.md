@@ -66,9 +66,12 @@ Taking the panel somewhere new? Add that network on the device page before you g
 ### Add a network from the device page
 
 1. Open **Wi-Fi networks** on the device page's Device tab and tap **Add network**.
-2. Type the network's name and password, and tap **Save**. Leave the password blank for an open network.
+2. Wait a few seconds while the panel looks for networks. **Networks nearby** lists the ones it can see, strongest first, with how strong each signal is. Tap one to fill in its name. Not in the list? Type the name in **Network name**.
+3. Enter the password and tap **Save**. A network marked **Open** has no password, so leave it blank.
 
-The panel saves the network second in the list, right behind the one it's on, and stays on its Wi-Fi. It joins the new network wherever it can't find one it already knows, like a phone hotspot, a cabin or a friend's house. A network that doesn't show its name (a hidden network) works too, as long as the name is typed exactly.
+The list only shows 2.4 GHz networks, because those are the only ones the panel can join. It leaves out the network the panel is on, and marks the ones it already knows **Saved**. Tap **Look again** to scan again, for example after you turn on a phone hotspot. The panel stays on its Wi-Fi while it looks.
+
+The panel saves the network second in the list, right behind the one it's on, and stays on its Wi-Fi. It joins the new network wherever it can't find one it already knows, like a phone hotspot, a cabin or a friend's house. You can add a network that isn't in range now, too, by typing its name. A network that doesn't show its name (a hidden network) never shows in the list, but works as long as the name is typed exactly.
 
 Typing a saved network's name again replaces its password. The network the panel is on now can't be changed this way, because its password already works.
 

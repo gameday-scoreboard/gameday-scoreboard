@@ -64,7 +64,7 @@ A playlist is a group of your favorites with a name, like your football teams or
 
 ### Sports in a playlist
 
-Under each playlist's teams, **Sports** lists every league the panel follows: NFL, College football, MLB, MLS, Premier League, NBA, WNBA, Men's college basketball and NHL. Tap one to put it in the playlist, and tap it again to take it out. A playlist can hold sports, teams or both, and needs no favorites to hold only sports.
+Under each playlist's teams, **Sports** lists every league the panel follows: NFL, College football, MLB, MLS, Premier League, NBA, WNBA, Men's college basketball, Women's college basketball and NHL. Tap one to put it in the playlist, and tap it again to take it out. A playlist can hold sports, teams or both, and needs no favorites to hold only sports.
 
 A playlist with a sport in it plays like Live games over its sports:
 

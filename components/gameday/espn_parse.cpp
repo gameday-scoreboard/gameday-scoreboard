@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 #include "espn_parse.h"
+#include "flights.h"
 #include "game_leaders.h"
 #include "weather.h"
 
@@ -82,7 +83,7 @@ std::string team_day_url(League league, uint32_t group, int64_t day_epoch, const
   int y, m, d;
   civil_from_epoch(day_epoch - 5 * 3600, y, m, d);
   char buf[48];
-  if ((league == League::MCBB || league == League::NCAA) && group != 0) {
+  if ((league == League::MCBB || league == League::WCBB || league == League::NCAA) && group != 0) {
     snprintf(buf, sizeof(buf), "groups=%u&", (unsigned) group);
     url += buf;
   }
@@ -162,7 +163,7 @@ std::string scan_url(League league, int64_t now_epoch, bool top25) {
   // ranked teams' games (17 of 132 on 2/14/2026); 50 is all of Division I.
   if (league == League::NCAA)
     snprintf(buf, sizeof(buf), "?groups=80&limit=300&dates=%04d%02d%02d", y, m, d);
-  else if (league == League::MCBB && !top25)
+  else if ((league == League::MCBB || league == League::WCBB) && !top25)
     snprintf(buf, sizeof(buf), "?groups=50&limit=300&dates=%04d%02d%02d", y, m, d);
   else
     snprintf(buf, sizeof(buf), "?dates=%04d%02d%02d", y, m, d);
@@ -297,6 +298,10 @@ bool parse_season_str(const std::string &json, uint32_t our_team_id, SeasonRead 
 bool parse_geocode_from(WxSource &input, WxPlace &out) { return parse_geocode(input, out); }
 bool parse_forecast_from(WxSource &input, WxForecast &out) { return parse_forecast(input, out); }
 bool parse_hour_from(WxSource &input, WxHour &out) { return parse_hour(input, out); }
+bool parse_sky_from(WxSource &input, float home_lat, float home_lon, float radius_km, Sky &out) {
+  return parse_sky(input, home_lat, home_lon, radius_km, out);
+}
+bool parse_route_from(WxSource &input, Route &out) { return parse_route(input, out); }
 
 uint32_t parse_color(const std::string &hex) {
   if (hex.size() != 6)

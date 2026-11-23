@@ -42,7 +42,7 @@ A strip along the bottom edge of the board has:
 - **Brightness**, shown as a percent
 - **Refresh scores**, which reads your teams from ESPN again right away. Use it when the board looks wrong, for example after a game moved.
 
-Under it, **Showing** picks the page the panel shows: **Scoreboard**, **Clock**, **Effects** or **Smart board**. The Game Day app and Home Assistant have the same controls. See [Brightness and the clock](/using/brightness-and-clock/).
+Under it, **Showing** picks the page the panel shows: **Scoreboard**, **Clock**, **Effects**, **Smart board**, **Flights** or **Weather**. The Game Day app and Home Assistant have the same controls. See [Brightness and the clock](/using/brightness-and-clock/).
 
 **Effects** is new: one of 52 moving patterns fills the panel in place of the scoreboard, and **Effect**, **Palette**, **Speed** and **Intensity** controls appear under **Showing** while it is the page showing. The board comes back when you pick the Scoreboard again, or when the panel has something to tell you. Once you have an effect playlist, an **Effect playlist** picker there starts or stops one; you make them on the Customize tab under **Effect playlists**. See [Effects](/using/effects/).
 
@@ -100,7 +100,7 @@ Groups your favorites into named playlists you can switch between. **New playlis
 
 ### Choosing teams
 
-**Add a favorite** opens the team chooser. It has a search box and a tab per league: **NFL**, **NCAAF** (college football), **MLB**, **MLS**, **EPL** (Premier League), **NBA**, **WNBA**, **NCAAM** (men's college basketball) and **NHL**. Search looks through every league at once. The chooser stays open so you can add several: a tap adds a team to the end of your list, a tap on a checked team takes it out, and **Done** closes it.
+**Add a favorite** opens the team chooser. It has a search box and a tab per league: **NFL**, **NCAAF** (college football), **MLB**, **MLS**, **EPL** (Premier League), **NBA**, **WNBA**, **NCAAM** (men's college basketball), **NCAAW** (women's college basketball) and **NHL**. Search looks through every league at once. The chooser stays open so you can add several: a tap adds a team to the end of your list, a tap on a checked team takes it out, and **Done** closes it.
 
 The first tab, **On now**, lists today's games in every league, under **Live now**, **Later today**, **Final** and **Postponed or canceled**. Tap a side to add that team. The chooser opens on **On now** when a game is live, and on your first favorite's league otherwise.
 
@@ -119,7 +119,7 @@ The chooser is for favorites only.
 | **Ticker speed** | How fast the ticker scrolls, 1 to 10. See [The ticker](/using/ticker/). |
 | **Night schedule** | Off to start. Dims the panel, or turns the screen off, between **Starts at** and **Ends at**. **Screen at night** On keeps it lit at **Night brightness**, Off turns it dark. A live game of your team or a favorite keeps it at normal brightness. The remote, a team pick or **Panel on** turns it off for the rest of the night. See [Night schedule](/using/brightness-and-clock/#night-schedule). |
 | **Game-day wake** | Off to start. Turns a panel you switched off back on before a game of your team or a favorite, **Turns on** 5 minutes to 2 hours before (15 to start). See [Game-day wake and after the game](/using/brightness-and-clock/#game-day-wake-and-after-the-game). |
-| **After the game** | What the panel does once the final has been up a while: **Stay on the scoreboard** (to start), **Turn off**, **Show the clock** or **Show the Smart board** until your next game is close. |
+| **After the game** | What the panel does once the final has been up a while: **Stay on the scoreboard** (to start), **Turn off**, **Show the clock**, **Show the Smart board**, **Show effects**, **Show flights** or **Show the weather** until your next game is close. |
 
 ### Ticker
 
@@ -193,6 +193,7 @@ Your own words, pictures and dates on the panel.
 - **Pictures**: up to 4 of your own pictures or GIFs for the panel to show between games. **Add a picture**, and **Delete** next to each one. See [Pictures](/using/pictures/).
 - **Date countdown**: a **Name** and a **Day** to count down to, like Christmas, with **Clear the countdown** to remove it. See [Countdowns](/using/countdowns/#your-own-countdown).
 - **Effect playlists**: up to 4 named lists of effects the panel steps through on its Effects page, each effect with its own palette, speed, intensity and time on screen, and a **Shuffle** switch. **Play** starts one. See [Effects](/using/effects/#effect-playlists).
+- **Flights**: **Within**, **Facing**, an optional **ADS-B receiver** and an optional **adsb.lol key** for the Flights page, with a line saying what it's reading. See [Flights](/using/flights/).
 
 The Message card, Pictures and Date countdown each have a **Show between games** switch at the top, the same switch as that card's row in [Between games](#between-games).
 
@@ -219,7 +220,7 @@ The next sections are folded shut, each with a one-line summary. Tap one to open
   - **Show how to connect when the panel starts**: after it joins Wi-Fi, the panel shows a QR code for the Game Day app, then its address, for about 20 seconds. Turn it off to go straight to the scoreboard.
   - **Backup**: **Export settings** saves this panel's settings to a file, and **Import settings** loads a saved file back, onto this panel or another one. Wi-Fi networks and the WizMote pairing aren't in the file. See [Back up and restore settings](/using/backup/).
 - **Game events**: tells Home Assistant when your team scores, with a heads-up before the start and an optional web address to post them to. See [Game events](/using/game-events/).
-- **Wi-Fi networks**: the networks the panel remembers, in the order it tries them, with **Forget** for each. Forgetting the network the panel is on moves it to the next saved one right away. **Add network** saves another one by name and password without taking the panel off its Wi-Fi, and offers to switch to it when it's in range. See [Wi-Fi](/using/wifi/#add-a-network-from-the-device-page).
+- **Wi-Fi networks**: the networks the panel remembers, in the order it tries them, with **Forget** for each. Forgetting the network the panel is on moves it to the next saved one right away. **Add network** lists the networks the panel can see, and saves the one you tap or type, with its password, without taking the panel off its Wi-Fi, and offers to switch to it when it's in range. See [Wi-Fi](/using/wifi/#add-a-network-from-the-device-page).
 - **Remote**: pairs and unpairs a WizMote with **Discovery** and **Unpair remote**. It also sets what buttons 1 to 4 show. See [WizMote remote](/using/remote/).
 - **Matrix**: click the picture that matches your panel: **One 64x64 panel**, or **One 128x64 panel** (or two 64x64 side by side). The panel restarts with the new layout. See [Panel sizes and layouts](/using/panel-sizes/).
 - **Diagnostics**: see [below](#diagnostics).

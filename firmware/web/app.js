@@ -46,12 +46,13 @@
     nba: { prefix: "NBA", tab: "NBA", name: "NBA", path: "basketball/nba", logo: "nba", byId: false, scan: "" },
     wnba: { prefix: "WNBA", tab: "WNBA", name: "WNBA", path: "basketball/wnba", logo: "wnba", byId: false, scan: "" },
     mcbb: { prefix: "NCAAM", tab: "NCAAM", name: "Men's college basketball", path: "basketball/mens-college-basketball", logo: "ncaa", byId: true, scan: "groups=50&limit=300&" },
+    wcbb: { prefix: "NCAAW", tab: "NCAAW", name: "Women's college basketball", path: "basketball/womens-college-basketball", logo: "ncaa", byId: true, scan: "groups=50&limit=300&" },
     nhl: { prefix: "NHL", tab: "NHL", name: "NHL", path: "hockey/nhl", logo: "nhl", byId: false, scan: "" },
   };
   const lgInfo = (lg) => LEAGUES[lg] || LEAGUES.nfl;
   // The league's name in "All NFL live games": its short name, or the long one
   // where the short one is an abbreviation owners don't use.
-  const liveName = (lg) => ({ ncaa: "college football", mcbb: "men's college basketball", epl: "Premier League" }[lg] || lgInfo(lg).name);
+  const liveName = (lg) => ({ ncaa: "college football", mcbb: "men's college basketball", wcbb: "women's college basketball", epl: "Premier League" }[lg] || lgInfo(lg).name);
   // "NFL", "NFL and NHL", "NFL, NBA and NHL".
   const andJoin = (a) => (a.length > 1 ? a.slice(0, -1).join(", ") + " and " + a[a.length - 1] : a[0] || "");
   const logoUrl = (league, id, abbr) => {
@@ -126,6 +127,15 @@
         <div id="sbCtls" hidden>
           <p class="hint">The Smart board stays up, through restarts too, until you pick another page. Home Assistant usually fills its rows, and writes over a row you change here the next time it updates it.</p>
           <div class="sbrows" id="sbRows"></div>
+        </div>
+        <div id="flCtls" hidden>
+          <p class="hint">Flights stays up, through restarts too, until you pick another page.</p>
+          <p class="hint" id="flNow" hidden></p>
+          <button class="linkbtn" id="flGo">Flights settings under Customize</button>
+        </div>
+        <div id="wxpCtls" hidden>
+          <p class="hint" id="wxpHint"></p>
+          <button class="linkbtn" id="wxpTown">Change your town</button>
         </div>
       </div>
     </div>
@@ -235,7 +245,7 @@
               <option value="30">30 minutes before</option><option value="60">1 hour before</option><option value="120">2 hours before</option>
             </select></div>
             <div class="ctl"><label for="afterGame">After the game<small id="afterHint"></small></label><select id="afterGame">
-              <option value="scoreboard">Stay on the scoreboard</option><option value="off">Turn off</option><option value="clock">Show the clock</option><option value="smartboard">Show the Smart board</option>
+              <option value="scoreboard">Stay on the scoreboard</option><option value="off">Turn off</option><option value="clock">Show the clock</option><option value="smartboard">Show the Smart board</option><option value="effects">Show effects</option><option value="flights">Show flights</option><option value="weather">Show the weather</option>
             </select></div>
           </div>
         </div>
@@ -361,6 +371,30 @@
           <div class="actions" id="fxListActions"><button class="btn" id="fxListAdd">New effect playlist</button></div>
         </div>
       </div>
+      <div class="card" id="flCard" hidden>
+        <h2>Flights</h2>
+        <div class="cbody">
+          <p class="hint" id="flHome"></p>
+          <button class="linkbtn" id="flTown" hidden>Set your town in Weather first</button>
+          <div class="ctl"><label for="flRad">Within</label><select id="flRad"></select></div>
+          <div class="ctl"><label for="flFace">Facing<small>Pick the way your window faces to show the plane you can see.</small></label><select id="flFace">
+            <option value="0">Any direction</option><option value="1">North</option><option value="2">Northeast</option><option value="3">East</option>
+            <option value="4">Southeast</option><option value="5">South</option><option value="6">Southwest</option><option value="7">West</option><option value="8">Northwest</option>
+          </select></div>
+          <label class="fl" for="flRx">ADS-B receiver<small>Optional. A tar1090 or readsb address on your network, like 192.168.1.50, or a full aircraft.json address.</small></label>
+          <input type="text" id="flRx" class="field" maxlength="63" placeholder="192.168.1.50" autocomplete="off" autocapitalize="off" spellcheck="false">
+          <div class="actions"><button class="btn primary" id="flRxSave">Save</button><button class="btn" id="flRxClear">Clear</button></div>
+          <label class="fl" for="flKey">adsb.lol key<small>Optional. Free from adsb.lol; makes the panel read every 30 seconds instead of every minute. <a href="https://www.adsb.lol/request" target="_blank" rel="noopener">Request a free key</a></small></label>
+          <div id="flKeyNew">
+            <input type="password" id="flKey" class="field" maxlength="63" autocomplete="off" autocapitalize="off" spellcheck="false">
+            <div class="actions"><button class="btn primary" id="flKeySave">Save</button></div>
+          </div>
+          <div class="ctl" id="flKeySet" hidden><label>Key saved</label><button class="btn" id="flKeyClear">Clear</button></div>
+          <p class="hint" id="flStatus"></p>
+          <p class="hint">Plane data from adsb.lol (ODbL) and routes from adsbdb, both free community services. If you enjoy this, please support them:</p>
+          <p class="hint"><a href="https://www.adsb.lol/sponsor" target="_blank" rel="noopener">Sponsor adsb.lol</a> &middot; <a href="https://www.adsb.lol/docs/get-started/introduction" target="_blank" rel="noopener">Share your receiver</a></p>
+        </div>
+      </div>
     </div>
     </section>
 
@@ -442,7 +476,12 @@
           <p class="hint" id="netMsg" role="status" hidden></p>
           <div class="actions" id="netAddRow"><button class="btn" id="netAdd">Add network</button></div>
           <div id="netForm" hidden>
-            <label class="fl" for="netName">Network name<small>2.4 GHz only. The panel saves it without leaving the network it's on, and joins it wherever it can't find the others.</small></label>
+            <div id="netScan">
+              <div class="nethead"><span class="fl">Networks nearby<small>The 2.4 GHz networks the panel can see, strongest first. Tap one to use it.</small></span><button class="btn" id="netRescan">Look again</button></div>
+              <p class="hint" id="netScanMsg" role="status" hidden></p>
+              <div id="netNearby"></div>
+            </div>
+            <label class="fl" for="netName">Network name<small>Or type it, for a hidden network. 2.4 GHz only. The panel saves it without leaving the network it's on, and joins it wherever it can't find the others.</small></label>
             <input type="text" id="netName" class="field" maxlength="32" autocomplete="off" autocapitalize="none" spellcheck="false" enterkeyhint="next">
             <label class="fl" for="netPass">Password<small>Blank for an open network.</small></label>
             <input type="password" id="netPass" class="field" maxlength="64" autocomplete="new-password" enterkeyhint="done">
@@ -667,6 +706,8 @@
     },
     cdname: String, cddate: (v) => (v === "none" ? "" : v),
     town: String, wxon: (v) => v === "1", wxunit: Number,
+    // The adsb.lol key (flkey) isn't here: the state only says whether one is set.
+    flrad: Number, flface: Number, flrx: String,
     live: (v) => v.split(",").filter(Boolean),
     favs: (v) => v.split(",").filter(Boolean).map(ref),
     // Teams as places in favs, which is how the state document lists them.
@@ -726,6 +767,15 @@
       if (!connected && !restart && Date.now() - streamAt > 10000) connect();
       if (r.ok) {
         D = await r.json();
+        // The panel caches the rest of the document, so the live ages win
+        const ages = D.ages;
+        if (ages) {
+          if (D.wx && D.wx.read_s !== undefined && ages.wx_read_s !== undefined) D.wx.read_s = ages.wx_read_s;
+          if (D.fl && ages.fl_read_s !== undefined) {
+            D.fl.read_s = ages.fl_read_s;
+            D.fl.wait_s = ages.fl_wait_s;
+          }
+        }
         for (const k of Object.keys(held)) {
           const h = held[k];
           if (h.ack && (same(k, D[k], h.v) || left > h.ack + APPLY_MS)) delete held[k];
@@ -1394,6 +1444,101 @@
       read.textContent = "Not read yet.";
     }
   };
+  // ---- the Flights page (components/gameday/flights.h) ------------------
+  // Its distance steps (flights.h kFlRadiusMi, kFlRadiusKm), in the unit the
+  // state's radius is said in, which follows the weather's degrees.
+  const FL_MI = [5, 10, 15, 25, 50];
+  const FL_KM = [10, 15, 25, 40, 80];
+  const flRad = $("#flRad");
+  const flFace = $("#flFace");
+  const flRx = $("#flRx");
+  const flKey = $("#flKey");
+  let flUnit = "";
+  // A receiver address or key the panel takes: printable, no spaces, 63 at most.
+  const flTextOk = (v) => v.length <= 63 && /^[!-~]*$/.test(v);
+  flRad.onchange = () => setGD({ flrad: flRad.value });
+  flFace.onchange = () => setGD({ flface: flFace.value });
+  const postRx = () => {
+    const v = flRx.value.trim();
+    if (!flTextOk(v)) return toast("The receiver address can't have spaces.");
+    setGD({ flrx: v });
+  };
+  $("#flRxSave").onclick = postRx;
+  flRx.onkeydown = (e) => { if (e.key === "Enter") postRx(); };
+  $("#flRxClear").onclick = () => { flRx.value = ""; setGD({ flrx: "" }); };
+  // The key goes to the panel and nowhere else: the box empties once it is
+  // sent, and the state only ever says whether one is set.
+  const postKey = () => {
+    const v = flKey.value.trim();
+    if (!v) return;
+    if (!flTextOk(v)) return toast("The key can't have spaces.");
+    flKey.value = "";
+    setGD({ flkey: v }).then((ok) => { if (ok) toast("Key saved"); });
+  };
+  $("#flKeySave").onclick = postKey;
+  flKey.onkeydown = (e) => { if (e.key === "Enter") postKey(); };
+  $("#flKeyClear").onclick = () => setGD({ flkey: "" }).then((ok) => { if (ok) toast("Key cleared"); });
+  // The town is the Weather card's: open its row on Display, or the sheet that adds it.
+  const openTown = () => {
+    showPane("display");
+    const row = $('#cardList .xrow[data-card="weather"]');
+    if (!row) {
+      $("#cdCard").scrollIntoView({ block: "start" });
+      if (!$("#cardAdd").disabled) openAddSheet();
+      return;
+    }
+    if (!row.classList.contains("open")) row.querySelector(".xbtn").click();
+    $("#town").focus();
+  };
+  $("#flTown").onclick = openTown;
+  $("#wxpTown").onclick = openTown;
+  // Under Showing while Weather is up: what it shows, or that it needs a town.
+  const renderWeatherPage = () => {
+    if (!S) return;
+    const noTown = !S.town;
+    $("#wxpHint").textContent = noTown
+      ? "Weather shows the forecast for your town. Set your town first."
+      : "Weather stays up, through restarts too, until you pick another page." + (S.wx && S.wx.place ? " The forecast for " + S.wx.place + "." : "");
+    $("#wxpTown").textContent = noTown ? "Set your town" : "Change your town";
+  };
+  $("#flGo").onclick = () => { showPane("customize"); $("#flCard").scrollIntoView({ block: "start" }); };
+  const flAgo = (s) => (s < 60 ? s + " s ago" : mins(s) + " min ago");
+  const flWait = (s) => (s < 3600 ? mins(s) + " min" : Math.round(s / 3600) + " h");
+  // What the page is doing, for the card and under Showing.
+  const flStatus = (f) => {
+    if (!f.on) return "Not reading: Flights isn't on screen";
+    if (!f.place) return "Not reading: set your town in Weather first";
+    if (f.err === "limit") return "Paused: adsb.lol's daily limit" + (f.wait_s > 0 ? ", back in " + flWait(f.wait_s) : "");
+    if (f.err === "net" || f.err === "http") {
+      return (f.src === "receiver" ? "Can't reach your receiver" : "Can't reach flight data")
+        + (f.wait_s > 0 ? ", tries again in " + flWait(f.wait_s) : "");
+    }
+    if (f.read_s < 0) return "Looking for planes";
+    const n = f.n ? f.n + (f.n === 1 ? " plane nearby" : " planes nearby") : "No planes nearby";
+    return n + ", from " + (f.src === "receiver" ? "your receiver" : "adsb.lol") + ", read " + flAgo(f.read_s);
+  };
+  const renderFlights = () => {
+    const f = S.fl;
+    $("#flCard").hidden = !f;  // firmware from before the Flights page
+    $("#flNow").hidden = !f;
+    if (!f) return;
+    $("#flHome").textContent = f.place ? "Planes near " + f.place : "";
+    $("#flHome").hidden = !f.place;
+    $("#flTown").hidden = !!f.place;
+    const unit = /km$/.test(f.radius || "") ? "km" : "mi";
+    if (unit !== flUnit) {
+      flUnit = unit;
+      flRad.textContent = "";
+      (unit === "km" ? FL_KM : FL_MI).forEach((d, i) => flRad.add(new Option(d + " " + unit, String(i))));
+    }
+    if (document.activeElement !== flRad) flRad.value = String(S.flrad);
+    if (document.activeElement !== flFace) flFace.value = String(S.flface);
+    if (document.activeElement !== flRx) flRx.value = S.flrx || "";
+    $("#flRxClear").hidden = !S.flrx;
+    $("#flKeyNew").hidden = !!S.flkey_set;
+    $("#flKeySet").hidden = !S.flkey_set;
+    $("#flStatus").textContent = $("#flNow").textContent = flStatus(f);
+  };
   // Favorites: one row per team in priority order. Every change posts the
   // whole list (favs=) so the device always sees one ordered list.
   let favKeys = [];
@@ -2040,7 +2185,7 @@
       const mine = real.filter((k) => lgs.includes(keyLeague(k)));
       if (rows.includes(sp) && mine.length >= 2) opts.push(["sport:" + sp, "My " + sp + " teams"]);
       for (const k of mine) { const t = teamByKey(k); opts.push(["team:" + k, t ? t[3] : k]); }
-      for (const lg of lgs) opts.push(["pick:" + lg, "Another " + (lg === "ncaa" || lg === "mcbb" ? liveName(lg) : lgInfo(lg).name) + " team..."]);
+      for (const lg of lgs) opts.push(["pick:" + lg, "Another " + (lg === "ncaa" || lg === "mcbb" || lg === "wcbb" ? liveName(lg) : lgInfo(lg).name) + " team..."]);
       groups.push([title, opts]);
     }
     groups.push(["", [["all", "All favorites"], ["live", "Live games"], ["none", "Nothing"]]]);
@@ -2302,6 +2447,8 @@
     if (document.activeElement !== cdDate) cdDate.value = S.cddate || "";
     $("#cdClear").hidden = !S.cdname && !S.cddate;
     renderWeather();
+    renderFlights();
+    renderWeatherPage();
     // Firmware that can't install updates (older, or the demo build) leaves it out.
     $("#autoupdRow").hidden = S.autoupd === undefined;
     // Older firmware and the demo build have no beta to follow.
@@ -2468,6 +2615,12 @@
       lead.value = l;
     }
     const after = $("#afterGame");
+    // Firmware from before the Flights page doesn't take it.
+    const flOpt = after.querySelector('option[value="flights"]');
+    flOpt.hidden = flOpt.disabled = S.fl === undefined;
+    // Nor from before the Weather page.
+    const wxOpt = after.querySelector('option[value="weather"]');
+    wxOpt.hidden = wxOpt.disabled = S.wxpage === undefined;
     if (S.after !== wakeSeen.after && document.activeElement !== after) {
       wakeSeen.after = S.after;
       if (![...after.options].some((o) => o.value === S.after)) after.add(new Option(S.after, S.after));
@@ -2479,7 +2632,10 @@
       ? (S.wake_now === "asleep" ? "Off since the last game." : "Once the final has been up a while, the panel turns off.") + back
       : S.after === "clock" ? "Once the final has been up a while, the panel shows the time and your next game until that game is close."
         : S.after === "smartboard" ? "Once the final has been up a while, the panel shows the Smart board until your next game is close."
-          : "The final, then your next game, as before.";
+          : S.after === "effects" ? "Once the final has been up a while, and whenever no game of yours is on, the panel plays the effect Showing's Effects page is set to, until your next game is close."
+            : S.after === "flights" ? "Once the final has been up a while, the panel shows the planes near your town until your next game is close."
+              : S.after === "weather" ? "Once the final has been up a while, the panel shows the weather for your town until your next game is close."
+                : "The final, then your next game, as before.";
   };
   $("#wakeLead").onchange = () => {
     wakeSeen.lead = null;
@@ -2796,6 +2952,9 @@
     { name: "Select Page", into: "#showCtls", label: "Showing", onValue: (v) => {
       $("#fxCtls").hidden = v !== "Effects";
       $("#sbCtls").hidden = v !== "Smart board";
+      $("#flCtls").hidden = v !== "Flights";
+      $("#wxpCtls").hidden = v !== "Weather";
+      if (v === "Weather") renderWeatherPage();
     } },
     { name: "Effect", into: "#fxCtls", label: "Effect" },
     { name: "Smart board row 1", into: "#sbRows", label: "Row 1", sbRow: true },
@@ -3986,19 +4145,92 @@
   };
   const nap = (ms) => new Promise((r) => setTimeout(r, ms));
   const bytes = (s) => new TextEncoder().encode(s).length;
+  // Networks nearby: opening the form asks the panel to scan (POST scan=1,
+  // about 4 s, the panel stays on its network) and lists what GET then names
+  // under "nearby", strongest first. Tapping one fills in the name. The
+  // network the panel is on is left out: adding it again does nothing.
+  const scanMsg = (t) => {
+    const m = $("#netScanMsg");
+    m.textContent = t || "";
+    m.hidden = !t;
+  };
+  // The same line as the Wi-Fi card's: weak below -75 dBm.
+  const signalWord = (rssi) => (rssi >= -60 ? "Strong" : rssi >= -75 ? "Good" : "Weak");
+  const markNetPick = () => {
+    const name = $("#netName").value.trim();
+    document.querySelectorAll("#netNearby .netpick").forEach((b) => setOn(b, b.dataset.ssid === name, "aria-pressed"));
+  };
+  const renderNearby = (j) => {
+    const box = $("#netNearby");
+    box.innerHTML = "";
+    const on = ((j && j.networks) || []).find((n) => n.connected);
+    const saved = new Set(((j && j.networks) || []).map((n) => n.ssid));
+    const list = ((j && j.nearby) || []).filter((n) => !on || n.ssid !== on.ssid);
+    if (!list.length) return scanMsg("The panel can't see another 2.4 GHz network. Type its name below, or move closer and look again.");
+    scanMsg("");
+    list.forEach((n) => {
+      const b = el("button", "netpick");
+      b.type = "button";
+      b.dataset.ssid = n.ssid;
+      const name = el("span", null, n.ssid);
+      if (saved.has(n.ssid)) name.appendChild(el("small", null, "Saved"));
+      b.appendChild(name);
+      b.appendChild(el("span", "val", n.open ? "Open, " + signalWord(n.rssi).toLowerCase() : signalWord(n.rssi)));
+      b.onclick = () => {
+        $("#netName").value = n.ssid;
+        $("#netPass").value = "";
+        markNetPick();
+        netMsg(n.open ? n.ssid + " is open, so leave the password blank." : "");
+        (n.open ? $("#netSave") : $("#netPass")).focus();
+      };
+      box.appendChild(b);
+    });
+    markNetPick();
+  };
+  let scanRun = 0;  // a newer look, or a closed form, ends the one before
+  const lookNearby = async () => {
+    const run = ++scanRun;
+    const again = $("#netRescan");
+    again.disabled = true;
+    scanMsg("Looking for networks…");
+    try {
+      await fetch("/gameday/wifi?scan=1", { method: "POST" });
+    } catch (_) {}
+    let j = null;
+    for (let i = 0; i < 8; i++) {
+      await nap(1500);
+      if (run !== scanRun) return;
+      try {
+        j = await wifiDoc(4000);
+      } catch (_) {
+        j = null;
+        continue;
+      }
+      if (!j.scanning) break;
+    }
+    if (run !== scanRun) return;
+    again.disabled = false;
+    if (!j) return scanMsg("The panel didn't answer. Type the network's name below, or look again.");
+    renderNetworks(j);
+    renderNearby(j);
+  };
   const openNetForm = (open) => {
     $("#netForm").hidden = !open;
     $("#netAddRow").hidden = open;
+    scanRun++;
     if (!open) return;
     $("#netName").value = "";
     $("#netPass").value = "";
-    $("#netName").focus();
+    $("#netNearby").innerHTML = "";
+    lookNearby();
   };
   $("#netAdd").onclick = () => {
     netMsg("");
     openNetForm(true);
   };
   $("#netCancel").onclick = () => openNetForm(false);
+  $("#netRescan").onclick = () => lookNearby();
+  $("#netName").addEventListener("input", markNetPick);
   $("#netName").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#netPass").focus(); });
   $("#netPass").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#netSave").click(); });
 
@@ -4109,6 +4341,8 @@
       // The panel publishes it whenever an effect playlist starts or stops
       // (a hand pick, Showing leaving Effects): re-read which one plays.
       case "Effect playlist": if (S && S.fxlists !== undefined) scheduleState(150); break;
+      // Flights reads only while it is up: re-read whether it is.
+      case "Select Page": if (S && S.fl) scheduleState(500); break;
       case "Firmware": renderUpdate(ents[e.id]); refreshFirmwareDetail(e.id); break;
       case "WizMote Status": {
         $("#wizStatus").textContent = e.value || "";
