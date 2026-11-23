@@ -3812,9 +3812,15 @@ bool GamedayComponent::standby_read_due_() const {
   if (this->favorites_mode_())
     for (const auto &e : this->fav_)
       live = live || (!this->fav_off_(e) && e.game.valid && e.game.state == GameState::IN);
-  const uint32_t every =
-      watch ? ::espn::weather_watch_every_ms(live, epoch, kick, this->wake_.lead)
-            : ::espn::standby_every_ms(night_dark, this->wake_.on, epoch, kick, this->wake_.lead);
+  if (watch) {
+    // The Weather page counts from the last game read that came in, so one
+    // put up (or back after a restart) with nothing read lately reads at
+    // once; at most one try a minute while reads fail.
+    const uint32_t now = millis(), every = ::espn::weather_watch_every_ms(live, epoch, kick, this->wake_.lead);
+    return (this->standby_ms_ == 0 || now - this->standby_ms_ >= 60u * 1000u) &&
+           (this->game_read_ms_ == 0 || now - this->game_read_ms_ >= every);
+  }
+  const uint32_t every = ::espn::standby_every_ms(night_dark, this->wake_.on, epoch, kick, this->wake_.lead);
   return every != 0 && millis() - this->standby_ms_ >= every;
 }
 
