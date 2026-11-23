@@ -230,6 +230,7 @@
     {"name": "the clock after the game", "start": {"after": "off"}, "set": [["after", "clock"]], "expect": {"after": "clock"}},
     {"name": "effects after the game", "start": {"after": "clock"}, "set": [["after", "effects"]], "expect": {"after": "effects"}},
     {"name": "flights after the game", "start": {"after": "clock"}, "set": [["after", "flights"]], "expect": {"after": "flights"}},
+    {"name": "weather after the game", "start": {"after": "flights"}, "set": [["after", "weather"]], "expect": {"after": "weather"}},
     {"name": "an after-the-game choice this firmware doesn't have is refused", "start": {"after": "clock"}, "set": [["after", "fireworks"]],
      "expect": {"after": "clock"}},
     {"name": "wake off keeps its lead and after-the-game choice", "start": {"wake": true, "wakelead": 45, "after": "off"},

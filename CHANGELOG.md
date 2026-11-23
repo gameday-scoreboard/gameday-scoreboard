@@ -50,6 +50,7 @@ A new Flights page shows the planes flying over your home, women's college baske
 
 - 📶 **Add network** lists the 2.4 GHz networks the panel can see, strongest first: tap one to fill in its name, or type a hidden one
 - ✈️ **Flights** under **Showing** and **After the game**: the planes near your home with their airline, route, type, altitude and distance, from adsb.lol's free community data or your own ADS-B receiver
+- 🌤️ **Weather** under **Showing** and **After the game**: your town's weather now and the next 6 hours with the chance of rain, and a bottom line with your live game's score, rain on the way, or the next sunrise or sunset
 - ✨ **Show effects** under **After the game**: the panel plays your effect whenever no game of yours is on, between seasons too, and goes back to the scoreboard before your next game
 - 🏀 Women's college basketball joins the panel: follow any Division I women's team from the new NCAAW tab in the team picker
 

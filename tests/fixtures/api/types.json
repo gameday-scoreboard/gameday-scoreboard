@@ -121,6 +121,7 @@
     "hookpost.status": "int",
     "town": "string",
     "wxon": "bool",
+    "wxpage": "bool",
     "wxunit": "int",
     "flrad": "int",
     "flface": "int",

@@ -188,6 +188,9 @@ INITIAL = {
     # The weather card (weather.h): the town, the switch and the degrees (0
     # auto, 1 F, 2 C); wx once a town is set.
     "town": "", "wxon": False, "wxunit": 0,
+    # The Weather page (weather_page.h) is up on a lit screen: rebuilt by
+    # state_doc().
+    "wxpage": False,
     # The Flights page (flights.h): distance step, facing, receiver, whether
     # an adsb.lol key is set (the key itself is never sent), and fl, what the
     # page is doing: rebuilt by state_doc() from these.
@@ -235,7 +238,7 @@ ENTITIES = [
     {"id": "number/Scroll Speed", "domain": "number", "name": "Scroll Speed", "state": "5", "value": "5",
      "min_value": "1", "max_value": "10", "step": "1"},
     {"id": "select/Select Page", "domain": "select", "name": "Select Page", "state": "Scoreboard",
-     "value": "Scoreboard", "option": ["Scoreboard", "Clock", "Effects", "Smart board", "Flights"]},
+     "value": "Scoreboard", "option": ["Scoreboard", "Clock", "Effects", "Smart board", "Flights", "Weather"]},
     # The Smart board's rows (firmware/pages/smart_board.yaml), which Home Assistant fills
     *({"id": f"text/Smart board row {n}", "domain": "text", "name": f"Smart board row {n}", "state": "",
        "value": "", "max_length": 255} for n in range(1, 5)),
@@ -533,6 +536,9 @@ def state_doc():
     STATE.setdefault("live_only", "")
     STATE["remote"] = [{"v": b.get("v", "fav"), "gone": remote_gone(i + 1, b.get("v", "fav"))}
                        for i, b in enumerate((STATE.get("remote") or [{}] * 4)[:4])]
+    if "wxpage" in STATE:
+        light = next(e for e in ENTITIES if e["domain"] == "light")
+        STATE["wxpage"] = entity("Select Page")["value"] == "Weather" and light["state"] == "ON"
     if "fl" in STATE:
         # The weather town is home; the distance in the weather's units (auto is miles for these Texas towns).
         fl = STATE["fl"]

@@ -42,7 +42,7 @@ A strip along the bottom edge of the board has:
 - **Brightness**, shown as a percent
 - **Refresh scores**, which reads your teams from ESPN again right away. Use it when the board looks wrong, for example after a game moved.
 
-Under it, **Showing** picks the page the panel shows: **Scoreboard**, **Clock**, **Effects**, **Smart board** or **Flights**. The Game Day app and Home Assistant have the same controls. See [Brightness and the clock](/using/brightness-and-clock/).
+Under it, **Showing** picks the page the panel shows: **Scoreboard**, **Clock**, **Effects**, **Smart board**, **Flights** or **Weather**. The Game Day app and Home Assistant have the same controls. See [Brightness and the clock](/using/brightness-and-clock/).
 
 **Effects** is new: one of 52 moving patterns fills the panel in place of the scoreboard, and **Effect**, **Palette**, **Speed** and **Intensity** controls appear under **Showing** while it is the page showing. The board comes back when you pick the Scoreboard again, or when the panel has something to tell you. Once you have an effect playlist, an **Effect playlist** picker there starts or stops one; you make them on the Customize tab under **Effect playlists**. See [Effects](/using/effects/).
 
@@ -119,7 +119,7 @@ The chooser is for favorites only.
 | **Ticker speed** | How fast the ticker scrolls, 1 to 10. See [The ticker](/using/ticker/). |
 | **Night schedule** | Off to start. Dims the panel, or turns the screen off, between **Starts at** and **Ends at**. **Screen at night** On keeps it lit at **Night brightness**, Off turns it dark. A live game of your team or a favorite keeps it at normal brightness. The remote, a team pick or **Panel on** turns it off for the rest of the night. See [Night schedule](/using/brightness-and-clock/#night-schedule). |
 | **Game-day wake** | Off to start. Turns a panel you switched off back on before a game of your team or a favorite, **Turns on** 5 minutes to 2 hours before (15 to start). See [Game-day wake and after the game](/using/brightness-and-clock/#game-day-wake-and-after-the-game). |
-| **After the game** | What the panel does once the final has been up a while: **Stay on the scoreboard** (to start), **Turn off**, **Show the clock**, **Show the Smart board**, **Show effects** or **Show flights** until your next game is close. |
+| **After the game** | What the panel does once the final has been up a while: **Stay on the scoreboard** (to start), **Turn off**, **Show the clock**, **Show the Smart board**, **Show effects**, **Show flights** or **Show the weather** until your next game is close. |
 
 ### Ticker
 

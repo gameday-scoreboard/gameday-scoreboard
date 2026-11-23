@@ -73,6 +73,7 @@
 #include "showing.h"
 #include "update_nudge.h"
 #include "weather.h"
+#include "weather_page.h"
 #include "wifi_history.h"
 #ifdef GAMEDAY_DEMO
 #include "demo.h"
@@ -574,6 +575,15 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // What the Flights page draws now (flights_page.h), wide for two panels:
   // the last read's planes moved on to where they are now. Main loop only.
   void flights_view(::espn::FlView &v, bool wide) const;
+  // pages/weather.yaml's gd_wxp_pinned, read for showing_now_().
+  void set_wxp_pinned_ref(const bool *pinned) { this->wxp_pinned_ = pinned; }
+  // After the game is Weather and it is between games: the Weather page goes
+  // up until the next game is near (pages/weather.yaml, on the "weather"
+  // action, which fires each time this changes).
+  bool weather_between() const { return this->wake_wxp_; }
+  // What the Weather page draws now (weather_page.h), wide for two panels.
+  // Main loop only.
+  void weather_view(::espn::WxPageView &v, bool wide) const;
   // After the game is Effects: the panel put the Effects page up itself,
   // between games, so the page's start doesn't count as somebody picking
   // it (no night skip, no lighting a dark panel). pages/effects.yaml.
@@ -1252,6 +1262,15 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // showing_now_() reads the page select itself.
   const bool *sb_pinned_{nullptr};
   const bool *fl_pinned_{nullptr};
+  const bool *wxp_pinned_{nullptr};
+  // The Weather page (weather_page.h): wxp_on_ while it is up on a lit
+  // screen, so the forecast is read for it even with the card off or a game
+  // live. Picked under Showing it also reads the owner's games for its
+  // bottom row (wxp_watch_(), weather_watch_every_ms).
+  bool wxp_on_{false};
+  uint32_t wxp_tick_ms_{0};
+  void wxp_tick_();  // from loop()
+  bool wxp_watch_() const { return this->showing_ == ::espn::Showing::PICKED && this->wxp_on_; }
   ::espn::Showing showing_{::espn::Showing::BOARD};
   ::espn::Showing showing_now_() const;
   void showing_tick_();  // from loop(): a picked page stops the reads, the Scoreboard brings them back
@@ -1799,7 +1818,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // pages/smart_board.yaml puts up on the "smartboard" action; wake_fx_ an
   // effect between games, which fx_between_tick_ puts up; wake_fl_ the
   // Flights page between games, which pages/flights.yaml puts up on the
-  // "flights" action.
+  // "flights" action; wake_wxp_ the Weather page between games, which
+  // pages/weather.yaml puts up on the "weather" action.
   ESPPreferenceObject wake_pref_;
   ::espn::WakePrefs wake_{};
   ::espn::WakeState wake_state_{};
@@ -1808,6 +1828,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool wake_smart_{false};
   bool wake_fx_{false};
   bool wake_fl_{false};
+  bool wake_wxp_{false};
   bool power_on_{true};
   // Live games with Favorites take over: the next start of a favorite's
   // game from the last scan, 0 for none.

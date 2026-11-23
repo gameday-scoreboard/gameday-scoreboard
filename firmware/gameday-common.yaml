@@ -219,6 +219,8 @@ packages:
   smart_board: !include pages/smart_board.yaml
   # The planes near home from adsb.lol or the owner's receiver (the Flights page)
   flights: !include pages/flights.yaml
+  # The town's forecast now and for the next hours (the Weather page)
+  weather: !include pages/weather.yaml
   # Factory check (the flag factory_flash.py leaves, or POST /gameday/action?do=qc)
   qc: !include pages/qc.yaml
   # Dims a hot panel and caps one on a weak power brick, and says why
