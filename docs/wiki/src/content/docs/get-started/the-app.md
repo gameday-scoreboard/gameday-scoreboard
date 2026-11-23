@@ -51,7 +51,7 @@ When **Showing** is on **Effects** and the panel has [effect playlists](/using/e
 :::
 
 :::note[Coming in the next app update]
-On Android, when **Showing** is on **Weather**, the line under it says the page stays up until you pick another one and names the place its forecast is for. With no town set, it asks you to set your town first, in **Display > Weather**.
+On Android, when **Showing** is on **Weather**, the line under it says the page stays up until you pick another one and names the place its forecast is for. With no town set, it asks you to set your town first, in **Display > Weather**. It shows once the panel runs firmware with the Weather page.
 :::
 
 If the app loses its connection to the panel for a moment while the panel still answers, **Reconnecting…** shows at the top of the Board until it's back. If the panel doesn't answer at all, the Board says **Can't reach** and the panel's name, with what to check.
