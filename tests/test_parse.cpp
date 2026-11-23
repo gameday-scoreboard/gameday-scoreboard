@@ -7449,7 +7449,9 @@ static void test_weather() {
   CHECK_EQ(forecast_url(32.95457f, -97.01501f, "America/Chicago"),
            std::string("https://api.open-meteo.com/v1/forecast?latitude=32.9546&longitude=-97.0150"
                        "&current=temperature_2m,weather_code,is_day&daily=weather_code,temperature_2m_max,"
-                       "temperature_2m_min&temperature_unit=fahrenheit&timezone=America%2FChicago&forecast_days=4"));
+                       "temperature_2m_min,sunrise,sunset&hourly=temperature_2m,weather_code,"
+                       "precipitation_probability,is_day&temperature_unit=fahrenheit&timezone=America%2FChicago"
+                       "&forecast_days=4&forecast_hours=15"));
   // The town as kept: one line, no emoji, at most kTownMax bytes.
   CHECK_EQ(town_clean("  Coppell\n\xF0\x9F\x8F\x88 "), std::string("Coppell"));
   CHECK_EQ(town_clean(std::string(60, 'x')).size(), kTownMax);

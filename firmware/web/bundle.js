@@ -137,6 +137,10 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
           <p class="hint" id="flNow" hidden></p>
           <button class="linkbtn" id="flGo">Flights settings under Customize</button>
         </div>
+        <div id="wxpCtls" hidden>
+          <p class="hint" id="wxpHint"></p>
+          <button class="linkbtn" id="wxpTown">Change your town</button>
+        </div>
       </div>
     </div>
 
@@ -245,7 +249,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
               <option value="30">30 minutes before</option><option value="60">1 hour before</option><option value="120">2 hours before</option>
             </select></div>
             <div class="ctl"><label for="afterGame">After the game<small id="afterHint"></small></label><select id="afterGame">
-              <option value="scoreboard">Stay on the scoreboard</option><option value="off">Turn off</option><option value="clock">Show the clock</option><option value="smartboard">Show the Smart board</option><option value="effects">Show effects</option><option value="flights">Show flights</option>
+              <option value="scoreboard">Stay on the scoreboard</option><option value="off">Turn off</option><option value="clock">Show the clock</option><option value="smartboard">Show the Smart board</option><option value="effects">Show effects</option><option value="flights">Show flights</option><option value="weather">Show the weather</option>
             </select></div>
           </div>
         </div>
@@ -1479,7 +1483,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
   flKey.onkeydown = (e) => { if (e.key === "Enter") postKey(); };
   $("#flKeyClear").onclick = () => setGD({ flkey: "" }).then((ok) => { if (ok) toast("Key cleared"); });
   // The town is the Weather card's: open its row on Display, or the sheet that adds it.
-  $("#flTown").onclick = () => {
+  const openTown = () => {
     showPane("display");
     const row = $('#cardList .xrow[data-card="weather"]');
     if (!row) {
@@ -1489,6 +1493,17 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     }
     if (!row.classList.contains("open")) row.querySelector(".xbtn").click();
     $("#town").focus();
+  };
+  $("#flTown").onclick = openTown;
+  $("#wxpTown").onclick = openTown;
+  // Under Showing while Weather is up: what it shows, or that it needs a town.
+  const renderWeatherPage = () => {
+    if (!S) return;
+    const noTown = !S.town;
+    $("#wxpHint").textContent = noTown
+      ? "Weather shows the forecast for your town. Set your town first."
+      : "Weather stays up, through restarts too, until you pick another page." + (S.wx && S.wx.place ? " The forecast for " + S.wx.place + "." : "");
+    $("#wxpTown").textContent = noTown ? "Set your town" : "Change your town";
   };
   $("#flGo").onclick = () => { showPane("customize"); $("#flCard").scrollIntoView({ block: "start" }); };
   const flAgo = (s) => (s < 60 ? s + " s ago" : mins(s) + " min ago");
@@ -2437,6 +2452,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     $("#cdClear").hidden = !S.cdname && !S.cddate;
     renderWeather();
     renderFlights();
+    renderWeatherPage();
     // Firmware that can't install updates (older, or the demo build) leaves it out.
     $("#autoupdRow").hidden = S.autoupd === undefined;
     // Older firmware and the demo build have no beta to follow.
@@ -2606,6 +2622,9 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     // Firmware from before the Flights page doesn't take it.
     const flOpt = after.querySelector('option[value="flights"]');
     flOpt.hidden = flOpt.disabled = S.fl === undefined;
+    // Nor from before the Weather page.
+    const wxOpt = after.querySelector('option[value="weather"]');
+    wxOpt.hidden = wxOpt.disabled = S.wxpage === undefined;
     if (S.after !== wakeSeen.after && document.activeElement !== after) {
       wakeSeen.after = S.after;
       if (![...after.options].some((o) => o.value === S.after)) after.add(new Option(S.after, S.after));
@@ -2619,7 +2638,8 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
         : S.after === "smartboard" ? "Once the final has been up a while, the panel shows the Smart board until your next game is close."
           : S.after === "effects" ? "Once the final has been up a while, and whenever no game of yours is on, the panel plays the effect Showing's Effects page is set to, until your next game is close."
             : S.after === "flights" ? "Once the final has been up a while, the panel shows the planes near your town until your next game is close."
-              : "The final, then your next game, as before.";
+              : S.after === "weather" ? "Once the final has been up a while, the panel shows the weather for your town until your next game is close."
+                : "The final, then your next game, as before.";
   };
   $("#wakeLead").onchange = () => {
     wakeSeen.lead = null;
@@ -2937,6 +2957,8 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       $("#fxCtls").hidden = v !== "Effects";
       $("#sbCtls").hidden = v !== "Smart board";
       $("#flCtls").hidden = v !== "Flights";
+      $("#wxpCtls").hidden = v !== "Weather";
+      if (v === "Weather") renderWeatherPage();
     } },
     { name: "Effect", into: "#fxCtls", label: "Effect" },
     { name: "Smart board row 1", into: "#sbRows", label: "Row 1", sbRow: true },

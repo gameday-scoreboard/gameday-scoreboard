@@ -638,7 +638,7 @@ test("Showing Effects reveals the effect controls, and they post", async ({ page
   // Showing and the effect controls are on the Home tab, under the panel's power and brightness.
   const showing = page.getByRole("combobox", { name: "Showing" });
   await expect(showing).toHaveValue("Scoreboard");
-  await expect(showing.locator("option")).toHaveText(["Scoreboard", "Clock", "Effects", "Smart board", "Flights"]);
+  await expect(showing.locator("option")).toHaveText(["Scoreboard", "Clock", "Effects", "Smart board", "Flights", "Weather"]);
   await expect(page.locator("#fxCtls")).toBeHidden();
   // The Panel card's own controls are untouched by the hidden effect rows.
   await expect(page.locator("#quickCtls .ctl")).toHaveCount(2);
@@ -3477,6 +3477,9 @@ test("game-day wake: off by default, its lead and after the game post, hidden on
   await page.locator("#afterGame").selectOption("flights");
   await expectSet(request, { after: "flights" });
   await expect(page.locator("#afterHint")).toContainText("the panel shows the planes near your town until your next game is close");
+  await page.locator("#afterGame").selectOption("weather");
+  await expectSet(request, { after: "weather" });
+  await expect(page.locator("#afterHint")).toContainText("the panel shows the weather for your town until your next game is close");
 
   // Off with the wake off says how to bring it back, and asleep says so.
   await reset(request, { after: "off", wake_now: "asleep" });
@@ -3727,6 +3730,40 @@ test("flights: no card or After the game choice on firmware without the Flights 
   await tab(page, "display");
   await expect(page.locator('#afterGame option[value="flights"]')).toBeDisabled();
   await expect(page.locator('#afterGame option[value="flights"]')).toHaveJSProperty("hidden", true);
+});
+
+test("weather page: no After the game choice on firmware without it", async ({ page, request }) => {
+  await reset(request, { wxpage: null });
+  await page.goto("/");
+  await tab(page, "display");
+  await expect(page.locator('#afterGame option[value="flights"]')).toBeEnabled();
+  await expect(page.locator('#afterGame option[value="weather"]')).toBeDisabled();
+  await expect(page.locator('#afterGame option[value="weather"]')).toHaveJSProperty("hidden", true);
+});
+
+test("weather page: under Showing it says whose forecast, or asks for a town", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  const showing = page.getByRole("combobox", { name: "Showing" });
+  await expect(page.locator('#afterGame option[value="weather"]')).toHaveJSProperty("hidden", false);
+  await showing.selectOption("Weather");
+  await expect(page.locator("#wxpCtls")).toBeVisible();
+  await expect(page.locator("#flCtls")).toBeHidden();
+  await expect(page.locator("#wxpHint")).toHaveText("Weather shows the forecast for your town. Set your town first.");
+  await expect(page.locator("#wxpTown")).toHaveText("Set your town");
+
+  await reset(request, flTown);
+  await page.goto("/");
+  await showing.selectOption("Weather");
+  await expect(page.locator("#wxpHint")).toHaveText(
+    "Weather stays up, through restarts too, until you pick another page. The forecast for Coppell, Texas.");
+  await expect(page.locator("#wxpTown")).toHaveText("Change your town");
+  // The link opens the Weather card's town
+  await page.locator("#wxpTown").click();
+  await expect(page.locator("#town")).toBeVisible();
+  await tab(page, "board");
+  await showing.selectOption("Scoreboard");
+  await expect(page.locator("#wxpCtls")).toBeHidden();
 });
 
 test("flights: Within and Facing post, in the weather's units, and the card says where home is", async ({ page, request }) => {
