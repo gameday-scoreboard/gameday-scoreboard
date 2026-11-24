@@ -42,7 +42,7 @@ The picture card works like the [message card](/using/messages/#a-message-card):
 - It takes turns with the message card, the [news](/using/news/) and the [College Top 25](/using/top-25/): only one is on the screen at a time.
 
 :::note[Coming in the next app update]
-On Android, the note after you add a picture says when a message card on **Whenever no game is on** keeps it from coming up, and how to give pictures a turn: change **Show it** under **Message card** to a time, like **Every 2 minutes**.
+When a message card on **Whenever no game is on** holds the board, a picture you add gets no turn, and the app says so, on iPhone and Android: "Added, but the message card holds the board between games, so the picture won't come up." To give pictures a turn, change **Show it** under **Message card** to a time, like **Every 2 minutes**. The note changes back to "It's up next" once you do.
 :::
 
 ## Delete a picture
