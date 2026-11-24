@@ -170,7 +170,8 @@
     {"id": "schedule", "name": "Schedule", "on": true, "ok": true, "hint": "Only for teams in Favorite teams, not baseball"},
     {"id": "seasonrecap", "name": "Season recap", "on": true, "ok": true, "hint": "Only for teams in Favorite teams, not baseball"},
     {"id": "news", "name": "News headlines", "on": false, "ok": true, "hint": ""},
-    {"id": "weather", "name": "Weather", "on": true, "ok": true, "hint": "Set your town below first"}
+    {"id": "weather", "name": "Weather", "on": true, "ok": true, "hint": "Set your town below first"},
+    {"id": "gamedaycard", "name": "Game Day card", "on": false, "ok": true, "hint": ""}
   ],
   "town": "75019",
   "wxon": true,

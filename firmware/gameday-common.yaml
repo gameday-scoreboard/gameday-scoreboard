@@ -765,6 +765,12 @@ gameday:
           lambda: 'return x == "msg";'
         then:
           - script.execute: gd_msg_card
+    # The Game Day card (pages/gameday-live.yaml)
+    - if:
+        condition:
+          lambda: 'return x == "gameday_card";'
+        then:
+          - script.execute: gd_gameday_card
     # The college Top 25 card (pages/gameday-live.yaml)
     - if:
         condition:

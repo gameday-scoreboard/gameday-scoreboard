@@ -179,8 +179,9 @@ What the panel shows when no game is on. **Countdown to the next game**, on unle
 | **Schedule** | A favorite's next three games, for teams in every league but MLB. See [Schedule and season recap](/using/schedule/). |
 | **Season recap** | A favorite's record and playoff result between seasons, for teams in every league but MLB. |
 | **Weather** | The forecast for your town. See [Weather](/using/weather/). |
+| **Game Day card** | A QR code for gameday-scoreboard.com every 20 minutes, for a panel other people see. See [Game Day card](/using/gameday-card/). |
 
-Every card is on to start except News headlines and Weather (on once you set a town), so a panel does what it did before the update. A card with nothing to show yet says what it needs under its name: a day for the date countdown, text or a list for the message card, a picture for Pictures, a college football or basketball team for College Top 25, a team outside MLB in Favorite teams for Schedule and Season recap, a town for Weather. You can still turn it off before then. The list is part of the [settings backup](/using/backup/).
+Every card is on to start except News headlines, the Game Day card and Weather (on once you set a town), so a panel does what it did before the update. A card with nothing to show yet says what it needs under its name: a day for the date countdown, text or a list for the message card, a picture for Pictures, a college football or basketball team for College Top 25, a team outside MLB in Favorite teams for Schedule and Season recap, a town for Weather. You can still turn it off before then. The list is part of the [settings backup](/using/backup/).
 
 The **Weather** card holds a **Town or ZIP code** box with **Look up**, the place the panel found, and when the forecast was last read and what it said. Setting a town turns the card on. **Degrees** picks °F, °C or Auto for the card and the kickoff forecast.
 
