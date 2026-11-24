@@ -69,10 +69,10 @@ inline SettingType setting_type(const char *k) {
                                       "field",   "winbar", "spark", "bigplays"};
   static const char *const kInt[] = {"mode",  "rotate",   "panels",    "lockon",
                                      "release", "collide", "msgevery", "nightlevel", "list", "pregame",
-                                     "wakelead", "celebrate", "wxunit"};
+                                     "wakelead", "celebrate", "wxunit", "flrad", "flface"};
   static const char *const kText[] = {"fav1", "fav2", "fav3",       "fav4",     "tz",   "msg",
                                       "msgurl", "nightstart", "nightend", "nick", "cdname", "cddate", "hook",
-                                      "sport", "town", "after", "remote1", "remote2", "remote3", "remote4"};
+                                      "sport", "town", "after", "remote1", "remote2", "remote3", "remote4", "flrx"};
   static const char *const kList[] = {"favs", "live"};
   for (const char *b : kBool)
     if (strcmp(k, b) == 0)
@@ -126,7 +126,7 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
                                       "odds",     "leaders",  "field",    "winbar",      "spark",      "opp",      "celebrate",   "bigplays",    "best",        "bootaddr",   "night",
                                       "nightstart", "nightend", "nightscreen", "nightlevel", "wake", "wakelead",
                                       "after",    "cards",    "countdown",
-                                      "top25",    "news",     "cdname",   "cddate",   "town",        "wxon",     "wxunit",   "gameleaders",
+                                      "top25",    "news",     "cdname",   "cddate",   "town",        "wxon",     "wxunit",   "flrad",    "flface",   "flrx",     "gameleaders",
                                       "msg",      "msgurl",   "msgevery", "autoupd",     "beta",
                                       "lists",    "list",     "sport",    "hook",       "pregame",  "remote1",  "remote2",  "remote3",  "remote4",
                                       "fxlists"};
@@ -341,7 +341,7 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
     if (v.isNull())
       continue;
     std::string k = key;
-    if ((k == "sport" && !favorites) || set_key_once(key))
+    if ((k == "sport" && !favorites) || set_key_once(key) || set_key_secret(key))
       continue;
     SettingType type = setting_type(key);
     SetOp op;
@@ -696,7 +696,7 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
     bool known = strcmp(k, "schema") == 0 || strcmp(k, "version") == 0 || strcmp(k, "name") == 0 ||
                  strcmp(k, "brightness") == 0 || strcmp(k, "scroll") == 0;
     for (const char *s : kSetKeys)
-      known = known || (strcmp(k, s) == 0 && !set_key_once(s));
+      known = known || (strcmp(k, s) == 0 && !set_key_once(s) && !set_key_secret(s));
     if (!known)
       out.skipped.push_back(k);
   }

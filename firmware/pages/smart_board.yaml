@@ -75,6 +75,8 @@ esphome:
     - priority: -200.0
       then:
         - lambda: |-
+            // What Showing has up decides what the panel reads (showing.h)
+            id(gameday_ctl).set_sb_pinned_ref(&id(gd_sb_pinned));
             id(page_manager).add_on_state_callback([](size_t index) {
               const bool sb = strcmp(id(page_manager).option_at(index), "Smart board") == 0;
               if (::espn::sb_flags().own_change) {
@@ -151,13 +153,13 @@ script:
           for (size_t i = 0; i < ::espn::kSbRows; i++) {
             lv_obj_t *l = lbl[i];
             if (!filled[i]) {
-              lv_obj_add_flag(l, LV_OBJ_FLAG_HIDDEN);
+              lv_obj_set_hidden(l, true);
               drawn[i] = 0;
               continue;
             }
             const ::espn::SbRow &r = rows[i];
             const uint32_t k = key(raw[i], y[i], h[i]);
-            if (!layout_changed && drawn[i] == k && !lv_obj_has_flag(l, LV_OBJ_FLAG_HIDDEN))
+            if (!layout_changed && drawn[i] == k && !lv_obj_is_hidden(l))
               continue;
             drawn[i] = k;
             int32_t widths[4];
@@ -179,7 +181,7 @@ script:
             lv_obj_set_pos(l, 0, y[i] + (h[i] - heights[f]) / 2);
             if (roll)
               lv_label_set_long_mode(l, LV_LABEL_LONG_SCROLL_CIRCULAR);
-            lv_obj_clear_flag(l, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(l, false);
           }
 
           // Nothing sent yet: say what the page is for, not a black panel
@@ -191,18 +193,18 @@ script:
             lv_obj_set_pos(id(gd_sb_hint_sub), 0, W >= 128 ? 36 : 30);
             lv_label_set_text(id(gd_sb_hint_sub),
                               W >= 128 ? "Send rows from\nHome Assistant" : "Send rows\nfrom Home\nAssistant");
-            lv_obj_clear_flag(id(gd_sb_hint_title), LV_OBJ_FLAG_HIDDEN);
-            lv_obj_clear_flag(id(gd_sb_hint_sub), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(gd_sb_hint_title), false);
+            lv_obj_set_hidden(id(gd_sb_hint_sub), false);
           } else {
-            lv_obj_add_flag(id(gd_sb_hint_title), LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(id(gd_sb_hint_sub), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(gd_sb_hint_title), true);
+            lv_obj_set_hidden(id(gd_sb_hint_sub), true);
           }
 
           lv_obj_set_pos(id(gd_sb_mark), W - 3, 0);
           if (stale && n > 0)
-            lv_obj_clear_flag(id(gd_sb_mark), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(gd_sb_mark), false);
           else
-            lv_obj_add_flag(id(gd_sb_mark), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(gd_sb_mark), true);
 
 interval:
   # Whether Home Assistant is still there, for the stale look

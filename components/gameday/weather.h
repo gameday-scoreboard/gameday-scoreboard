@@ -28,6 +28,8 @@ namespace espn {
 // like the nickname.
 constexpr size_t kTownMax = 40;
 constexpr size_t kPlaceMax = 40;
+// The Weather page (weather_page.h, firmware/pages/weather.yaml) reads the
+// same forecast, with the next hours and each day's sunrise and sunset in it.
 // Reads every half hour; the card shows a forecast up to this old, then steps
 // out of the rotation until a read works again.
 constexpr uint32_t kWxReadMs = 30 * 60 * 1000;
@@ -63,6 +65,21 @@ struct WxDay {
   uint8_t wday{0};  // 0 Sunday
 };
 
+// One hour of the forecast, for the Weather page (weather_page.h). Small,
+// since the component keeps two forecasts (its own and the read's) in
+// internal RAM.
+struct WxHourly {
+  int16_t t10{0};     // tenths of a degree F
+  uint8_t code{255};  // WMO weather code; 255 for an hour the reply left out
+  int8_t pop{-1};     // the chance of rain, snow or storms, 0 to 100; -1 unknown
+  bool night{false};
+};
+// The hours read: the one under way and the 14 after it, so a forecast read
+// up to 2 hours ago still covers the page's next 12 hours.
+constexpr size_t kWxHours = 15;
+constexpr size_t kWxSunDays = 4;
+constexpr int16_t kWxNoSun = -1;
+
 struct WxForecast {
   bool valid{false};
   int t10{0};  // now
@@ -73,6 +90,15 @@ struct WxForecast {
   WxDay later;      // the day after those, for the move past midnight (wx_roll_day)
   bool has_later{false};
   int32_t day0{0};  // today's date in the reply, as days since 1970-01-01; 0 when it had none
+  // The Weather page's: the hours from hour0 on (local hours since
+  // 1970-01-01, wx_local_minutes / 60), one an entry, and each day's sunrise
+  // and sunset from day0 on, as minutes into that day (kWxNoSun for none: a
+  // polar day or night, or a reply without them).
+  int32_t hour0{0};
+  WxHourly hours[kWxHours];
+  uint8_t n_hours{0};
+  int16_t sunrise[kWxSunDays]{kWxNoSun, kWxNoSun, kWxNoSun, kWxNoSun};
+  int16_t sunset[kWxSunDays]{kWxNoSun, kWxNoSun, kWxNoSun, kWxNoSun};
 };
 
 // The town as the panel keeps it: one line, printable, no emoji, at most
@@ -121,9 +147,10 @@ inline std::string forecast_url(float lat, float lon, const char *tz_iana) {
   char buf[64];
   snprintf(buf, sizeof(buf), "latitude=%.4f&longitude=%.4f", (double) lat, (double) lon);
   return std::string("https://api.open-meteo.com/v1/forecast?") + buf +
-         "&current=temperature_2m,weather_code,is_day&daily=weather_code,temperature_2m_max,temperature_2m_min"
+         "&current=temperature_2m,weather_code,is_day&daily=weather_code,temperature_2m_max,temperature_2m_min,"
+         "sunrise,sunset&hourly=temperature_2m,weather_code,precipitation_probability,is_day"
          "&temperature_unit=fahrenheit&timezone=" +
-         url_encode(tz_iana) + "&forecast_days=4";
+         url_encode(tz_iana) + "&forecast_days=4&forecast_hours=15";
 }
 
 namespace detail {
@@ -148,6 +175,14 @@ inline void fill_forecast_filter(JsonDocument &f) {
   d["weather_code"] = true;
   d["temperature_2m_max"] = true;
   d["temperature_2m_min"] = true;
+  d["sunrise"] = true;
+  d["sunset"] = true;
+  JsonObject h = f["hourly"].to<JsonObject>();
+  h["time"] = true;
+  h["temperature_2m"] = true;
+  h["weather_code"] = true;
+  h["precipitation_probability"] = true;
+  h["is_day"] = true;
 }
 
 // A temperature that could be real, in tenths of a degree. False for a
@@ -185,6 +220,16 @@ inline int32_t wx_days_from_date(const char *date) {
   if (date == nullptr || sscanf(date, "%4d-%2d-%2d", &y, &m, &d) != 3 || m < 1 || m > 12 || d < 1 || d > 31)
     return 0;
   return wx_days_from_civil(y, (unsigned) m, (unsigned) d);
+}
+
+// "2026-11-23T17:22" as local minutes since 1970-01-01 (the reply's times
+// are the panel's own, its time zone asked for); 0 when it isn't one.
+inline int32_t wx_local_minutes(const char *t) {
+  int y = 0, m = 0, d = 0, hh = 0, mm = 0;
+  if (t == nullptr || sscanf(t, "%4d-%2d-%2dT%2d:%2d", &y, &m, &d, &hh, &mm) != 5 || m < 1 || m > 12 || d < 1 ||
+      d > 31 || hh < 0 || hh > 23 || mm < 0 || mm > 59)
+    return 0;
+  return wx_days_from_civil(y, (unsigned) m, (unsigned) d) * 1440 + hh * 60 + mm;
 }
 
 // The day of the week of "2026-10-29", 0 Sunday. 0 for a date that doesn't read.
@@ -282,6 +327,36 @@ template<typename TInput> bool parse_forecast(TInput &input, WxForecast &out) {
     f.has_later = i == 3;
   }
   f.day0 = wx_days_from_date(time[0].as<const char *>());
+  // The Weather page's hours and suns. A reply without them (an older
+  // read's shape) still makes the card.
+  JsonArrayConst sr = daily["sunrise"], ss = daily["sunset"];
+  for (size_t i = 0; i < kWxSunDays && f.day0 != 0; i++) {
+    const int32_t day = (f.day0 + (int32_t) i) * 1440;
+    const int32_t rise = wx_local_minutes(sr[i].as<const char *>()), set = wx_local_minutes(ss[i].as<const char *>());
+    if (rise >= day && rise < day + 1440)
+      f.sunrise[i] = (int16_t) (rise - day);
+    if (set >= day && set < day + 1440)
+      f.sunset[i] = (int16_t) (set - day);
+  }
+  JsonObjectConst hourly = doc["hourly"];
+  JsonArrayConst ht = hourly["time"], htemp = hourly["temperature_2m"], hcode = hourly["weather_code"],
+                 hpop = hourly["precipitation_probability"], hday = hourly["is_day"];
+  f.hour0 = ht.size() > 0 ? wx_local_minutes(ht[0].as<const char *>()) / 60 : 0;
+  for (size_t i = 0; f.hour0 != 0 && i < ht.size() && i < kWxHours; i++) {
+    f.n_hours = (uint8_t) (i + 1);
+    WxHourly &h = f.hours[i];
+    int t10 = 0;
+    // Each entry is the hour after the one before; one that isn't, or has no
+    // temperature, stays empty (code 255).
+    if (wx_local_minutes(ht[i].as<const char *>()) / 60 != f.hour0 + (int32_t) i ||
+        !detail::wx_degrees(htemp[i], t10))
+      continue;
+    h.code = detail::wx_code(hcode[i]);
+    h.t10 = (int16_t) t10;
+    const int pop = hpop[i] | -1;
+    h.pop = (int8_t) (pop >= 0 && pop <= 100 ? pop : -1);
+    h.night = hday[i].is<int>() && hday[i].as<int>() == 0;
+  }
   f.valid = true;
   out = f;
   return true;
@@ -304,6 +379,10 @@ inline bool wx_roll_day(WxForecast &f, int32_t today) {
   f.next[1] = f.later;
   f.later = WxDay{};
   f.has_later = false;
+  for (size_t i = 0; i < kWxSunDays; i++) {
+    f.sunrise[i] = i + 1 < kWxSunDays ? f.sunrise[i + 1] : kWxNoSun;
+    f.sunset[i] = i + 1 < kWxSunDays ? f.sunset[i + 1] : kWxNoSun;
+  }
   f.day0 = today;
   return true;
 }

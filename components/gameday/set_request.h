@@ -15,6 +15,7 @@
 
 #include "cards.h"
 #include "countdown.h"
+#include "flights.h"
 #include "hook.h"
 #include "leagues.h"
 #include "message.h"
@@ -37,7 +38,8 @@ constexpr const char *kSetKeys[] = {"mode",   "rotate",   "fav1",   "fav2",    "
                                     "msgevery", "best",   "jump",   "banner",  "leaders", "night",
                                     "nightstart", "nightend", "nightscreen", "nightlevel", "favtake",
                                     "nick",   "lists",    "list",   "sport",   "hook",    "pregame",
-                                    "news",   "town",     "wxon",     "wxunit",   "cards",   "wake",    "wakelead",
+                                    "news",   "town",     "wxon",     "wxunit",   "flrad",   "flface",  "flrx",
+                                    "flkey",  "cards",    "wake",     "wakelead",
                                     "after",   "remote1", "remote2", "remote3", "remote4", "celebrate",
                                     "field",   "winbar",  "spark",   "bigplays", "keepfav", "fxlists", "fxlist"};
 
@@ -45,6 +47,24 @@ constexpr const char *kSetKeys[] = {"mode",   "rotate",   "fav1",   "fav2",    "
 // settings backup (settings_doc.h) has nothing of theirs to write or restore:
 // keepfav, and fxlist, which effect playlist plays now (like Showing, not kept).
 inline bool set_key_once(const char *k) { return strcmp(k, "keepfav") == 0 || strcmp(k, "fxlist") == 0; }
+
+// Set keys whose value is a secret: never in the state document or the
+// settings backup. flkey, the owner's adsb.lol key; the state says only
+// whether one is set (flkey_set).
+inline bool set_key_secret(const char *k) { return strcmp(k, "flkey") == 0; }
+
+// The Flights page's receiver address and adsb.lol key (flights.h): at most
+// this many bytes of printable ASCII with no spaces; "" clears either.
+constexpr int kFlTextMax = 63;
+
+inline bool fl_text_ok(const std::string &v) {
+  if (v.size() > (size_t) kFlTextMax)
+    return false;
+  for (char c : v)
+    if (c <= ' ' || c > '~')
+      return false;
+  return true;
+}
 
 // FAVORITES (4) follows the favorites list; LIVE (5) follows live games in
 // the leagues of the live mask. Modes 1-3 are the football-only live modes
@@ -485,6 +505,10 @@ enum class SetKind : uint8_t {
   TOWN,         // text, the weather card's town (weather.h); "" clears it and turns the card off
   WXON,         // on, the weather card between games
   WXUNIT,       // value, the weather's degrees: kWxUnitAuto, kWxUnitF or kWxUnitC (weather.h)
+  FL_RADIUS,    // value, the Flights page's distance step, 0 to kFlRadiusSteps - 1 (flights.h)
+  FL_FACE,      // value, the way the owner's window faces: 0 any, 1 to 8 for N to NW (flights.h facing_ok)
+  FL_RX,        // text, the owner's own ADS-B receiver (flights.h receiver_url); "" for none
+  FL_KEY,       // text, the owner's adsb.lol key; "" for none
   CARDS,        // mask: the between-games cards named, value: those turned on (cards.h); refused: ids left out
   FIELD,        // on, football's field strip on the board (game_viz.h)
   WINBAR,       // on, the win chance line on the board's situation row (row_text.h)
@@ -747,6 +771,19 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
     op.kind = SetKind::WXUNIT;
     op.value = v == "0" ? kWxUnitAuto : v == "1" ? kWxUnitF : v == "2" ? kWxUnitC : -1;
     return op.value >= 0;
+  }
+  if (k == "flrad") {
+    op.kind = SetKind::FL_RADIUS;
+    return parse_whole_int(v, op.value) && op.value >= 0 && op.value < (int) kFlRadiusSteps;
+  }
+  if (k == "flface") {
+    op.kind = SetKind::FL_FACE;
+    return parse_whole_int(v, op.value) && op.value >= 0 && op.value <= 8;
+  }
+  if (k == "flrx" || k == "flkey") {
+    op.kind = k == "flrx" ? SetKind::FL_RX : SetKind::FL_KEY;
+    op.text = v;
+    return fl_text_ok(v);
   }
   if (k == "night")
     return on(SetKind::NIGHT);

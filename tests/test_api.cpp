@@ -252,6 +252,13 @@ std::string full_health_json() {
 
 // The wifi object with every optional key: connected, a drop of each counted
 // cause in the last day, the newest one over.
+// The ages object, spliced the way ages_json_ does.
+std::string full_ages_json() {
+  char buf[80];
+  espn::ages_json(buf, sizeof(buf), 312, 20, 0);
+  return buf;
+}
+
 std::string full_wifi_json() {
   static int8_t rssi[espn::kWifiMinutes];
   static espn::WifiDrop drops[espn::kWifiDrops];
@@ -301,7 +308,7 @@ void test_state() {
   for (const auto &k : appended)
     firmware.insert(k);
   // Their contents, from the headers that write them
-  const std::pair<const char *, std::string> parts[] = {{"health", full_health_json()}, {"wifi", full_wifi_json()}};
+  const std::pair<const char *, std::string> parts[] = {{"health", full_health_json()}, {"wifi", full_wifi_json()}, {"ages", full_ages_json()}};
   for (const auto &p : parts) {
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, p.second);
@@ -460,7 +467,7 @@ void test_types() {
     }
   }
   JsonObjectConst state = types["state"];
-  const std::pair<const char *, std::string> parts[] = {{"health", full_health_json()}, {"wifi", full_wifi_json()}};
+  const std::pair<const char *, std::string> parts[] = {{"health", full_health_json()}, {"wifi", full_wifi_json()}, {"ages", full_ages_json()}};
   for (const auto &p : parts) {
     JsonDocument doc;
     if (deserializeJson(doc, p.second) == DeserializationError::Ok)

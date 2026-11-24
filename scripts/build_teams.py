@@ -16,8 +16,9 @@ by the teams endpoint (it returns FCS and D3 schools too), so the college
 list is collected from a season's worth of FBS scoreboards and filtered by
 conference id.
 
-Men's college basketball's team list is Division I only, but it can trail a
-school that just finished moving up; see mcbb_teams().
+The college basketball team lists (men's and women's) are Division I only,
+but they can trail a school that just finished moving up; see
+college_basketball_teams().
 """
 
 import argparse
@@ -53,7 +54,7 @@ sys.path.insert(0, str(COMPONENT))
 from leagues_table import leagues  # noqa: E402
 
 # Fewest teams a fresh list may have before the run is treated as a bad read.
-MIN_TEAMS = {"NFL": 32, "NCAA": 120, "MLB": 30, "NBA": 30, "NHL": 32, "WNBA": 13, "MLS": 29, "EPL": 20, "MCBB": 350}
+MIN_TEAMS = {"NFL": 32, "NCAA": 120, "MLB": 30, "NBA": 30, "NHL": 32, "WNBA": 13, "MLS": 29, "EPL": 20, "MCBB": 350, "WCBB": 350}
 
 
 # ESPN returns 403 to most unfamiliar agents but accepts ones that start with "curl/".
@@ -100,13 +101,14 @@ def pro_teams(league, path):
     return teams
 
 
-def mcbb_teams(path):
-    """ESPN's men's college basketball list holds only Division I teams but
-    can miss a school that just finished moving up. The D1 standings (one
-    table per conference) name every member. A team in the standings but not
-    in the list is kept only when its team endpoint places it under Division
-    I, so a school that has since left D1 stays out."""
-    found = {row[1]: row for row in pro_teams("MCBB", path)}
+def college_basketball_teams(league, path):
+    """ESPN's college basketball lists (men's and women's) hold only
+    Division I teams but can miss a school that just finished moving up.
+    The D1 standings (one table per conference) name every member. A team
+    in the standings but not in the list is kept only when its team
+    endpoint places it under Division I, so a school that has since left
+    D1 stays out."""
+    found = {row[1]: row for row in pro_teams(league, path)}
     standings = get(f"{STANDINGS_ROOT}/{path}/standings?group={D1_GROUP}")
     for conf in standings.get("children", []):
         for entry in conf.get("standings", {}).get("entries", []):
@@ -116,8 +118,8 @@ def mcbb_teams(path):
             t = get(f"{SITE_ROOT}/{path}/teams/{tid}")["team"]
             parent = ((t.get("groups") or {}).get("parent") or {}).get("id")
             if str(parent) == D1_GROUP:
-                print(f"MCBB: adding {t['displayName']} ({tid}), missing from the team list")
-                found[tid] = ("MCBB", tid, t["abbreviation"], t["displayName"], 0)
+                print(f"{league}: adding {t['displayName']} ({tid}), missing from the team list")
+                found[tid] = (league, tid, t["abbreviation"], t["displayName"], 0)
     return list(found.values())
 
 
@@ -162,8 +164,8 @@ def main():
             fresh = nfl_teams()
         elif lg == "NCAA":
             fresh = ncaa_teams()
-        elif lg == "MCBB":
-            fresh = mcbb_teams(paths[lg])
+        elif lg in ("MCBB", "WCBB"):
+            fresh = college_basketball_teams(lg, paths[lg])
         else:
             fresh = pro_teams(lg, paths[lg])
         print(f"{lg}: {len(fresh)} teams")

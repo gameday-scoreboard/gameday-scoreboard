@@ -110,7 +110,7 @@
   "jump": false,
   "banner": true,
   "favtake": true,
-  "live": ["nfl", "ncaa", "mlb", "mls", "epl", "nba", "wnba", "mcbb", "nhl"],
+  "live": ["nfl", "ncaa", "mlb", "mls", "epl", "nba", "wnba", "mcbb", "wcbb", "nhl"],
   "live_auto": true,
   "live_only": "",
   "tz": 1,
@@ -175,6 +175,7 @@
   ],
   "town": "75019",
   "wxon": true,
+  "wxpage": false,
   "wxunit": 0,
   "wx": {
     "place": "Coppell, Texas",
@@ -196,6 +197,21 @@
       {"d": "Thu", "hi": 80, "lo": 66, "code": 61},
       {"d": "Fri", "hi": 75, "lo": 67, "code": 2}
     ]
+  },
+  "flrad": 1,
+  "flface": 0,
+  "flrx": "",
+  "flkey_set": false,
+  "fl": {
+    "on": true,
+    "src": "adsblol",
+    "n": 8,
+    "heard": 11,
+    "read_s": 20,
+    "wait_s": 0,
+    "err": "none",
+    "place": "Coppell, Texas",
+    "radius": "10 mi"
   },
   "kick": {
     "src": "open-meteo",
@@ -391,5 +407,10 @@
     "last": "signal",
     "last_ago": 420,
     "last_down": 12
+  },
+  "ages": {
+    "wx_read_s": 312,
+    "fl_read_s": -1,
+    "fl_wait_s": 0
   }
 }

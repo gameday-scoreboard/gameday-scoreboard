@@ -42,6 +42,7 @@ script:
             - hub75.set_brightness:
                 id: matrix
                 brightness: !lambda 'return id(gameday_ctl).guard_brightness(id(gameday_ctl).display_level(), false);'
+            - script.execute: gd_dark_check  # drawing again at night (pages/guard.yaml)
             - while:
                 condition:
                   lambda: |-
@@ -63,7 +64,7 @@ script:
           then:
             - lambda: |-
                 id(reg_active) = false;
-                lv_obj_add_flag(id(reg_layer), LV_OBJ_FLAG_HIDDEN);
+                lv_obj_set_hidden(id(reg_layer), true);
                 ESP_LOGI("regulatory", "FCC information off");
             # The night schedule and the heat and power holds apply again.
             - script.execute: gd_guard
@@ -87,7 +88,7 @@ script:
           lv_label_set_text(id(reg_num), num);
           ESP_LOGD("regulatory", "Page %s", num);
           lv_obj_move_foreground(id(reg_layer));
-          lv_obj_clear_flag(id(reg_layer), LV_OBJ_FLAG_HIDDEN);
+          lv_obj_set_hidden(id(reg_layer), false);
 
 light:
   - id: !extend gd_display

@@ -98,6 +98,10 @@ In both apps, **Only today's games**, **Jump to the action** and **Score banner*
 On Android, **Setup** has **Walk through the settings again** too. It opens the walkthrough from setup: your teams, what the panel shows, the ticker and switching, and the timezone.
 :::
 
+:::note[Coming in the next app update]
+On iPhone, **Add network** under Wi-Fi networks in **Device** lists the networks the panel can see, strongest first, with how strong each signal is, as on the device page. It leaves out the network the panel is on and marks the ones it already knows **Saved**. Tap one to fill in its name, or type the name of a hidden network. **Look again** looks once more. The list shows once the panel runs firmware that sends it. See [Wi-Fi](/using/wifi/#add-a-network-from-the-device-page).
+:::
+
 In both apps, Settings has three pages for the panel, like the device page's tabs:
 
 - **Display**: ticker speed, the night schedule (iPhone), the ticker, celebrations and **Between games**. **Showing** moved to the Board. On Android, the **Celebrations** card also has a **Celebrations** choice, **Full**, **Subtle** or **Off**, for how big the show is (see [Celebrations](/using/device-page/#celebrations)). It shows once the panel runs firmware with that setting.
@@ -152,7 +156,15 @@ On iPhone and Android, **Display** has the device page's **Game-day wake** and *
 On iPhone and Android, **After the game** also has **Show the Smart board**: your [Smart board](/using/smart-board/) rows between games, until the **Turns on** time before your next game, then the scoreboard. **Turns on** shows with it too. It shows once the panel runs firmware with the Smart board.
 :::
 
+:::note[Coming in the next app update]
+On iPhone and Android, **After the game** also has **Show effects**: the effect the Effects page is set to, whenever no game of yours is on, until the **Turns on** time before your next game. See [Between games](/using/effects/#between-games).
+:::
+
 On iPhone and Android, **Customize** has **Pictures** after the message card, like the device page: the pictures on your panel, each with **Delete**, and **Add a picture**, which picks from your phone's photos. A photo is shrunk to fit the panel and a GIF up to 128 by 64 pixels goes as it is (see [Pictures](/using/pictures/)). It shows once the panel runs firmware with pictures.
+
+:::note[Coming in the next app update]
+On Android, **Customize** has a **Flights** card after **Date countdown**, like the device page's: **Within**, **Facing**, **ADS-B receiver** and **adsb.lol key**, and the status line, like **8 planes nearby, from adsb.lol, read 20 s ago** (see [Setting it up](/using/flights/#setting-it-up)). Once a key is saved, the card shows **Key saved** with **Clear**, never the key. With **Showing** on the Board set to **Flights**, the same status line shows under it, with **Flights settings under Customize**. The card shows once the panel runs firmware with the Flights page.
+:::
 
 On Android, **Device** has a **Remote buttons** card after **Remote**. On iPhone, **Device > Advanced** has **Buttons 1 to 4** under **Remote**. Both have the device page's picker for each of buttons 1 to 4: **Its own favorite**, a favorite team, a sport, a playlist, **All favorites** or **Nothing**. A button on its own favorite says which favorite that is, and one whose team, playlist or sport is gone says which favorite it plays for now. While a WizMote is paired, your favorites and playlists show the buttons set to them. See [The numbered buttons](/using/remote/#the-numbered-buttons). They show once the panel runs firmware with the pickers.
 

@@ -2,7 +2,7 @@
 
 ESPHome firmware for a standalone sports scoreboard on an ESP32-S3
 driving HUB75 LED panels: the NFL, college football, MLB, the NBA, the
-WNBA, men's college basketball, the NHL, MLS and the Premier League. It
+WNBA, men's and women's college basketball, the NHL, MLS and the Premier League. It
 follows games from ESPN's public API by itself and serves its own
 settings page. CONTRIBUTING.md has the same ground for people; this file
 is the short version.
@@ -48,7 +48,7 @@ is the short version.
 
 ## Build and test
 
-- ESPHome 2026.10.2, the version CI pins (`ESPHOME_VERSION` in
+- ESPHome 2026.11.0, the version CI pins (`ESPHOME_VERSION` in
   `.github/workflows/build.yml`). Use `esphome compile
   firmware/gameday.yaml` (and the scoreboard75 file) to check a change;
   `esphome config` misses C++ errors.
@@ -179,7 +179,8 @@ over is its own PR, never a side effect of another change.
 - Name the branch after the change (`espn-gzip`, `power-cut-boot`). The
   name stays in the merge commit, so CI's Branch rules job refuses a head
   branch with a tracker's ticket in it, like `card-123-...`.
-- A PR description says what changed and how it was tested. No links to
+- A PR description says what changed, how it was tested, and who the change
+  builds on: credit the data sources and projects it uses, with links. No links to
   private repos or trackers, no ticket numbers from them, and no AI
   attribution in PR text or comments. Maintainers keep reviews and
   progress notes privately.

@@ -336,6 +336,44 @@ static void test_event_live() {
   CHECK_EQ(chi.opp_leader, std::string("Penix Jr. 719 yds 3 TD"));
 }
 
+static void test_nfl_overtime() {
+  // NFL games that went to overtime, recorded from the single-event
+  // endpoint after the fact (see fixtures/README.md). Before these, NFL
+  // overtime was only covered by hand-built snapshots: the OT finals in
+  // the fixtures were basketball, hockey and college football.
+  GameSnapshot dal;
+  CHECK(parse_event_str(slurp("fixtures/event_nfl_ot.json"), Sport::FOOTBALL, 6, dal, "401772834"));
+  CHECK(dal.state == GameState::POST);
+  CHECK(dal.completed);
+  CHECK_EQ(dal.period, 5);
+  CHECK_EQ(dal.short_detail, std::string("Final/OT"));
+  CHECK(in_overtime(League::NFL, dal.period));
+  CHECK(dal.team_winner);
+  CHECK_EQ(dal.team_score, 40);
+  CHECK_EQ(dal.opp_score, 37);
+  CHECK_EQ(dal.opp_abbr, std::string("NYG"));
+  // The ticker calls a completed football final just "Final" (pinned in
+  // test_status_text); the "Final/OT" detail itself is on the snapshot
+  // above and is what the panel's own detail line shows.
+  TickerOptions o;
+  CHECK_EQ(status_text(dal, o, ""), std::string("Final | DAL 1-1 | NYG 0-2"));
+
+  // The 2025 Packers-Cowboys tie: overtime ran out with no winner, so
+  // neither side is flagged the winner and the scores stay level.
+  GameSnapshot gb;
+  CHECK(parse_event_str(slurp("fixtures/event_nfl_ot_tie.json"), Sport::FOOTBALL, 9, gb, "401772921"));
+  CHECK(gb.state == GameState::POST);
+  CHECK(gb.completed);
+  CHECK_EQ(gb.period, 5);
+  CHECK_EQ(gb.short_detail, std::string("Final/OT"));
+  CHECK(!gb.team_winner);
+  CHECK_EQ(gb.team_score, 40);
+  CHECK_EQ(gb.opp_score, 40);
+  CHECK_EQ(gb.opp_abbr, std::string("DAL"));
+  // Both records carry the tie in the third column.
+  CHECK_EQ(status_text(gb, o, ""), std::string("Final | GB 2-1-1 | DAL 1-2-1"));
+}
+
 static bool same_snapshot(const GameSnapshot &a, const GameSnapshot &b) {
   return a.valid == b.valid && a.state == b.state && a.event_id == b.event_id && a.kickoff_epoch == b.kickoff_epoch &&
          a.completed == b.completed && a.short_detail == b.short_detail && a.display_clock == b.display_clock &&
@@ -747,6 +785,19 @@ static std::vector<HaEvent> sf(std::vector<HaEvent> v) {
     if (e.kind == HaKind::SCORE || e.kind == HaKind::FINAL)
       out.push_back(e);
   return out;
+}
+
+// Back on the Scoreboard after a page with no game on it (showing.h): the
+// scores from while it was away never fire, the next ones do.
+static void test_ha_events_after_away() {
+  HaTracker t;
+  sf(t.update(live(7, 0), false));
+  t.clear();  // the panel left the Scoreboard
+  CHECK(sf(t.update(live(21, 3), false)).empty());  // two touchdowns and a field goal while away
+  auto e = sf(t.update(live(28, 3), false));
+  CHECK_EQ(e.size(), (size_t) 1);
+  CHECK_EQ(e[0].play, std::string("touchdown"));
+  CHECK_EQ(e[0].team_score, 28);
 }
 
 static void test_ha_events() {
@@ -2397,6 +2448,34 @@ static void test_mlb_pre_post() {
   ppd.team_score = 2;
   CHECK_EQ(decide_splash(ppd_was, ppd, true, true).text, std::string(""));
 
+  // Extra innings for real: MIL @ TB went 12 (2026-10-27). The only
+  // extra-inning coverage before this fixture faked a "Final/10" detail
+  // on the nine-inning final above.
+  GameSnapshot x12 = mlb_event("fixtures/event_mlb_final_12.json", kBrewers);
+  CHECK(x12.state == GameState::POST);
+  CHECK(x12.completed);
+  CHECK_EQ(x12.period, 12);
+  CHECK_EQ(x12.short_detail, std::string("Final/12"));
+  CHECK(!x12.team_winner);
+  CHECK_EQ(x12.team_score, 3);
+  CHECK_EQ(x12.opp_score, 4);
+  CHECK_EQ(x12.opp_abbr, std::string("TB"));
+
+  // The 2025 Speedway Classic (ATL @ CIN) was suspended by rain in the
+  // first inning and finished the next day. ESPN's document for it now
+  // reads Final, with wasSuspended set on the competition. The parser
+  // doesn't read that flag, so this pins only that a suspended game ESPN
+  // has since finished parses as an ordinary final; it can't test a game
+  // while it sits suspended (see fixtures/README.md).
+  GameSnapshot sus = mlb_event("fixtures/event_mlb_suspended_final.json", kBraves);
+  CHECK(sus.state == GameState::POST);
+  CHECK(sus.completed);
+  CHECK_EQ(sus.short_detail, std::string("Final"));
+  CHECK(sus.team_winner);
+  CHECK_EQ(sus.team_score, 4);
+  CHECK_EQ(sus.opp_score, 2);
+  CHECK_EQ(sus.opp_abbr, std::string("CIN"));
+
   GameSnapshot x;
   CHECK(!parse_event_str(slurp("fixtures/event_mlb_top.json"), Sport::BASEBALL, kWhiteSox, x));  // not in it
   CHECK(!parse_event_str(slurp("fixtures/event_mlb_top.json"), Sport::BASEBALL, kBraves, x, "401908017"));  // some other event
@@ -3233,6 +3312,88 @@ static void test_mcbb() {
   live.nba.phase = Phase::END_PERIOD;
   live.period = 2;
   CHECK_EQ(clock_text(live), std::string("End 2nd"));
+}
+
+// Women's college basketball, recorded 2026-11-06: UConn's team document
+// with the season just started, a game scheduled that night, the day's
+// full Division I scoreboard and a final from 2026-01-10 (see
+// fixtures/README.md). The women's game plays quarters, not halves: the
+// documents say so (format.regulation.periods is 4, the men's say 2).
+static const uint32_t kUConnW = 41, kTexasTechW = 2641, kNotreDameW = 87;
+
+static void test_wcbb_urls() {
+  CHECK_EQ(team_url(League::WCBB, 41),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/teams/41"));
+  CHECK_EQ(event_url(League::WCBB, "401919954"),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/scoreboard/401919954"));
+  CHECK_EQ(team_logo_url(League::WCBB, 41, "CONN"),
+           std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/ncaa/500-dark/41.png&w=64&h=64"));
+  const LeagueInfo *l = league_by_key("wcbb");
+  CHECK(l != nullptr && !l->season_list && l->logo_by_id && l->sport == Sport::BASKETBALL);
+  CHECK_EQ(std::string(league_path(League::WCBB)), std::string("womens-college-basketball"));
+  // "All women's college basketball live games", as the device page says it.
+  CHECK_EQ(league_live_name(League::WCBB), std::string("women's college basketball"));
+  int n = 0;
+  for (size_t i = 0; i < kTeamCount; i++) {
+    const Team &t = kTeams[i];
+    if (t.league != League::WCBB)
+      continue;
+    n++;
+    if (t.espn_id == kUConnW)
+      CHECK_EQ(team_option(t), std::string("NCAAW: UConn Huskies"));
+  }
+  CHECK(n >= 350);
+  // Like the men's scan, the women's day scan needs the Division I group,
+  // or it sees only the ranked teams' games (2 of 45 on 2026-11-06).
+  CHECK_EQ(scan_url(League::WCBB, parse_iso8601_z("2026-02-14T20:00Z")),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/scoreboard"
+                       "?groups=50&limit=300&dates=20260214"));
+}
+
+static void test_wcbb() {
+  Schedule s;
+  CHECK(parse_team_str(slurp("fixtures/team_wcbb_uconn.json"), s));
+  CHECK_EQ(s.event_id, std::string("401911738"));
+  CHECK_EQ(s.kickoff_epoch, parse_iso8601_z("2026-11-08T19:00Z"));
+  CHECK_EQ(s.team_color, std::string("0c2340"));
+  CHECK_EQ(s.group, 4u);
+  CHECK_EQ(team_day_url(League::WCBB, s.group, parse_iso8601_z("2026-11-07T01:30Z") - 4 * 3600),
+           std::string("https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/scoreboard?groups=4&dates=20261106"));
+
+  GameSnapshot p = hoops_event("fixtures/event_wcbb_pre.json", kNotreDameW);
+  CHECK(p.state == GameState::PRE);
+  CHECK_EQ((int) p.nba.regulation, 4);
+  CHECK_EQ(p.opp_abbr, std::string("STO"));
+  TickerOptions o;
+  CHECK_EQ(status_text(p, o, "Nov 6 7:00 PM"),
+           std::string("Nov 6 7:00 PM | ND -45.5 | O/U 146.5 | ACCNX | Hidalgo 32.0 PPG | Paquette 21.0 PPG | Purcell Pavilion"));
+
+  // Texas Tech's 71-60 win at Cincinnati: four quarters, no series.
+  GameSnapshot f = hoops_event("fixtures/event_wcbb_final.json", kTexasTechW);
+  CHECK(f.state == GameState::POST);
+  CHECK_EQ((int) f.nba.regulation, 4);
+  CHECK_EQ(f.team_score, 71);
+  CHECK_EQ(f.opp_score, 60);
+  CHECK_EQ(status_text(f, o, ""), std::string("Final | TTU 18-0 | CIN 6-11"));
+  CHECK_EQ(basketball_series(f), std::string(""));
+
+  // The day's Division I scoreboard names Notre Dame's game that night.
+  Schedule day;
+  CHECK(parse_team_game_str(slurp("fixtures/day_wcbb_20261106.json"), kNotreDameW, day));
+  CHECK_EQ(day.event_id, std::string("401919954"));
+
+  // A live copy of the final for the clock: quarters, then overtime.
+  GameSnapshot live = f;
+  live.state = GameState::IN;
+  live.nba.phase = Phase::PLAY;
+  live.period = 3;
+  live.display_clock = "4:56";
+  CHECK_EQ(clock_text(live), std::string("4:56 3rd"));
+  live.period = 5;
+  CHECK_EQ(clock_text(live), std::string("4:56 OT"));
+  live.nba.phase = Phase::HALFTIME;
+  live.period = 2;
+  CHECK_EQ(clock_text(live), std::string("Halftime"));
 }
 
 // A real home run (TB @ NYY, 2026-10-07, Top 6th): ESPN types the play
@@ -6613,7 +6774,11 @@ static void test_wake() {
   CHECK_EQ(after_parse("scoreboard"), 0);
   CHECK_EQ(after_parse("off"), 1);
   CHECK_EQ(after_parse("clock"), 2);
-  CHECK_EQ(after_parse("effects"), -1);  // not in this firmware yet
+  CHECK_EQ(after_parse("smartboard"), 3);
+  CHECK_EQ(after_parse("effects"), 4);
+  CHECK_EQ(after_parse("flights"), 5);
+  CHECK_EQ(std::string(after_word((uint8_t) After::EFFECTS)), std::string("effects"));
+  CHECK_EQ(after_parse("effect"), -1);
   CHECK_EQ(after_parse(""), -1);
   CHECK_EQ(std::string(after_word(9)), std::string("scoreboard"));
   CHECK_EQ(clamp_wake_lead(0), (int) kWakeLeadMin);
@@ -6816,9 +6981,21 @@ static void test_wake() {
   // A remote press that follows a team or asks for the Scoreboard ends the
   // clock or Smart board between games; it comes back only after the next
   // game's final.
-  for (uint8_t after : {(uint8_t) After::CLOCK, (uint8_t) After::SMART}) {
+  for (uint8_t after :
+       {(uint8_t) After::CLOCK, (uint8_t) After::SMART, (uint8_t) After::EFFECTS, (uint8_t) After::FLIGHTS}) {
     p.after = after;
-    auto page = [&](const WakeState &s) { return after == (uint8_t) After::CLOCK ? wake_clock(p, s, in) : wake_smart(p, s, in); };
+    auto page = [&](const WakeState &s) {
+      return after == (uint8_t) After::CLOCK     ? wake_clock(p, s, in)
+             : after == (uint8_t) After::SMART   ? wake_smart(p, s, in)
+             : after == (uint8_t) After::EFFECTS ? wake_effects(p, s, in)
+                                                 : wake_flights(p, s, in);
+    };
+    // Each choice puts up its own page only.
+    at(kick - 3 * 3600);
+    {
+      WakeState s0;
+      CHECK_EQ(wake_clock(p, s0, in) + wake_smart(p, s0, in) + wake_effects(p, s0, in) + wake_flights(p, s0, in), 1);
+    }
     WakeState s;
     in.kick = kick;
     at(kick - 3 * 3600);
@@ -6845,6 +7022,25 @@ static void test_wake() {
   CHECK_EQ(std::string(wake_word(true, false)), std::string("asleep"));
   CHECK_EQ(std::string(wake_word(false, true)), std::string("clock"));
   CHECK_EQ(std::string(wake_word(false, false)), std::string(""));
+  CHECK_EQ(std::string(wake_word(false, false, false, true)), std::string("effects"));
+  CHECK_EQ(std::string(wake_word(false, false, false, false, true)), std::string("flights"));
+
+  // Effects between games: up only while nothing else needs the screen.
+  FxBetween fx;
+  fx.between = fx.board_ready = fx.power_on = fx.screen_on = fx.wifi = true;
+  CHECK(fx_between_want(fx));
+  for (bool FxBetween::*need : {&FxBetween::between, &FxBetween::board_ready, &FxBetween::power_on,
+                                &FxBetween::screen_on, &FxBetween::wifi}) {
+    FxBetween f = fx;
+    f.*need = false;
+    CHECK(!fx_between_want(f));
+  }
+  for (bool FxBetween::*takes : {&FxBetween::trouble, &FxBetween::mark, &FxBetween::banner, &FxBetween::card_turn}) {
+    FxBetween f = fx;
+    f.*takes = true;
+    CHECK(!fx_between_want(f));
+  }
+  CHECK(!fx_between_want(FxBetween{}));  // nothing known yet: no effect
 }
 
 static void test_offseason() {
@@ -7253,7 +7449,9 @@ static void test_weather() {
   CHECK_EQ(forecast_url(32.95457f, -97.01501f, "America/Chicago"),
            std::string("https://api.open-meteo.com/v1/forecast?latitude=32.9546&longitude=-97.0150"
                        "&current=temperature_2m,weather_code,is_day&daily=weather_code,temperature_2m_max,"
-                       "temperature_2m_min&temperature_unit=fahrenheit&timezone=America%2FChicago&forecast_days=4"));
+                       "temperature_2m_min,sunrise,sunset&hourly=temperature_2m,weather_code,"
+                       "precipitation_probability,is_day&temperature_unit=fahrenheit&timezone=America%2FChicago"
+                       "&forecast_days=4&forecast_hours=15"));
   // The town as kept: one line, no emoji, at most kTownMax bytes.
   CHECK_EQ(town_clean("  Coppell\n\xF0\x9F\x8F\x88 "), std::string("Coppell"));
   CHECK_EQ(town_clean(std::string(60, 'x')).size(), kTownMax);
@@ -9500,6 +9698,7 @@ int main() {
   test_scoreboard_live();
   test_scoreboard_post();
   test_event_live();
+  test_nfl_overtime();
   test_event_matches_scoreboard();
   test_scoreboard_pre_nfl();
   test_splash();
@@ -9562,6 +9761,8 @@ int main() {
   test_nba_splash();
   test_mcbb_urls();
   test_mcbb();
+  test_wcbb_urls();
+  test_wcbb();
   test_logo_url_matches_game();
   checks++;
   failures += run_football_golden();
@@ -9604,6 +9805,7 @@ int main() {
   test_regulatory();
   test_wifi_history();
   test_ha_events();
+  test_ha_events_after_away();
   test_ha_game_events();
   test_ha_pregame();
   test_ha_events_stale();

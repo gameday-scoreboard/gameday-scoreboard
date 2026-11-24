@@ -30,6 +30,12 @@
     }
   },
   "host": {
+    "flights_route": {
+      "heap": 1024
+    },
+    "flights_sky": {
+      "heap": 1024
+    },
     "poll_mlb_event": {
       "heap": 1581
     },
