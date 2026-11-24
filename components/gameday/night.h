@@ -31,6 +31,8 @@ struct NightPrefs {
   uint8_t level;        // 1 to 255
   uint8_t spare[3];
 } __attribute__((packed));
+static_assert(sizeof(NightPrefs) == 10,
+              "NightPrefs is saved: a new size needs a new preference key or a migration, not a new number");
 
 inline NightPrefs night_defaults() {
   NightPrefs p{};
