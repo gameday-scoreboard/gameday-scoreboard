@@ -20,4 +20,4 @@ Every 20 minutes between games the card takes the screen for 10 seconds, then th
 
 ## When it steps aside
 
-The card works like the [message card](/using/messages/#a-message-card): it never covers a live game, a celebration or the panel's own trouble messages, like **No internet**. It doesn't come up while another between-games card is showing, and it waits 10 seconds after the message card, the news card or a picture goes down.
+The card works like the [message card](/using/messages/#a-message-card): it never covers a live game, a celebration or the panel's own trouble messages, like **No internet**. It doesn't come up while another between-games card is showing, and it waits 10 seconds after the message card, the news card or a picture goes down. A message card on **Whenever no game is on** keeps it off.

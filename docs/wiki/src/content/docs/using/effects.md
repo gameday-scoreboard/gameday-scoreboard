@@ -33,7 +33,7 @@ From then on, once your game's final has been up a while (30 minutes, 10 for bas
 - at the **Turns on** time before your next game starts (it shows above **After the game**, 15 minutes to start), or when a game of yours goes live, and stays there through the game and its final.
 - when you pick a team, a mode or your favorites, press a [remote](/using/remote/) button that follows something or picks a page, or pick another page under **Showing**. The panel stays on what you picked, and the effect comes back after your next game's final.
 
-While it's between games, the effect steps aside for a few seconds, then comes back, for the cards you turned on under **Between games** that keep their turns: your own [countdown](/using/countdowns/), the [weather](/using/weather/) and the [message card](/using/messages/). The countdown to your next game waits until the scoreboard is back.
+While it's between games, the effect steps aside for a few seconds, then comes back, for the cards you turned on under **Between games** that keep their turns: your own [countdown](/using/countdowns/), the [weather](/using/weather/) and the [message card](/using/messages/). A message card on **Whenever no game is on** keeps the board, so the effect doesn't come up. The countdown to your next game waits until the scoreboard is back.
 
 Anything on the [list below](#what-the-panel-does-while-an-effect-runs) still takes the screen. After a banner, the night schedule's screen-off, **Panel on** off, the heat or power mark, or a Wi-Fi or internet problem, the effect comes back once it's over. Starting the effect by itself never turns night mode off or lights a panel that's off.
 
