@@ -613,6 +613,13 @@ web_server:
   # Custom page (firmware/web). Regenerate bundle.js with scripts/build_web.py.
   js_include: web/bundle.js
   css_include: web/app.css
+  # Our Wi-Fi config has only an ap: (the networks are saved on the panel), and
+  # for that ESPHome serves its own page at / unless local is false. js_url is
+  # empty because the default adds ESPHome's app from oi.esphome.io, which our
+  # page never used: it opened a second /events stream behind it. CI runs
+  # scripts/device_page_check.py on each build.
+  local: false
+  js_url: ""
 
 http_request:
   id: http_client
