@@ -2120,6 +2120,63 @@ test("pictures: adds a PNG and a GIF as they are, fits a big still, refuses a wi
   await expect(page.locator("#picCard")).toBeHidden();
 });
 
+// message.h msg_turn: every 0 never hides the card between games, so the
+// picture card never gets a turn. Every other Show it does.
+const PIC_NEXT = "Added. It's up next between games.";
+const PIC_HELD = "Added, but the message card holds the board between games, so the picture won't come up. Under Message card, change Show it from Whenever no game is on to a time, like Every 2 minutes, to give pictures a turn.";
+
+const LIST = "http://192.168.1.5/names.txt";
+for (const [what, state, note] of [
+  ["a message on Every minute", { msg: "Wings $5", msgevery: 1 }, PIC_NEXT],
+  ["a message on Whenever no game is on", { msg: "Wings $5", msgevery: 0 }, PIC_HELD],
+  ["no message on Whenever no game is on", { msg: "", msgevery: 0 }, PIC_NEXT],
+  ["the message card off on Whenever no game is on", { msg: "Wings $5", msgevery: 0, off: "message" }, PIC_NEXT],
+  ["a list that was read", { msgurl: LIST, msgevery: 0, msgread: { status: 200, entries: 412 } }, PIC_HELD],
+  ["a list on its first page", { msgurl: LIST, msgevery: 0, msgread: { status: 200 } }, PIC_HELD],
+  ["a list read before whose last read failed", { msgurl: LIST, msgevery: 0, msgread: { status: 0, entries: 412 } }, PIC_HELD],
+  ["a list not read yet", { msgurl: LIST, msgevery: 0 }, PIC_HELD],
+  ["a list that can't be reached, with old text behind it", { msg: "Wings $5", msgurl: LIST, msgevery: 0, msgread: { status: 0 } }, PIC_NEXT],
+  ["a list that answers an error", { msgurl: LIST, msgevery: 0, msgread: { status: 404 } }, PIC_NEXT],
+  ["an empty list", { msgurl: LIST, msgevery: 0, msgread: { status: 200, entries: 0 } }, PIC_NEXT],
+  ["a list on Every 5 minutes", { msgurl: LIST, msgevery: 5, msgread: { status: 200, entries: 412 } }, PIC_NEXT],
+]) {
+  test("pictures: the note after adding one, with " + what, async ({ page, request }) => {
+    const { off, ...set } = state;
+    await reset(request, set);
+    if (off) await request.post("/gameday/set?cards=" + off + ":0");
+    await page.goto("/");
+    await tab(page, "customize");
+    await expect(page.locator("#picCard")).toBeVisible();
+    await page.setInputFiles("#picFile", { name: "blue.png", mimeType: "image/png",
+      buffer: fs.readFileSync(require("path").join(__dirname, "../fixtures/pictures/blue.png")) });
+    await expect(page.locator("#picNote")).toHaveText(note);
+    await expect(page.locator("#picList .pic")).toHaveCount(1);
+    await expect(page.locator("#picNote")).toHaveText(note);
+  });
+}
+
+test("pictures: the note follows Show it, and no other note does", async ({ page, request }) => {
+  await reset(request, { msg: "Wings $5", msgevery: 0 });
+  await page.goto("/");
+  await tab(page, "customize");
+  const pic = (name, mimeType) => ({ name, mimeType,
+    buffer: fs.readFileSync(require("path").join(__dirname, "../fixtures/pictures", name)) });
+  await page.setInputFiles("#picFile", pic("blue.png", "image/png"));
+  await expect(page.locator("#picNote")).toHaveText(PIC_HELD);
+  await page.locator("#msgEvery").selectOption("2");
+  await page.locator("#msgSave").click();
+  await expect(page.locator("#picNote")).toHaveText(PIC_NEXT);
+
+  // A refused file's note stays as it is when the setting changes.
+  const wide = "That GIF is 129 by 64 pixels. A GIF can be up to 128 by 64; resize it first.";
+  await page.setInputFiles("#picFile", pic("wide.gif", "image/gif"));
+  await expect(page.locator("#picNote")).toHaveText(wide);
+  await page.locator("#msgEvery").selectOption("0");
+  await page.locator("#msgSave").click();
+  await expect.poll(async () => (await deviceState(request)).msgevery).toBe(0);
+  await expect(page.locator("#picNote")).toHaveText(wide);
+});
+
 test("pictures: the add button says when the panel keeps 4", async ({ page, request }) => {
   const four = [1, 2, 3, 4].map((s) => ({ s, k: "png", w: 64, h: 64, f: 1, b: 900, id: s }));
   await reset(request, { pics: four, picroom: 0 });

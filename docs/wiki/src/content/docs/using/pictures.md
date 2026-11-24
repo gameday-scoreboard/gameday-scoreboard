@@ -39,7 +39,7 @@ Every 3 minutes between games, the next picture takes the screen for 10 seconds.
 The picture card works like the [message card](/using/messages/#a-message-card):
 
 - It never covers a live game, a celebration, or the panel's own trouble messages, like **No internet**.
-- It takes turns with the message card, the [news](/using/news/) and the [College Top 25](/using/top-25/): only one is on the screen at a time.
+- It takes turns with the message card, the [news](/using/news/) and the [College Top 25](/using/top-25/): only one is on the screen at a time. A message card on **Whenever no game is on** keeps the board, so the pictures wait. If you add one then, the device page says so; to give pictures a turn, change **Show it** under **Message card** to a time, like **Every 2 minutes**.
 
 ## Delete a picture
 

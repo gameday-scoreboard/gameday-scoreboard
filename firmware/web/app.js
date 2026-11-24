@@ -2654,12 +2654,32 @@
   // is one as uploaded). A still image is fitted to the panel here and sent
   // as a PNG; a GIF can't be redrawn in the browser, so it goes as it is.
   const PIC_MAX = 64 * 1024;
-  const picNote = (t) => { const n = $("#picNote"); n.textContent = t; n.hidden = !t; };
+  // The note after an upload is up: it follows the message card's settings.
+  let picAdded = false;
+  const picNote = (t) => { picAdded = false; const n = $("#picNote"); n.textContent = t; n.hidden = !t; };
+  // A message card on Whenever no game is on never comes down between games
+  // (msg_turn in message.h), so a picture gets no turn. A list that couldn't
+  // be read, or is empty, leaves the board free.
+  const msgHolds = () => {
+    const card = (S.cards || []).find((c) => c.id === "message");
+    if (S.msgevery !== 0 || (card && !card.on)) return false;
+    if (!S.msgurl) return !!(S.msg || "").trim();
+    const read = S.msgread || {};
+    if (read.entries !== undefined) return read.entries > 0;
+    return read.status === undefined || read.status === 200;
+  };
+  const picAddedNote = () => {
+    picNote(msgHolds()
+      ? "Added, but the message card holds the board between games, so the picture won't come up. Under Message card, change Show it from Whenever no game is on to a time, like Every 2 minutes, to give pictures a turn."
+      : "Added. It's up next between games.");
+    picAdded = true;
+  };
   let picShown = null;
   const renderPics = () => {
     // Older firmware has no picture card.
     $("#picCard").hidden = S.pics === undefined;
     if (S.pics === undefined) return;
+    if (picAdded) picAddedNote();
     const pics = S.pics || [];
     $("#picAdd").disabled = !S.picroom;
     $("#picAdd").textContent = pics.length >= 4 ? "4 pictures kept" : "Add a picture";
@@ -2753,7 +2773,7 @@
       return;
     }
     if (!r.ok) { picNote("Not added: " + (j.error || "the panel answered " + r.status + ".")); return; }
-    picNote("Added. It's up next between games.");
+    picAddedNote();
     scheduleState(APPLY_MS + 100);
   };
 

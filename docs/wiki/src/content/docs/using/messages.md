@@ -39,7 +39,7 @@ On the same tab, under **Message card**, type your message and press **Save**. E
 | Show it | What happens |
 | --- | --- |
 | **Every 2 minutes** (and the other times) | The card takes the board for about 10 seconds, then the scoreboard comes back until the next turn. Starts at every 2 minutes. |
-| **Whenever no game is on** | The card holds the board between games, moving to the next page every 10 seconds. Good for a panel on a wall of names. |
+| **Whenever no game is on** | The card holds the board between games, moving to the next page every 10 seconds. Your pictures, the news, the weather and the other cards don't come up while it does. Good for a panel on a wall of names. |
 
 Each turn shows up to four entries. With more than that, the next turn picks up where the last one stopped, and after the last entry it starts again at the top.
 
