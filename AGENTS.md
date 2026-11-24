@@ -172,6 +172,36 @@ over is its own PR, never a side effect of another change.
   `_Hashtable` or `deque` symbol there points at one of the patterns
   above.
 
+## Tests and evidence
+
+- Expected values in a test come from somewhere other than the code under
+  test: a recorded ESPN document, the calendar, a value worked out by
+  hand. A test that calls the function to get its own answer proves
+  nothing.
+- Cover the failures too: no answer, a cut-off or late answer, a missing
+  field, an empty list, the largest and smallest values allowed.
+- A fix to what a panel does is shown both ways: the same steps on a `dev`
+  build, where the bug happens, and on the fix, where it doesn't. If the
+  bug is rare, force it (drop Wi-Fi, a fake server that answers slowly, a
+  build that injects the fault). If it can't be forced, the PR says why
+  and what was checked instead.
+- Show that the test ran: the requests went through, the panel was on the
+  page under test, the log covers the whole run. A pass with nothing
+  driving it isn't a pass.
+- An accepted request isn't proof the panel did it. Read the state back or
+  look at the screen. If a write may not have landed, check before sending
+  it again.
+- A PR says what wasn't tested: a board, a layout, a league, hardware.
+
+## Shared data and workarounds
+
+- Data that more than one task can reach (the main loop, the ESPN fetch
+  task, the logo, webhook and web server tasks) has a comment where it is
+  declared: which task writes it, which may read it, and what guards it.
+- A workaround names the version it is for (ESPHome, ESP-IDF, a board
+  revision), the failure it avoids, and where that was seen (an issue, a
+  log, a measurement).
+
 ## Rules
 
 - Branch from `dev` and open PRs against `dev`. `beta` and `main` only take
@@ -201,7 +231,8 @@ over is its own PR, never a side effect of another change.
   starts with a plain summary line under 240 characters (the first PR
   after a release writes it; a later one rewrites it when its change is
   the bigger news), and a change to a feature that already has a line
-  updates that line instead of adding another. CI's "Changelog ready to
+  updates that line instead of adding another; a fix to something that
+  hasn't shipped changes no line, or that feature's line. CI's "Changelog ready to
   release" job checks this on PRs into `dev`: a PR touching `firmware/`
   or `components/` changes Unreleased unless its description has `No
   owner-visible change, no docs: <why>` or `No changelog line: <why>`.
@@ -213,7 +244,7 @@ over is its own PR, never a side effect of another change.
   `firmware/` or `components/` without one, unless the PR description
   has a line `No owner-visible change, no docs: <why>` (the reviewer checks
   that claim). Describe the behavior as it is on `dev`, in the present
-  tense: the docs site publishes from `main`, so the page goes live with
+  tense, for the owner, with no internal names: the docs site publishes from `main`, so the page goes live with
   the release. No "Coming in the next release" notes (CI refuses them);
   a phone app feature that waits for an app update uses
   `:::note[Coming in the next app update]`. `npm run build` in
