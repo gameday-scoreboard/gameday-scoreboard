@@ -60,6 +60,8 @@ struct PowerLog {
   uint32_t brownouts;  // every brownout restart this panel has had
   uint8_t unused[4];
 } __attribute__((packed));
+static_assert(sizeof(PowerLog) == 8,
+              "PowerLog is saved: a new size needs a new preference key or a migration, not a new number");
 
 // At boot, with whether this start was a brownout. True when the log changed.
 inline bool power_log_start(PowerLog &log, bool brownout) {

@@ -721,6 +721,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t every;
     uint8_t spare[3];
   } __attribute__((packed));
+  static_assert(sizeof(PrefsMsg) == 366,
+                "PrefsMsg is saved: a new size needs a new preference key or a migration, not a new number");
   ESPPreferenceObject msg_pref_;
   std::string msg_text_, msg_url_;
   uint8_t msg_every_{::espn::kMsgEveryDefault};
@@ -867,6 +869,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   struct PrefsNick {
     char text[::espn::kNickMax + 1];
   } __attribute__((packed));
+  static_assert(sizeof(PrefsNick) == 33,
+                "PrefsNick is saved: a new size needs a new preference key or a migration, not a new number");
   ESPPreferenceObject nick_pref_;
   std::string nick_;
   void load_nick_();
@@ -925,24 +929,34 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t tz_index;  // a position in kTimezones, which only ever grows at the end (timezones.h)
     uint8_t flags;
   } __attribute__((packed));
+  static_assert(sizeof(Prefs) == 7,
+                "Prefs is saved: a new size needs a new preference key or a migration, not a new number");
   // Kept separate so adding fields never invalidates the original blob.
   struct Prefs2 {
     uint8_t mode;
     uint8_t rotate_minutes;
   } __attribute__((packed));
+  static_assert(sizeof(Prefs2) == 2,
+                "Prefs2 is saved: a new size needs a new preference key or a migration, not a new number");
   struct Prefs3 {
     uint8_t fav_league[4];
     uint32_t fav_id[4];  // 0 = slot empty
   } __attribute__((packed));
+  static_assert(sizeof(Prefs3) == 20,
+                "Prefs3 is saved: a new size needs a new preference key or a migration, not a new number");
   struct Prefs4 {
     uint8_t lockon_minutes;
     uint16_t release_seconds;
     uint8_t collide;  // 0 = stick with the higher slot, 1 = alternate on the rotate timer
   } __attribute__((packed));
+  static_assert(sizeof(Prefs4) == 4,
+                "Prefs4 is saved: a new size needs a new preference key or a migration, not a new number");
   struct Prefs6 {
     uint8_t auto_update;  // 1 = install new releases on its own
     int32_t tried_day;    // espn::auto_update_day() of the last install try, 0 = never
   } __attribute__((packed));
+  static_assert(sizeof(Prefs6) == 5,
+                "Prefs6 is saved: a new size needs a new preference key or a migration, not a new number");
   // Favorites 5-16 (1-4 stay in Prefs3, so older panels keep theirs) and the
   // settings that came with the longer list.
   // Its size is fixed: a blob that changes size fails to load and resets every
@@ -955,6 +969,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t flags;                 // FAV7_*
     uint16_t live_mask;            // Live mode: 1 << League per league, 0 = the leagues you follow
   } __attribute__((packed));
+  static_assert(sizeof(Prefs7) == 63,
+                "Prefs7 is saved: a new size needs a new preference key or a migration, not a new number");
   static constexpr uint8_t FAV7_TODAY = 1;  // idle playlist shows only today's games
   static constexpr uint8_t FAV7_JUMP = 2;   // Jump to the action
   // The score banner is on by default, and a saved spare bit is 0: set means off.
@@ -970,7 +986,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t celeb;   // byte 2, celebrate.h celeb_level_from_stored: 0 is Full, so a saved spare byte stays Full
     uint8_t viz;     // byte 3, VIZ8_*: set bits turn a picture off, so a saved spare byte is 0
   } __attribute__((packed));
-  static_assert(sizeof(Prefs8) == 4, "Prefs8 is a saved 4-byte blob; a new size fails to load and resets it");
+  static_assert(sizeof(Prefs8) == 4,
+                "Prefs8 is saved: a new size needs a new preference key or a migration, not a new number");
   static_assert(offsetof(Prefs8, viz) == 3, "the pictures' bits live in Prefs8's last byte");
   static constexpr uint8_t VIZ8_NOFIELD = 1;   // football's field strip off
   static constexpr uint8_t VIZ8_NOWIN = 2;     // the win chance line off (was the win bar's)
@@ -995,6 +1012,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     // Was spare, so older firmware has it off. The blob has no spare left.
     uint8_t news;
   } __attribute__((packed));
+  static_assert(sizeof(CountdownPrefs) == 29,
+                "CountdownPrefs is saved: a new size needs a new preference key or a migration, not a new number");
   ESPPreferenceObject countdown_pref_;
   CountdownPrefs countdown_{};
   void save_countdown_();
@@ -1011,6 +1030,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t unit;        // ::espn::kWxUnit*
     char country[2];     // the place's, "US", from the lookup; zeros for none
   } __attribute__((packed));
+  static_assert(sizeof(PrefsWx) == 94,
+                "PrefsWx is saved: a new size needs a new preference key or a migration, not a new number");
   ESPPreferenceObject wx_pref_;
   PrefsWx wx_{};
   void load_wx_();
@@ -1084,6 +1105,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     char key[::espn::kFlTextMax + 1];  // the owner's adsb.lol key, never sent back
     uint8_t spare[6];
   } __attribute__((packed));
+  static_assert(sizeof(PrefsFl) == 136,
+                "PrefsFl is saved: a new size needs a new preference key or a migration, not a new number");
   ESPPreferenceObject fl_pref_;
   PrefsFl fl_{};
   void load_fl_();
@@ -1143,6 +1166,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t sport;
     uint8_t spare[1];
   } __attribute__((packed));
+  static_assert(sizeof(Prefs9) == 292,
+                "Prefs9 is saved: a new size needs a new preference key or a migration, not a new number");
 
   // Each playlist's options (playlists.h ListOpt) and the schedule's state,
   // in their own fixed-size blob: opt[n] belongs to playlist n + 1 and is
@@ -1158,7 +1183,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t sched_sport;  // the sport row playing before, 1 + Sport; 0 = none
     uint8_t spare[4];
   } __attribute__((packed));
-  static_assert(sizeof(Prefs10) == 104, "Prefs10 is a fixed-size blob");
+  static_assert(sizeof(Prefs10) == 104,
+                "Prefs10 is saved: a new size needs a new preference key or a migration, not a new number");
   ESPPreferenceObject pref10_;
   Prefs10 prefs10_{};
   // The options of playlist n (1..count); every other list has none.
@@ -1182,7 +1208,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t held;
     uint8_t spare[1];
   } __attribute__((packed));
-  static_assert(sizeof(Prefs11) == 96, "Prefs11 is a fixed-size blob");
+  static_assert(sizeof(Prefs11) == 96,
+                "Prefs11 is saved: a new size needs a new preference key or a migration, not a new number");
   ESPPreferenceObject pref11_;
   Prefs11 prefs11_{};
   bool fav_solo_(uint8_t i) const { return i < 16 && ((this->prefs11_.solo >> i) & 1u) != 0; }
@@ -1206,7 +1233,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   struct Prefs12 {
     uint8_t mark[::espn::kListMax];
   } __attribute__((packed));
-  static_assert(sizeof(Prefs12) == 16, "Prefs12 is a fixed-size blob");
+  static_assert(sizeof(Prefs12) == 16,
+                "Prefs12 is saved: a new size needs a new preference key or a migration, not a new number");
   ESPPreferenceObject pref12_;
   Prefs12 prefs12_{};
 
@@ -1220,7 +1248,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint16_t leagues[::espn::kListMax];
     uint32_t names;
   };  // no padding to pack, and a pointer to the masks stays aligned
-  static_assert(sizeof(Prefs13) == 36, "Prefs13 is a fixed-size blob");
+  static_assert(sizeof(Prefs13) == 36,
+                "Prefs13 is saved: a new size needs a new preference key or a migration, not a new number");
   ESPPreferenceObject pref13_;
   Prefs13 prefs13_{};
   // The playing playlist's sports, 0 when Favorite teams plays its teams as
@@ -1692,6 +1721,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t pregame;
     uint8_t spare[3];
   } __attribute__((packed));
+  static_assert(sizeof(PrefsHook) == 165,
+                "PrefsHook is saved: a new size needs a new preference key or a migration, not a new number");
   ESPPreferenceObject hook_pref_;
   std::string hook_url_;
   uint8_t pregame_min_{(uint8_t) ::espn::kPregameDefault};
@@ -2034,6 +2065,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t madeup;                       // 1 = made-up teams, no logos
     uint8_t running;                      // the demo playing at power off, 0 = none
   } __attribute__((packed));
+  static_assert(sizeof(DemoPrefs) == 18,
+                "DemoPrefs is saved: a new size needs a new preference key or a migration, not a new number");
   ESPPreferenceObject demo_pref_;
   DemoPrefs demo_prefs_{};
   uint8_t demo_kind_{0};    // what is playing, 0 = off

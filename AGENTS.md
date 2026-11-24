@@ -58,6 +58,12 @@ is the short version.
   `crash_report.py` and `tests/web/mock_device.py`. The last checks the device page's mock
   against `tests/fixtures/set_cases.json`, the same table the host tests
   run through `components/gameday/set_request.h`.
+- A struct saved with `make_preference<T>` keeps its size: on ESP32 a blob
+  of another length fails to load, so every setting in it resets at the
+  update. Use its spare bytes, or save the new fields under a new
+  preference key. Each has a `static_assert(sizeof(T) == <number>)` beside
+  it; `python3 scripts/saved_size_lint.py .` (CI runs it) fails for one
+  without.
 - A panel that restarted from a crash, a watchdog or a brownout keeps the
   report in flash (`components/crash_report`, `GET /gameday/crash`).
   `python3 scripts/crash_report.py <panel>` prints it and decodes the

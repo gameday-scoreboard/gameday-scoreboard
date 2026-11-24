@@ -70,6 +70,8 @@ struct WakePrefs {
   uint8_t after;  // After
   uint8_t spare[5];
 } __attribute__((packed));
+static_assert(sizeof(WakePrefs) == 8,
+              "WakePrefs is saved: a new size needs a new preference key or a migration, not a new number");
 
 inline WakePrefs wake_defaults() {
   WakePrefs p{};
