@@ -385,6 +385,8 @@ struct TickerOptions {
   // The last play worth reading, shown while ESPN's last play is a
   // substitution (row_text.h RowHold); nullptr for none. Basketball.
   const char *held_play{nullptr};
+  // The held play came before a timeout that goes on through it. Basketball.
+  bool held_break{false};
   // Both records before the start, for a board too narrow to show them
   // under the logos (one 64-wide panel, pages/gameday-live.yaml).
   bool records{false};
@@ -477,6 +479,9 @@ bool basketball_junk_play(const GameSnapshot &s);
 // Basketball's team stats while a game is on, our side's number first, "FG
 // 47% to 29% | 3PT 3/14 to 5/25 | Rebounds 38-22". "" when ESPN has none.
 std::string basketball_box_line(const GameSnapshot &s);
+// ESPN's play text, tidied: single spaces, one full stop, and "team turnover"
+// with the team's abbreviation in place of "team".
+std::string basketball_tidy_play(const GameSnapshot &s, const std::string &play);
 // Whether ESPN has said the board has no game, for no_game_text. In Favorites
 // (favs > 0) only once every favorite's team read has answered (`read` of
 // them): one answered favorite says nothing of the others.

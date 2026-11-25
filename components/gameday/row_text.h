@@ -86,7 +86,8 @@ struct RowLines {
 struct RowHold {
   std::string event_id;
   std::string basket;  // "McDaniels 3", "Burries FT"
-  std::string play;    // the last play worth reading, for the ticker
+  std::string play;    // the last play worth reading, tidied for the ticker
+  bool timeout{false};  // a timeout came after it
   int total{-1};       // both scores added, at the last read
 
   // One read of the board game.
@@ -95,11 +96,19 @@ struct RowHold {
       this->event_id = g.event_id;
       this->basket.clear();
       this->play.clear();
+      this->timeout = false;
       this->total = -1;
     }
-    if (g.sport == Sport::BASKETBALL && g.state == GameState::IN && !g.last_play.empty() &&
-        !basketball_junk_play(g) && !timeout_play(g.last_play) && g.last_play != this->play)
-      this->play = g.last_play;
+    if (g.sport == Sport::BASKETBALL && g.state == GameState::IN && !g.last_play.empty()) {
+      if (timeout_play(g.last_play)) {
+        this->timeout = true;
+      } else if (!basketball_junk_play(g)) {
+        this->timeout = false;
+        // Tidied with this play's own side: the next read's play can be the
+        // other team's.
+        this->play = basketball_tidy_play(g, g.last_play);
+      }
+    }
     if (g.sport != Sport::BASKETBALL || g.state != GameState::IN)
       return;
     // A basket the read didn't name (another play came after it): the one
