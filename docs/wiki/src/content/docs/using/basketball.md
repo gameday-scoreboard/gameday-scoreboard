@@ -23,12 +23,12 @@ Basketball teams have no Up next list on the device page: their season schedules
 
 - **The clock and period** under the scores, like "1:04 4th", or "45.3 4th" in the last minute, when ESPN drops the minutes. Overtime reads "OT", then "2OT" and so on. Men's college games play halves, so the clock reads "12:34 1st" or "12:34 2nd"; women's college games play quarters, like the WNBA.
 - **Breaks**: "Halftime", or "End" and the period, like "End 3rd".
-- **The ticker** with the last play. During a break it shows the series, or the records outside the playoffs.
+- **The ticker** with the last play worth reading: a player checking in doesn't replace it. During a break it shows the series, or outside the playoffs both teams' shooting and rebounds, your team's number first, like "FG 47% to 29% | 3PT 3/14 to 5/25 | Rebounds 38-22".
 
 On a 128-wide board the row under the clock shows words, one line at a time, about 4 seconds each, using the full width of the board:
 
-- **The last basket**, like "McDaniels 3", or "Nesmith FT" for a free throw. It stays until the next basket, and a new one shows right away. It follows **Last play**.
-- **Each team's points leader** in this game, like "Edwards 24".
+- **The last basket**, like "Last: McDaniels 3", or "Last: Nesmith FT" for a free throw. It stays until the next basket, and a new one shows right away. It follows **Last play**.
+- **Each team's points leader** in this game, like "MIN Edwards 24 pts".
 - **The playoff series**, like "NY lead 2-1" or "Series 2-2", in a playoff game.
 - **The win chance**, like "MIN 56% to win", for the team ESPN favors, when the game first comes up and when ESPN's number moves 10 points or more since it last showed, no more than once every 3 minutes. **Win chance** under **Live pictures** on the device page's Display tab turns it off.
 
