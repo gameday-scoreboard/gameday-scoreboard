@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -289,19 +290,28 @@ bool golf_whole_document(const uint8_t *data, size_t size, const uint32_t *fav_i
     bool scored;
     int total;
     bool weekend;
+    std::set<int> has, played;  // rounds with a line, and with a score
   };
   std::vector<Total> totals;
   for (JsonObjectConst gc : comp0["competitors"].as<JsonArrayConst>()) {
     b.field++;
     espn::detail::GolfPending p;
     GolfRow &r = p.row;
-    Total t{false, 0, false};
+    Total t{false, 0, false, {}, {}};
     const std::string score = espn::detail::str_or_empty(gc["score"]);
     t.scored = golf_score(score.c_str(), t.total);
     if (t.scored)
       snprintf(r.score, sizeof(r.score), "%s", score.c_str());
-    for (JsonObjectConst gl : gc["linescores"].as<JsonArrayConst>())
-      t.weekend = t.weekend || (gl["period"] | 0) == 3;
+    for (JsonObjectConst gl : gc["linescores"].as<JsonArrayConst>()) {
+      const int k = gl["period"] | 0;
+      if (k < 1 || k > 8)
+        continue;
+      int n = 0;
+      t.has.insert(k);
+      if (golf_score(espn::detail::str_or_empty(gl["displayValue"]).c_str(), n))
+        t.played.insert(k);
+    }
+    t.weekend = t.has.count(3) != 0;
     totals.push_back(t);
     r.place = (uint16_t) totals.size();  // for now, which golfer of the field this is
     r.pos = (uint16_t) (gc["order"] | 0);
@@ -379,16 +389,20 @@ bool golf_whole_document(const uint8_t *data, size_t size, const uint32_t *fav_i
           return &g.line[i];
       return (const espn::detail::GolfLine *) nullptr;
     };
-    const int rounds = std::min(4, (int) b.round - (b.playoff ? 1 : 0));
-    for (int k = 1; k <= rounds && r.gone == GolfGone::NO; k++) {
-      const auto *lead = line(kept[0], k), *mine = line(p, k);
-      if (lead == nullptr)
+    const Total &lead = totals[kept[0].row.place - 1], &mine = totals[p.row.place - 1];
+    size_t empty3 = 0;
+    for (const Total &t : totals)
+      empty3 += t.played.count(1) && t.played.count(2) && !t.played.count(3) && t.has.count(3);
+    for (int k = 1; k <= 8 && k <= (int) b.round && r.gone == GolfGone::NO; k++) {
+      size_t n = 0;
+      for (const Total &t : totals)
+        n += t.has.count(k);
+      if (n < 10 || !lead.has.count(k) || mine.played.count(k))
         continue;
-      if (mine == nullptr && k >= 3)
+      if (k >= 3 && !mine.has.count(k))
         r.gone = GolfGone::CUT;
-      else if (lead->today[0] != '\0' && (mine == nullptr || mine->today[0] == '\0') &&
-               (k < (int) b.round || b.state == GolfState::POST))
-        r.gone = GolfGone::LEFT;
+      else if (lead.played.count(k) && (k < (int) b.round || b.state == GolfState::POST))
+        r.gone = k == 3 && empty3 >= 10 ? GolfGone::CUT : GolfGone::LEFT;
     }
     if (const auto *now = line(p, b.round)) {
       memcpy(r.today, now->today, sizeof(r.today));

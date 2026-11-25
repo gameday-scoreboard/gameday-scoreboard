@@ -2654,6 +2654,14 @@ test("the Golf leaderboard card picks its tours with chips", async ({ page, requ
   await chips.nth(0).click();
   await expectSet(request, { leaderboards: "golf:" });
   await expect((await deviceState(request)).leaderboards).toBe("golf:");
+  // Taken off and put back with no tour on, the card starts with the PGA Tour.
+  await page.getByRole("button", { name: "Remove Golf leaderboard" }).click();
+  await expectSet(request, { cards: "golf:0" });
+  expect((await deviceState(request)).leaderboards).toBe("golf:");
+  await page.locator("#cardAdd").click();
+  await page.getByRole("button", { name: "Add Golf leaderboard" }).click();
+  await expectSet(request, { cards: "golf:1", leaderboards: "golf:pga" });
+  expect((await deviceState(request)).leaderboards).toBe("golf:pga");
   // The chips are the tours the panel names, whatever the page's own table has.
   await reset(request, { lbleagues: [{ key: "pga", name: "PGA TOUR", sport: "golf" }, { key: "f1", name: "Formula 1", sport: "racing" }] });
   await page.goto("/");

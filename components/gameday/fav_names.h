@@ -56,21 +56,27 @@ inline std::string fav_ref_name(const std::string &ref) {
   return b == std::string::npos ? std::string() : athlete_name_clean(ref.substr(b + 1));
 }
 
-// The kept name of an athlete, "" for none.
-inline std::string fav_name_get(const FavNames *n, uint8_t league, uint32_t id) {
-  if (n == nullptr || id == 0)
-    return "";
-  for (const auto &e : n->e)
-    if (e.league == league && e.id == id)
-      return std::string(e.name, strnlen(e.name, kAthleteNameMax));
+// After a load: every name ends inside its entry, whatever flash held.
+inline void fav_names_end(FavNames &n) {
+  for (auto &e : n.e)
+    e.name[kAthleteNameMax - 1] = '\0';
+}
+
+// The kept name of an athlete, "" for none. It stays where it is kept.
+inline const char *fav_name_get(const FavNames *n, uint8_t league, uint32_t id) {
+  if (n != nullptr && id != 0)
+    for (const auto &e : n->e)
+      if (e.league == league && e.id == id)
+        return e.name;
   return "";
 }
 
 // Keeps name for an athlete. Its own entry first, else an empty one, else one
 // whose athlete isn't among favs any more. True when the blob changed and
 // needs saving: never for the same name again, an empty name or a team.
-inline bool fav_name_put(FavNames &n, uint8_t league, uint32_t id, const std::string &name,
-                         const std::vector<std::pair<uint8_t, uint32_t>> &favs) {
+// favs lists league and id pairs.
+template<typename Favs>
+bool fav_name_put(FavNames &n, uint8_t league, uint32_t id, const std::string &name, const Favs &favs) {
   if (!athlete_league(league) || id == 0 || name.empty())
     return false;
   std::string text = athlete_name_clean(name);
@@ -106,28 +112,33 @@ inline bool fav_name_put(FavNames &n, uint8_t league, uint32_t id, const std::st
 // "Scheffler", past a suffix like "Jr." or "III"; "" when it is longer than
 // kAthleteAbbrMax bytes or the name is one word.
 constexpr size_t kAthleteAbbrMax = 10;
-inline std::string athlete_abbr(const std::string &name) {
-  std::vector<std::string> words;
-  size_t start = 0;
-  while (start < name.size()) {
-    size_t sp = name.find(' ', start);
-    std::string w = name.substr(start, sp == std::string::npos ? std::string::npos : sp - start);
-    if (!w.empty())
-      words.push_back(w);
-    start = sp == std::string::npos ? name.size() : sp + 1;
-  }
+inline void athlete_abbr(const char *name, char (&out)[kAthleteAbbrMax + 1]) {
   static const char *const kSuffixes[] = {"Jr.", "Jr", "Sr.", "Sr", "II", "III", "IV"};
-  while (words.size() > 1) {
+  out[0] = '\0';
+  size_t end = strlen(name);
+  for (;;) {
+    while (end > 0 && name[end - 1] == ' ')
+      end--;
+    size_t start = end;
+    while (start > 0 && name[start - 1] != ' ')
+      start--;
+    bool first = true;  // the only word left
+    for (size_t i = 0; i < start; i++)
+      first = first && name[i] == ' ';
+    if (first)
+      return;
     bool suffix = false;
     for (const char *s : kSuffixes)
-      suffix = suffix || words.back() == s;
-    if (!suffix)
-      break;
-    words.pop_back();
+      suffix = suffix || (strlen(s) == end - start && strncmp(name + start, s, end - start) == 0);
+    if (!suffix) {
+      if (end - start <= kAthleteAbbrMax) {
+        memcpy(out, name + start, end - start);
+        out[end - start] = '\0';
+      }
+      return;
+    }
+    end = start;
   }
-  if (words.size() < 2 || words.back().size() > kAthleteAbbrMax)
-    return "";
-  return words.back();
 }
 
 }  // namespace espn

@@ -866,9 +866,16 @@ struct GolfLine {
   char today[6]{};
 };
 constexpr uint8_t kGolfLines = 8;  // rounds kept per golfer
+constexpr uint16_t kGolfRoundMin = 10;  // a playoff has fewer golfers, a cut or a round more
+
+// The rounds a golfer has a line for, and has a score in: bit 1 is round 1.
+struct GolfRounds {
+  uint16_t has{0}, scored{0};
+};
 
 struct GolfPending {
   GolfRow row;
+  GolfRounds played;
   uint8_t lines{0};
   GolfLine line[kGolfLines];
 
@@ -892,13 +899,16 @@ struct GolfEvent {
   uint16_t lead_n{0};  // golfers on the leader's score
   int run_total{0};
   bool run_weekend{false};  // they have a line for round 3 (a cut golfer doesn't)
+  uint16_t played[kGolfLines + 1]{};  // golfers with a line for each round
+  uint16_t unplayed3{0};  // golfers with rounds 1 and 2 played and an empty line for round 3
   PsVector<GolfPending> rows;
 
   void clear_field() {
     this->listed = false;
     this->b.field = 0;
     this->top = this->favs = 0;
-    this->run_first = this->run_n = this->lead_n = 0;
+    this->run_first = this->run_n = this->lead_n = this->unplayed3 = 0;
+    memset(this->played, 0, sizeof(this->played));
     this->rows.clear();
   }
 };
@@ -995,9 +1005,10 @@ class GolfRead {
     int total = 0;
     const std::string score = str_or_empty(gc["score"]);
     const bool scored = golf_score(score.c_str(), total);
+    this->count_(gc, p.played);
     if (scored) {
       snprintf(r.score, sizeof(r.score), "%s", score.c_str());
-      this->place_(gc, total);
+      this->place_(total, (p.played.has & (1u << 3)) != 0);
       r.place = ev.run_first;
       r.tied = ev.run_n > 1;
     } else {
@@ -1118,12 +1129,27 @@ class GolfRead {
     return !ev.listed ? 0 : ev.b.state == GolfState::IN ? 3 : ev.b.state == GolfState::POST ? 2 : 1;
   }
 
-  // The golfer just counted has this total: the run they join or start.
-  void place_(JsonObjectConst gc, int total) {
+  // The rounds this golfer has lines for, counted over the field.
+  void count_(JsonObjectConst gc, GolfRounds &g) {
     GolfEvent &ev = this->cur_;
-    bool weekend = false;
-    for (JsonObjectConst gl : gc["linescores"].as<JsonArrayConst>())
-      weekend = weekend || (gl["period"] | 0) == 3;
+    for (JsonObjectConst gl : gc["linescores"].as<JsonArrayConst>()) {
+      const int k = gl["period"] | 0;
+      if (k < 1 || k > kGolfLines)
+        continue;
+      int n = 0;
+      if (golf_score(gl["displayValue"] | "", n))
+        g.scored |= (uint16_t) (1u << k);
+      if (!(g.has & (1u << k)))
+        ev.played[k]++;
+      g.has |= (uint16_t) (1u << k);
+    }
+    if ((g.scored & 0b1110) == 0b0110 && (g.has & (1u << 3)))
+      ev.unplayed3++;
+  }
+
+  // The golfer just counted has this total: the run they join or start.
+  void place_(int total, bool weekend) {
+    GolfEvent &ev = this->cur_;
     if (ev.run_n > 0 && total == ev.run_total && weekend == ev.run_weekend) {
       ev.run_n++;
       for (GolfPending &p : ev.rows)
@@ -1139,20 +1165,22 @@ class GolfRead {
   }
 
   // Whether a golfer is still in the tournament, against the leader's
-  // rounds: ESPN marks neither a missed cut nor a withdrawal. A playoff's
-  // round is the leaders' alone.
+  // rounds: ESPN marks neither a missed cut nor a withdrawal. A golfer who
+  // missed the cut has no line for round 3 (the PGA Tour, the LPGA) or, like
+  // dozens of others, an empty one (the DP World Tour). One who withdrew has
+  // a round with no score that the leader played. A round few golfers have
+  // a line for is a playoff, whatever its number.
   static GolfGone gone_(const GolfEvent &ev, const GolfPending &p) {
     const GolfBoard &b = ev.b;
-    const GolfPending &lead = ev.rows[0];
-    for (int k = 1; k <= 4 && k <= (int) b.round - (b.playoff ? 1 : 0); k++) {
-      const GolfLine *first = lead.round(k), *line = p.round(k);
-      if (first == nullptr)
+    const GolfRounds &lead = ev.rows[0].played, &mine = p.played;
+    for (int k = 1; k <= kGolfLines && k <= (int) b.round; k++) {
+      const uint16_t bit = (uint16_t) (1u << k);
+      if (ev.played[k] < kGolfRoundMin || !(lead.has & bit) || (mine.scored & bit))
         continue;
-      if (line == nullptr && k >= 3)
+      if (!(mine.has & bit) && k >= 3)
         return GolfGone::CUT;
-      const bool over = first->today[0] != '\0' && (k < (int) b.round || b.state == GolfState::POST);
-      if (over && (line == nullptr || line->today[0] == '\0'))
-        return GolfGone::LEFT;
+      if ((lead.scored & bit) && (k < (int) b.round || b.state == GolfState::POST))
+        return k == 3 && ev.unplayed3 >= kGolfRoundMin ? GolfGone::CUT : GolfGone::LEFT;
     }
     return GolfGone::NO;
   }

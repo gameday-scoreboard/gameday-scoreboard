@@ -1245,7 +1245,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // just set), saving only what changed.
   void put_fav_names_(const std::vector<::espn::TeamRef> &teams, const std::vector<std::string> &names);
   bool put_fav_name_(uint8_t league, uint32_t id, const std::string &name);  // no save
-  std::string fav_name_(uint8_t league, uint32_t id) const {
+  const char *fav_name_(uint8_t league, uint32_t id) const {
     return ::espn::fav_name_get(this->fav_names_, league, id);
   }
   // The options of playlist n (1..count); every other list has none.
@@ -1541,7 +1541,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     // golf_favs is the tour's followed golfers, by ESPN athlete id.
     bool need_golf{false};
     uint8_t golf_slot{0};
-    std::vector<uint32_t> golf_favs;
+    std::array<uint32_t, FAV_MAX> golf_favs{};
+    uint8_t golf_fav_n{0};
     ::espn::GolfBoard golf_board;
     bool golf_ok{false};
     uint32_t golf_bytes{0};

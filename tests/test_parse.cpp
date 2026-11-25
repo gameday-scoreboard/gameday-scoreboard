@@ -6702,6 +6702,54 @@ static void test_golf_weeks() {
   CHECK_EQ(golf_line(fm, fm.rows[10], false), std::string("CUT Wanna  +1"));
   CHECK_EQ(golf_line(fm, fm.rows[11], false), std::string("OUT Yang    E"));
 
+  // The DP World Tour gives a golfer who missed the cut empty lines for
+  // rounds 3 and 4; one who withdrew in round 4 has that one empty. Thriston
+  // Lawrence won a playoff, which ESPN leaves as the final's round 5.
+  const uint32_t omega[] = {5119683, 5100, 5312609};
+  json = slurp("fixtures/scoreboard_eur_20260906_final.json");
+  GolfBoard om;
+  CHECK(parse_golf(json, League::EUR, omega, 3, om));
+  CHECK_EQ((int) om.round, 5);
+  CHECK_EQ(om.rows.size(), (size_t) 13);
+  for (size_t i = 0; i < 10; i++)
+    CHECK(om.rows[i].gone == GolfGone::NO);
+  CHECK_EQ(golf_line(om, om.rows[0], false), std::string(" 1 Lawren -18"));
+  CHECK_EQ(golf_line(om, om.rows[1], true), std::string("  2 P. Casey          -18"));
+  CHECK_EQ(golf_line(om, om.rows[10], false), std::string("CUT Ding   -2"));
+  CHECK_EQ(golf_line(om, om.rows[11], false), std::string("OUT de Ja  +2"));
+  CHECK_EQ(golf_line(om, om.rows[12], false), std::string("OUT Kanek   E"));
+  // A 54-hole LPGA final: the cut golfers have no round 3 line.
+  const uint32_t shoprite[] = {7858, 4397117, 8543};
+  json = slurp("fixtures/scoreboard_lpga_20260531_final.json");
+  GolfBoard sr;
+  CHECK(parse_golf(json, League::LPGA, shoprite, 3, sr));
+  CHECK_EQ((int) sr.round, 3);
+  CHECK(sr.rows[0].gone == GolfGone::NO && sr.rows[9].gone == GolfGone::NO);
+  CHECK(sr.rows[10].gone == GolfGone::NO && sr.rows[11].gone == GolfGone::LEFT && sr.rows[12].gone == GolfGone::LEFT);
+  // A 54-hole final after a playoff, which is round 4 there: whether ESPN
+  // scores the playoff's line or leaves it empty, nobody is marked cut.
+  for (const char *extra : {"-1", "-"}) {
+    json = R"({"events":[{"name":"Fifty Four","status":{"type":{"state":"post"}},"competitions":[{"competitors":[)";
+    for (int i = 1; i <= 40; i++) {
+      json += std::string(i > 1 ? "," : "") + "{\"id\":\"" + std::to_string(i) + "\",\"order\":" + std::to_string(i) +
+              ",\"score\":\"-" + std::to_string(i <= 2 ? 12 : 11 - i / 8) + "\",\"athlete\":{\"shortName\":\"P. P" +
+              std::to_string(i) + "\"},\"linescores\":[";
+      for (int k = 1; k <= (i <= 2 ? 4 : 3); k++)
+        json += std::string(k > 1 ? "," : "") + "{\"period\":" + std::to_string(k) + ",\"displayValue\":\"" +
+                (k == 4 ? extra : "-3") + "\"}";
+      json += "]}";
+    }
+    json += R"(],"status":{"period":4,"type":{"state":"post","completed":true,"shortDetail":"Complete"}}}]}]})";
+    GolfBoard ff;
+    const uint32_t last[] = {40};
+    CHECK(parse_golf(json, League::LPGA, last, 1, ff));
+    CHECK_EQ((int) ff.round, 4);
+    CHECK_EQ(ff.rows.size(), (size_t) 11);
+    for (const GolfRow &r : ff.rows)
+      CHECK(r.gone == GolfGone::NO);
+    CHECK(ff.rows[0].place == 1 && !ff.rows[0].tied && ff.rows[1].place == 2 && !ff.rows[1].tied);
+  }
+
   // A suffix is not a surname, and a place past 99 takes the name's room.
   json = R"({"events":[{"name":"Names","status":{"type":{"state":"in"}},"competitions":[{"competitors":[)";
   for (int i = 1; i <= 120; i++)
@@ -6750,7 +6798,8 @@ static void test_golf_stream() {
                            "fixtures/scoreboard_pga_20261123_r4_done.json", "fixtures/scoreboard_pga_20261123_playoff.json",
                            "fixtures/scoreboard_pga_20261123_final.json", "fixtures/scoreboard_pga_20261124_next.json",
                            "fixtures/scoreboard_pga_20260614_final.json", "fixtures/scoreboard_lpga_20260830_final.json",
-                           "fixtures/scoreboard_eur_20261125_pre.json"}) {
+                           "fixtures/scoreboard_eur_20261125_pre.json", "fixtures/scoreboard_eur_20260906_final.json",
+                           "fixtures/scoreboard_lpga_20260531_final.json"}) {
     std::string json = slurp(name);
     GolfBoard a, b;
     GolfStream in{json};

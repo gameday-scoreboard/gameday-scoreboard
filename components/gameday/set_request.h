@@ -563,7 +563,9 @@ struct SetOp {
   uint32_t named{0};  // LEADERBOARDS
   TeamRef team;
   std::vector<TeamRef> teams;
-  std::vector<std::string> names;    // FAVS: each team's athlete name (fav_names.h), "" for none
+  // FAVS: each team's athlete name (fav_names.h), "" for none. Parallel to
+  // teams and kept as it is, a plain vector made and freed with the request.
+  std::vector<std::string> names;
   std::vector<std::string> refused;  // favs entries left out, for the log
   std::string text;
   uint32_t ymd{0};

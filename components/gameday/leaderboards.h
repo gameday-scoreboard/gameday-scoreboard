@@ -12,6 +12,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -59,7 +60,10 @@ inline const char *leaderboard_name(League l) {
 struct LeaderboardsText {
   uint32_t on{0};     // the leagues picked
   uint32_t named{0};  // every league of the sports the text names: the ones it sets
-  std::vector<std::string> skipped;  // "racing", "golf:nfl": a sport or league this firmware doesn't have
+  // "racing", "golf:nfl": a sport or league this firmware doesn't have. A
+  // settings import adds these to its own list of skipped keys, strings too
+  // (settings_doc.h), so they are never more than one request's words.
+  std::vector<std::string> skipped;
 };
 
 // False when the text names no leaderboard sport this firmware has, so
@@ -111,25 +115,27 @@ inline uint32_t leaderboards_apply(uint32_t mask, const LeaderboardsText &t) {
 
 // "golf:pga,lpga": every leaderboard sport in Sport order, its leagues in
 // kLeagues order, a sport with none written as "golf:".
-inline std::string leaderboards_text(uint32_t mask) {
-  std::string out;
+constexpr size_t kLeaderboardsText = 96;
+inline void leaderboards_text(uint32_t mask, char (&out)[kLeaderboardsText]) {
+  size_t at = 0;
+  out[0] = '\0';
+  auto add = [&](const char *a, const char *b) {
+    if (at < sizeof(out))
+      at += (size_t) snprintf(out + at, sizeof(out) - at, "%s%s", a, b);
+  };
   for (int s = 0; s < kSportCount; s++) {
     if (!leaderboard_sport((Sport) s))
       continue;
-    if (!out.empty())
-      out += ';';
-    out += kSportKeys[s];
-    out += ':';
-    bool first = true;
+    add(at != 0 ? ";" : "", kSportKeys[s]);
+    const char *sep = ":";
     for (const auto &l : kLeagues)
       if (l.sport == (Sport) s && (mask & league_bit32(l.league))) {
-        if (!first)
-          out += ',';
-        out += l.key;
-        first = false;
+        add(sep, l.key);
+        sep = ",";
       }
+    if (sep[0] == ':')
+      add(sep, "");
   }
-  return out;
 }
 
 }  // namespace espn

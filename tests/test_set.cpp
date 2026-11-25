@@ -20,6 +20,17 @@
 
 using namespace espn;
 
+static std::string abbr_of(const char *name) {
+  char out[kAthleteAbbrMax + 1];
+  athlete_abbr(name, out);
+  return out;
+}
+static std::string boards_text(uint32_t mask) {
+  char out[kLeaderboardsText];
+  leaderboards_text(mask, out);
+  return out;
+}
+
 namespace {
 
 int checks = 0;
@@ -152,7 +163,7 @@ void load(Settings &s, JsonObjectConst o) {
     s.names = FavNames{};
     for (JsonPairConst p : o["favnames"].as<JsonObjectConst>()) {
       TeamRef t = team_ref(p.key().c_str());
-      fav_name_put(s.names, t.league, t.id, p.value() | "", {});
+      fav_name_put(s.names, t.league, t.id, p.value() | "", std::vector<std::pair<uint8_t, uint32_t>>{});
     }
   }
   if (o["lists"].is<JsonArrayConst>()) {
@@ -554,8 +565,8 @@ void state_doc(const Settings &s, JsonDocument &doc) {
       continue;
     JsonObject n = favnames[team_str(s.favs[i])].to<JsonObject>();
     n["name"] = name;
-    if (!athlete_abbr(name).empty())
-      n["abbr"] = athlete_abbr(name);
+    if (!abbr_of(name.c_str()).empty())
+      n["abbr"] = abbr_of(name.c_str());
   }
   JsonArray lists = doc["lists"].to<JsonArray>();
   for (const auto &l : s.lists) {
@@ -669,7 +680,7 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["town"] = s.town;
   doc["wxon"] = s.wxon;
   doc["wxunit"] = s.wxunit;
-  doc["leaderboards"] = leaderboards_text(s.leaderboards);
+  doc["leaderboards"] = boards_text(s.leaderboards);
   doc["flrad"] = s.flrad;
   doc["flface"] = s.flface;
   doc["flrx"] = s.flrx;
@@ -901,7 +912,7 @@ void test_leaderboards() {
   LeaderboardsText t;
   SCHECK(parse_leaderboards("golf:eur,pga", t) && t.on == (pga | eur) && t.named == (pga | lpga | eur) && t.skipped.empty(),
          "one sport's leagues");
-  SCHECK(leaderboards_text(leaderboards_apply(lpga, t)) == "golf:pga,eur", "a save replaces golf, in kLeagues order");
+  SCHECK(boards_text(leaderboards_apply(lpga, t)) == "golf:pga,eur", "a save replaces golf, in kLeagues order");
   SCHECK(parse_leaderboards("golf:", t) && t.on == 0 && leaderboards_apply(pga | lpga, t) == 0, "golf: turns golf off");
   SCHECK(parse_leaderboards("golf:pga,nfl,f1", t) && t.on == pga && t.skipped.size() == 2 && t.skipped[0] == "golf:nfl" &&
              t.skipped[1] == "golf:f1",
@@ -913,7 +924,7 @@ void test_leaderboards() {
   SCHECK(!parse_leaderboards("football:nfl", t) && t.skipped.size() == 1, "a sport of games has no leaderboards");
   SCHECK(!parse_leaderboards("", t) && !parse_leaderboards("pga,lpga", t), "empty, or golftours' old form");
   SCHECK(parse_leaderboards("golf:pga;golf:eur", t) && t.on == eur, "a sport named twice takes its last part");
-  SCHECK(leaderboards_text(0) == "golf:", "every sport written out, even with none on");
+  SCHECK(boards_text(0) == "golf:", "every sport written out, even with none on");
   SCHECK(leaderboard_mask_all() == (pga | lpga | eur), "the leaderboard leagues");
   SetOp op;
   SCHECK(parse_set("leaderboards", "golf:pga;racing:", op, kFavMax) && op.kind == SetKind::LEADERBOARDS &&
@@ -936,24 +947,27 @@ void test_fav_names() {
   SCHECK(fav_ref_name("pga:1:  Ludvig \xc3\x85" "berg \xf0\x9f\x98\x80 ") == "Ludvig \xc3\x85" "berg", "a name is trimmed, emoji left out");
   SCHECK(fav_ref_name("pga:1:Christiaan Bezuidenhout Jr.") == "Christiaan Bezuidenhout", "cut to 23 bytes");
   SCHECK(fav_ref_name("pga:1:Christiaan Bezuidenhou\xc3\xb8x") == "Christiaan Bezuidenhou", "never cut inside a character");
-  SCHECK(athlete_abbr("Scottie Scheffler") == "Scheffler" && athlete_abbr("Davis Love III") == "Love" &&
-             athlete_abbr("Matt Fitzpatrick") == "" && athlete_abbr("Scheffler") == "",
+  SCHECK(abbr_of("Scottie Scheffler") == "Scheffler" && abbr_of("Davis Love III") == "Love" &&
+             abbr_of("Matt Fitzpatrick") == "" && abbr_of("Scheffler") == "",
          "the short form is the surname when it fits");
+  SCHECK(abbr_of("") == "" && abbr_of("Jr.") == "" && abbr_of(" Harold  Varner III ") == "Varner" &&
+             abbr_of("Ludvig \xc3\x85" "berg") == "\xc3\x85" "berg" && abbr_of("III III") == "",
+         "odd names take no short form or the surname");
 
   FavNames n{};
   std::vector<std::pair<uint8_t, uint32_t>> favs = {{nfl, 6}, {pga, 9478}};
   SCHECK(fav_name_put(n, pga, 9478, "Scottie Scheffler", favs), "a new name is a change");
   SCHECK(!fav_name_put(n, pga, 9478, "Scottie Scheffler", favs), "the same name again writes nothing");
-  SCHECK(!fav_name_put(n, pga, 9478, "", favs) && fav_name_get(&n, pga, 9478) == "Scottie Scheffler",
+  SCHECK(!fav_name_put(n, pga, 9478, "", favs) && std::string(fav_name_get(&n, pga, 9478)) == "Scottie Scheffler",
          "no name keeps the one kept");
-  SCHECK(fav_name_put(n, pga, 9478, "S. Scheffler", favs) && fav_name_get(&n, pga, 9478) == "S. Scheffler",
+  SCHECK(fav_name_put(n, pga, 9478, "S. Scheffler", favs) && std::string(fav_name_get(&n, pga, 9478)) == "S. Scheffler",
          "a new name replaces it");
-  SCHECK(!fav_name_put(n, nfl, 6, "Cowboys", favs) && fav_name_get(&n, nfl, 6).empty(), "a team keeps no name");
-  SCHECK(fav_name_get(nullptr, pga, 9478).empty(), "none kept");
+  SCHECK(!fav_name_put(n, nfl, 6, "Cowboys", favs) && std::string(fav_name_get(&n, nfl, 6)).empty(), "a team keeps no name");
+  SCHECK(std::string(fav_name_get(nullptr, pga, 9478)).empty(), "none kept");
   // An app that sends refs alone: the name stays. Dropped and followed again
   // with no name, the golfer still has it, until another name needs the entry.
   std::vector<std::pair<uint8_t, uint32_t>> dropped = {{(uint8_t) League::NBA, 6}};
-  SCHECK(!fav_name_put(n, pga, 9478, "", dropped) && fav_name_get(&n, pga, 9478) == "S. Scheffler",
+  SCHECK(!fav_name_put(n, pga, 9478, "", dropped) && std::string(fav_name_get(&n, pga, 9478)) == "S. Scheffler",
          "a drop forgets nothing");
   // Full: an athlete no longer followed gives up its entry.
   FavNames full{};
@@ -964,8 +978,8 @@ void test_fav_names() {
   }
   SCHECK(!fav_name_put(full, pga, 999, "Seventeenth", all), "no room while all 16 are followed");
   all[4] = {pga, 999};
-  SCHECK(fav_name_put(full, pga, 999, "Seventeenth", all) && fav_name_get(&full, pga, 999) == "Seventeenth" &&
-             fav_name_get(&full, pga, 5).empty() && fav_name_get(&full, pga, 6) == "Golfer 6",
+  SCHECK(fav_name_put(full, pga, 999, "Seventeenth", all) && std::string(fav_name_get(&full, pga, 999)) == "Seventeenth" &&
+             std::string(fav_name_get(&full, pga, 5)).empty() && std::string(fav_name_get(&full, pga, 6)) == "Golfer 6",
          "the unfollowed golfer's entry is reused");
 }
 

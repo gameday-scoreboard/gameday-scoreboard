@@ -76,4 +76,4 @@ Some things the board shows only as ESPN has them:
 
 ## Turning it off
 
-Remove **Golf leaderboard** from the **Between games** list to stop it altogether. Golfers you follow stay in your favorites. Tapping off every tour on the card leaves only the tours of the golfers you follow.
+Remove **Golf leaderboard** from the **Between games** list to stop it altogether. Add it back with no tour picked and no golfer followed, and it starts with the PGA Tour. Golfers you follow stay in your favorites. Tapping off every tour on the card leaves only the tours of the golfers you follow.

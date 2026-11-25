@@ -299,4 +299,6 @@ their second round, and a final read back with `?dates=20261101`:
 | `scoreboard_pga_20260614_final.json` | `.../golf/pga/scoreboard?dates=20260614`, RBC Canadian Open, Final: Brooks Koepka withdrew in round 4 and is listed next to last at -6, his round 4 line "-" |
 | `scoreboard_lpga_20260830_final.json` | `.../golf/lpga/scoreboard?dates=20260830`, FM Championship, Final: the 77 who missed the cut have lines for rounds 1, 2 and 4 |
 | `scoreboard_eur_20261125_pre.json` | `.../golf/eur/scoreboard` recorded 2026-11-25, before the BMW Australian PGA Championship: `pre` with 156 golfers, all at "E" |
+| `scoreboard_eur_20260906_final.json` | `.../golf/eur/scoreboard?dates=20260906`, Omega European Masters, Final after a playoff (round 5): the 84 who missed the cut have empty lines for rounds 3 and 4 |
+| `scoreboard_lpga_20260531_final.json` | `.../golf/lpga/scoreboard?dates=20260531`, ShopRite LPGA Classic, a 54-hole Final: the 64 who missed the cut have lines for rounds 1 and 2 |
 | `scoreboard_pga_20260924_presidents_cup.json` | `.../golf/pga/scoreboard?dates=20260924`, the Presidents Cup, Final: two sides (`type` "team", USA 17 and INTL 13) and 30 matches, the first kept |

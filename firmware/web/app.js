@@ -1290,7 +1290,10 @@
   };
   const toggleCard = (id) => {
     const now = (S.cards || []).find((x) => x.id === id);
-    setGD({ cards: id + ":" + (now && now.on ? 0 : 1) });
+    const set = { cards: id + ":" + (now && now.on ? 0 : 1) };
+    // On with no tour and no golfer: it would have nothing to show, so it starts with the PGA Tour.
+    if (id === "golf" && now && !now.on && !now.ok && golfTours().includes("pga")) set.leaderboards = "golf:pga";
+    setGD(set);
   };
   // A card's own settings go inside its row; while it is off they wait here,
   // still in the page, since the renders look their fields up by id.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 // Golf: the PGA Tour, the LPGA and the DP World Tour (ESPN's golf/eur) as
 // leaderboard boards, read from the tour's scoreboard document (about
 // 90-600 KB, a tenth of that gzipped) and shown between games, a page of rows at a time, like the
@@ -60,9 +62,8 @@ inline int golf_slot(League l) { return l == League::PGA ? 0 : l == League::LPGA
 inline League golf_slot_league(int slot) { return slot == 0 ? League::PGA : slot == 1 ? League::LPGA : League::EUR; }
 constexpr int kGolfSlots = 3;
 
-// A golfer no longer in the tournament. CUT has no line for round 3 or 4
-// where the leader has one; LEFT has no score for a round that is over (ESPN
-// doesn't say whether that is a withdrawal or a disqualification).
+// A golfer no longer in the tournament (espn_parse_impl.h gone_). LEFT is a
+// withdrawal or a disqualification; ESPN doesn't say which.
 enum class GolfGone : uint8_t { NO, CUT, LEFT };
 
 struct GolfRow {

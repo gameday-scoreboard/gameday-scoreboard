@@ -6931,17 +6931,18 @@ void GamedayComponent::save_team_cache_(const ::espn::Team *team) {
 // ---- device page routes -----------------------------------------------------
 
 // name: an athlete's kept name (fav_names.h), "" for a team or none kept.
-static void put_team(JsonObject o, uint8_t league, uint32_t id, const std::string &name = std::string()) {
+static void put_team(JsonObject o, uint8_t league, uint32_t id, const char *name = "") {
   // A golfer has no team entry: the ref, and the name the panel keeps, with
   // the surname as the short form when it is short enough.
   if (::espn::athlete_league(league)) {
     o["l"] = ::espn::league_key((League) league);
     o["id"] = id;
-    if (!name.empty()) {
-      o["name"] = name;
-      std::string abbr = ::espn::athlete_abbr(name);
-      if (!abbr.empty())
-        o["abbr"] = abbr;
+    if (name[0] != '\0') {
+      char abbr[::espn::kAthleteAbbrMax + 1];
+      ::espn::athlete_abbr(name, abbr);
+      o["name"] = (char *) name;  // char *: the document copies it
+      if (abbr[0] != '\0')
+        o["abbr"] = (char *) abbr;
     }
     return;
   }
@@ -7212,7 +7213,9 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   // Every leaderboard sport's leagues, "golf:pga,lpga", and the leagues the
   // page and the apps draw as chips. lbleagues has its own key so the backup
   // never copies the list (settings_doc.h settings_from_state).
-  doc["leaderboards"] = ::espn::leaderboards_text(this->leaderboards_);
+  char lb_text[::espn::kLeaderboardsText];
+  ::espn::leaderboards_text(this->leaderboards_, lb_text);
+  doc["leaderboards"] = (char *) lb_text;
   JsonArray lb = doc["lbleagues"].to<JsonArray>();
   for (const auto &info : ::espn::kLeagues) {
     if (!::espn::leaderboard_sport(info.sport))
@@ -8340,7 +8343,9 @@ void GamedayComponent::load_leaderboards_() {
     if (this->prefs10_.old_golf_tours & (1u << s))
       this->leaderboards_ |= ::espn::league_bit32(::espn::golf_slot_league(s));
   if (this->prefs10_.old_golf_tours != 0) {
-    ESP_LOGI(TAG, "Leaderboards: %s, from the Golf card's tours", ::espn::leaderboards_text(this->leaderboards_).c_str());
+    char text[::espn::kLeaderboardsText];
+    ::espn::leaderboards_text(this->leaderboards_, text);
+    ESP_LOGI(TAG, "Leaderboards: %s, from the Golf card's tours", text);
     this->prefs10_.old_golf_tours = 0;
     this->pref10_.save(&this->prefs10_);
   }
@@ -8356,7 +8361,9 @@ void GamedayComponent::set_leaderboards_(uint32_t mask) {
   this->sync_prefs_();
   if (this->golf_ != nullptr)
     this->golf_->since_ms = 0;  // a new tour's first turn comes a minute from now
-  ESP_LOGI(TAG, "Leaderboards: %s", ::espn::leaderboards_text(mask).c_str());
+  char text[::espn::kLeaderboardsText];
+  ::espn::leaderboards_text(mask, text);
+  ESP_LOGI(TAG, "Leaderboards: %s", text);
   this->rebuild_state_(&this->last_fields_);
 }
 
@@ -8366,6 +8373,7 @@ void GamedayComponent::load_fav_names_() {
   this->fav_names_pref_ = global_preferences->make_preference<::espn::FavNames>(fnv1_hash("gameday_favnames_v1"));
   auto *n = new (::espn::psram_alloc(sizeof(::espn::FavNames))) ::espn::FavNames();
   if (this->fav_names_pref_.load(n)) {
+    ::espn::fav_names_end(*n);
     this->fav_names_ = n;
     return;
   }
@@ -8377,10 +8385,9 @@ bool GamedayComponent::put_fav_name_(uint8_t league, uint32_t id, const std::str
     return false;
   if (this->fav_names_ == nullptr)
     this->fav_names_ = new (::espn::psram_alloc(sizeof(::espn::FavNames))) ::espn::FavNames();
-  std::vector<std::pair<uint8_t, uint32_t>> favs;
+  std::array<std::pair<uint8_t, uint32_t>, FAV_MAX> favs{};  // an unused one has id 0, which no athlete has
   for (uint8_t i = 0; i < FAV_MAX; i++)
-    if (this->fav_id_(i) != 0)
-      favs.emplace_back(this->fav_league_(i), this->fav_id_(i));
+    favs[i] = {this->fav_league_(i), this->fav_id_(i)};
   return ::espn::fav_name_put(*this->fav_names_, league, id, name, favs);
 }
 
@@ -8528,7 +8535,7 @@ void GamedayComponent::start_golf_job_() {
   const League league = ::espn::golf_slot_league(slot);
   for (uint8_t i = 0; i < FAV_MAX; i++)
     if (this->fav_id_(i) != 0 && (League) this->fav_league_(i) == league)
-      this->job_.golf_favs.push_back(this->fav_id_(i));
+      this->job_.golf_favs[this->job_.golf_fav_n++] = this->fav_id_(i);
   this->start_worker_();
 }
 
@@ -8541,7 +8548,7 @@ void GamedayComponent::run_golf_job_() {
   if (container == nullptr)
     return;
   ContainerReader reader(container, this->espn_bytes_, nullptr, &fetch);
-  j.golf_ok = ::espn::parse_golf(reader, ::espn::golf_slot_league(j.golf_slot), j.golf_favs.data(), j.golf_favs.size(),
+  j.golf_ok = ::espn::parse_golf(reader, ::espn::golf_slot_league(j.golf_slot), j.golf_favs.data(), j.golf_fav_n,
                                  j.golf_board);
   container->end();
   j.golf_bytes = (uint32_t) reader.total();
@@ -8581,7 +8588,7 @@ void GamedayComponent::apply_golf_job_() {
   const ::espn::GolfBoard &b = c.board[s];
   bool named = false;
   for (const auto &r : b.rows)
-    if (r.favorite && r.name[0] != 0 && this->fav_name_((uint8_t) b.league, r.id).empty())
+    if (r.favorite && r.name[0] != 0 && this->fav_name_((uint8_t) b.league, r.id)[0] == '\0')
       named = this->put_fav_name_((uint8_t) b.league, r.id, r.name) || named;
   if (named) {
     this->fav_names_pref_.save(this->fav_names_);
