@@ -62,7 +62,9 @@ struct StoryLine {
   StoryKind kind{StoryKind::NONE};
   uint8_t score{0};   // how much it deserves the row, 0 to 100
   uint16_t value{0};  // what it counts; a change makes it news again
-  char text[22]{};    // fits 21 characters, a 128-wide row in the 6 px font
+  uint8_t side{0};    // whose it is: 1 ours, 2 theirs, 0 neither's
+  char text[22]{};    // without the team, which the row shows as a tag
+  char brief[16]{};   // when text doesn't fit beside the tag, "" for none
 };
 
 class Story {
@@ -195,10 +197,15 @@ class Story {
       this->last_t_ = at;
     if (dp > 0)
       this->last_o_ = at;
-    if (ended_run >= kRun && g.play_value > 0 && !g.play_athlete.empty() &&
-        g.play_team == (dt > 0 ? g.team_id : g.opp_id)) {
+    if (ended_run >= kRun) {
       this->over_at_ = at;
-      snprintf(this->over_name_, sizeof(this->over_name_), "%s", detail::leader_surname(g.play_athlete).c_str());
+      this->over_side_ = dt > 0 ? 1 : 2;
+      // By name only when that one basket is the whole change: two between
+      // reads, and the last play isn't the one that ended it.
+      const bool one = g.play_value == dt + dp && !g.play_athlete.empty() &&
+                       g.play_team == (dt > 0 ? g.team_id : g.opp_id);
+      snprintf(this->over_name_, sizeof(this->over_name_), "%s",
+               one ? detail::leader_surname(g.play_athlete).c_str() : "");
     }
     const uint8_t leader = t > o ? 1 : o > t ? 2 : this->leader_;
     if (leader != this->leader_ && this->leader_ != 0)
@@ -251,7 +258,7 @@ class Story {
     return best;
   }
 
-  void put_(StoryKind kind, int score, int value, const char *text) {
+  void put_(StoryKind kind, int side, int score, int value, const char *text, const char *brief = "") {
     if (score < kFloor)
       return;
     // Keep the best kShow, best first.
@@ -259,7 +266,9 @@ class Story {
     s.kind = kind;
     s.score = (uint8_t) std::min(100, score);
     s.value = (uint16_t) value;
+    s.side = (uint8_t) side;
     snprintf(s.text, sizeof(s.text), "%s", text);
+    snprintf(s.brief, sizeof(s.brief), "%s", brief);
     for (int i = 0; i < kShow; i++) {
       if (i < this->n_lines_ && this->lines_[i].score >= s.score)
         continue;
@@ -274,7 +283,6 @@ class Story {
   void rank_(const GameSnapshot &g, uint32_t now_ms) {
     this->n_lines_ = 0;
     char buf[40];
-    const char *us = g.team_abbr.c_str(), *them = g.opp_abbr.c_str();
     const int margin = this->t_ - this->o_, lead = abs(margin);
     const bool late = this->final_ && this->left_ >= 0;
     // Out of reach late: only a bigger run or drought still says anything.
@@ -287,51 +295,47 @@ class Story {
       if (a > 0 && since <= 120 && !(decided && a < 10)) {
         // "a 12-2 run", "an 8-0 run"
         const bool an = a == 8 || a == 11 || a == 18;
-        snprintf(buf, sizeof(buf), "%s on %s %d-%d run", side == 1 ? us : them, an ? "an" : "a", a, b);
-        this->put_(StoryKind::RUN, this->aged_(StoryKind::RUN, side, a * 16 + b, 56 + 2 * (a - b), now_ms), a * 16 + b,
+        snprintf(buf, sizeof(buf), "on %s %d-%d run", an ? "an" : "a", a, b);
+        this->put_(StoryKind::RUN, side, this->aged_(StoryKind::RUN, side, a * 16 + b, 56 + 2 * (a - b), now_ms), a * 16 + b,
                    buf);
       }
       const int last = side == 1 ? this->last_t_ : this->last_o_;
       const int dry = last < 0 ? 0 : this->at_ - last;
       if (dry >= (decided ? 240 : 120)) {
-        snprintf(buf, sizeof(buf), "%s scoreless %d:%02d", side == 1 ? us : them, dry / 60, dry % 60);
-        this->put_(StoryKind::DROUGHT, this->aged_(StoryKind::DROUGHT, side, dry / 60, 44 + dry / 8, now_ms), dry / 60,
+        snprintf(buf, sizeof(buf), "scoreless %d:%02d", dry / 60, dry % 60);
+        this->put_(StoryKind::DROUGHT, side, this->aged_(StoryKind::DROUGHT, side, dry / 60, 44 + dry / 8, now_ms), dry / 60,
                    buf);
       }
     }
     if (this->over_at_ >= 0 && this->at_ - this->over_at_ <= 30) {
-      snprintf(buf, sizeof(buf), "%s ends the run", this->over_name_);
-      // 21 characters fit the row.
-      if (strlen(buf) > 21)
-        snprintf(buf, sizeof(buf), "%s ends run", this->over_name_);
-      if (strlen(buf) <= 21)
-        this->put_(StoryKind::RUN_OVER, 72, this->over_at_, buf);
+      snprintf(buf, sizeof(buf), "%s ends run", this->over_name_);
+      this->put_(StoryKind::RUN_OVER, this->over_side_, 72, this->over_at_, this->over_name_[0] != '\0' && strlen(buf) <= 21 ? buf : "ends the run",
+                 "ends the run");
     }
     if (this->flip_at_ >= 0 && this->at_ - this->flip_at_ <= 45 && margin != 0) {
-      snprintf(buf, sizeof(buf), "%s takes the lead", margin > 0 ? us : them);
-      this->put_(StoryKind::TAKES_LEAD, late ? 95 : 74, this->flip_at_, buf);
+      this->put_(StoryKind::TAKES_LEAD, margin > 0 ? 1 : 2, late ? 95 : 74, this->flip_at_, "takes the lead");
     }
     if (late && this->left_ <= 180 && lead >= 1 && lead <= 3)
-      this->put_(StoryKind::CLOSE, 78, lead, "One-possession game");
+      this->put_(StoryKind::CLOSE, 0, 78, lead, "One-possession game");
     if (this->whole_) {
       // Only while it is the biggest whatever the order between reads.
       const int big = this->big_side_ == 1 ? this->max_t_ : this->max_o_;
       const int top = this->big_side_ == 1 ? this->hi_t_ : this->hi_o_;
       if (this->big_side_ != 0 && big >= 10 && big >= top && big >= this->max_t_ && big >= this->max_o_ && lead == big && this->at_ - this->big_at_ <= 60) {
-        snprintf(buf, sizeof(buf), "Biggest lead, %d", big);
-        this->put_(StoryKind::BIG_LEAD, this->aged_(StoryKind::BIG_LEAD, this->big_side_, big, 58, now_ms), big, buf);
+        snprintf(buf, sizeof(buf), "biggest lead, %d", big);
+        this->put_(StoryKind::BIG_LEAD, this->big_side_, this->aged_(StoryKind::BIG_LEAD, this->big_side_, big, 58, now_ms), big, buf);
       }
       for (int side = 1; side <= 2; side++) {
         const int down = side == 1 ? this->max_o_ : this->max_t_;
         const int now = side == 1 ? -margin : margin;
         if (down >= 12 && now <= down / 2 && now <= 8) {
-          snprintf(buf, sizeof(buf), "%s was down %d", side == 1 ? us : them, down);
-          this->put_(StoryKind::COMEBACK, this->aged_(StoryKind::COMEBACK, side, down, 64, now_ms), down, buf);
+          snprintf(buf, sizeof(buf), "was down %d", down);
+          this->put_(StoryKind::COMEBACK, side, this->aged_(StoryKind::COMEBACK, side, down, 64, now_ms), down, buf);
         }
         const int hi = side == 1 ? this->hi_t_ : this->hi_o_;
         if (hi <= 0 && this->half_over_(g) && lead > 0) {
-          snprintf(buf, sizeof(buf), "%s has never led", side == 1 ? us : them);
-          this->put_(StoryKind::NEVER_LED, this->aged_(StoryKind::NEVER_LED, side, side, 46, now_ms), side, buf);
+          this->put_(StoryKind::NEVER_LED, side, this->aged_(StoryKind::NEVER_LED, side, side, 46, now_ms), side,
+                     "has never led");
         }
       }
     }
@@ -367,7 +371,7 @@ class Story {
 
   int64_t event_{0};
   bool started_{false}, whole_{false}, final_{false};
-  uint8_t leader_{0}, big_side_{0};
+  uint8_t leader_{0}, big_side_{0}, over_side_{0};
   uint32_t back_ms_{0};
   int period_{0}, secs_{0};
   int t_{0}, o_{0}, at_{0}, left_{-1};

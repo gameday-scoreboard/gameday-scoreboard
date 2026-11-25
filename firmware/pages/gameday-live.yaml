@@ -83,7 +83,12 @@ script:
       - lambda: |-
           lv_obj_t *lbl = id(tt_down_lbl);
           const int W = lv_disp_get_hor_res(lv_disp_get_default());
-          const ::espn::RowLines &r = id(gameday_ctl).last_update().row;
+          const gameday::UpdateFields &u = id(gameday_ctl).last_update();
+          const ::espn::RowLines &r = u.row;
+          lv_obj_t *tags[2] = {id(gd_row_tag), id(gd_row_tag2)};
+          lv_obj_t *tag_lbls[2] = {id(gd_row_tag_lbl), id(gd_row_tag2_lbl)};
+          lv_obj_set_hidden(tags[0], true);
+          lv_obj_set_hidden(tags[1], true);
           if (W < 128 || r.n == 0) {
             lv_obj_set_hidden(lbl, true);
             id(gd_row_turn) = 0;
@@ -100,6 +105,12 @@ script:
           // line that doesn't fit at all gives its turn to the lead line
           // (the down and distance), and with neither the row stays empty:
           // text there never crosses the ball or the line to gain.
+          // A tag is its letters (5 px each) with 2 px before and 1 after,
+          // and 3 px to the words.
+          auto tag_w = [&](int side) { return (int) (side == 1 ? u.team_abbr : u.opponent_abbr).size() * 5 + 3; };
+          auto tags_w = [&](int side) {
+            return side == 0 ? 0 : side == 3 ? tag_w(1) + tag_w(2) + 6 : tag_w(side) + 3;
+          };
           auto fit = [&](const ::espn::RowLine &line, bool strict) -> std::string {
             std::string pick;
             for (int i = 0;; i++) {
@@ -108,7 +119,7 @@ script:
                 break;
               lv_point_t sz;
               lv_text_get_size(&sz, form.c_str(), f, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
-              if (sz.x <= id(gd_row_room))
+              if (sz.x <= id(gd_row_room) - tags_w(line.side))
                 return form;
               if (!strict)
                 pick = form;
@@ -130,6 +141,39 @@ script:
           if (cur == nullptr || pick != cur)
             lv_label_set_text(lbl, pick.c_str());
           lv_obj_set_style_text_color(lbl, lv_color_hex(l.rgb), 0);
+          // The tag and the words are centered together. Not on football's
+          // field strip, which places its own text.
+          if (!id(gd_row_strict)) {
+            const int room = id(gd_row_room), left = (W - room) / 2;
+            if (l.side == 0) {
+              lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_CENTER, 0);
+              lv_obj_set_x(lbl, left);
+              lv_obj_set_width(lbl, room);
+            } else {
+              lv_point_t sz;
+              lv_text_get_size(&sz, pick.c_str(), f, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+              const int words = std::min((int) sz.x, room - tags_w(l.side));
+              int x = left + (room - words - tags_w(l.side)) / 2;
+              auto put = [&](int i, int side) {
+                const uint32_t fill = ::espn::tag_fill((uint32_t) (side == 1 ? u.team_color : u.opponent_color));
+                lv_label_set_text(tag_lbls[i], (side == 1 ? u.team_abbr : u.opponent_abbr).c_str());
+                lv_obj_set_style_text_color(tag_lbls[i], lv_color_hex(::espn::tag_dark_text(fill) ? 0x000000 : 0xFFFFFF), 0);
+                lv_obj_set_style_bg_color(tags[i], lv_color_hex(fill), 0);
+                lv_obj_set_x(tags[i], x);
+                lv_obj_set_width(tags[i], tag_w(side));
+                lv_obj_set_hidden(tags[i], false);
+                x += tag_w(side);
+              };
+              put(0, l.side == 2 ? 2 : 1);
+              x += 3;
+              lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_LEFT, 0);
+              lv_obj_set_x(lbl, x);
+              lv_obj_set_width(lbl, words);
+              x += words + 3;
+              if (l.side == 3)
+                put(1, 2);
+            }
+          }
           lv_obj_set_hidden(lbl, false);
 
   - id: tt_apply_layout
@@ -411,6 +455,26 @@ script:
           // restarts the scroll animation, and pushes arrive every few seconds.
           // Scale the animation time with the text length so the scroll speed
           // stays constant (LVGL animates over a fixed TIME, not a fixed speed).
+          // Whose play it is, in front of it; the words scroll in the rest.
+          const gameday::UpdateFields &u = id(gameday_ctl).last_update();
+          const int tick_w = lv_disp_get_hor_res(lv_disp_get_default());
+          int tag_px = 0;
+          if (u.ticker_side != 0 && tick_w >= 128) {
+            const bool ours = u.ticker_side == 1;
+            const std::string &abbr = ours ? u.team_abbr : u.opponent_abbr;
+            const uint32_t fill = ::espn::tag_fill((uint32_t) (ours ? u.team_color : u.opponent_color));
+            tag_px = (int) abbr.size() * 5 + 3;
+            lv_label_set_text(id(gd_tick_tag_lbl), abbr.c_str());
+            lv_obj_set_style_text_color(id(gd_tick_tag_lbl), lv_color_hex(::espn::tag_dark_text(fill) ? 0x000000 : 0xFFFFFF), 0);
+            lv_obj_set_style_bg_color(id(gd_tick_tag), lv_color_hex(fill), 0);
+            lv_obj_set_width(id(gd_tick_tag), tag_px);
+            tag_px += 3;
+          }
+          lv_obj_set_hidden(id(gd_tick_tag), tag_px == 0);
+          if (lv_obj_get_x(id(tt_game_status_lbl)) != tag_px)
+            lv_obj_set_x(id(tt_game_status_lbl), tag_px);
+          if (lv_obj_get_width(id(tt_game_status_lbl)) != tick_w - tag_px)
+            lv_obj_set_width(id(tt_game_status_lbl), tick_w - tag_px);
           const char *cur = lv_label_get_text(id(tt_game_status_lbl));
           if (cur == nullptr || status_text != cur) {
             lv_label_set_text(id(tt_game_status_lbl), status_text.c_str());
@@ -1656,6 +1720,75 @@ lvgl:
                   hidden: true
                   text: ""
                   styles: ["tt_st_status_text"]
+
+              # Whose line it is: a team's abbreviation on its color, on the
+              # situation row (left and right of the words) and the ticker.
+              # gd_row_show and gd_update place and show them.
+              - obj:
+                  id: gd_row_tag
+                  scrollbar_mode: "OFF"
+                  x: 0
+                  y: 47
+                  width: 18
+                  height: 8
+                  radius: 0
+                  pad_all: 0
+                  border_width: 0
+                  bg_opa: COVER
+                  bg_color: 0x000000
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: gd_row_tag_lbl
+                        x: 2
+                        y: 0
+                        text_font: spleen_8
+                        text_color: 0xFFFFFF
+                        text: ""
+
+              - obj:
+                  id: gd_row_tag2
+                  scrollbar_mode: "OFF"
+                  x: 0
+                  y: 47
+                  width: 18
+                  height: 8
+                  radius: 0
+                  pad_all: 0
+                  border_width: 0
+                  bg_opa: COVER
+                  bg_color: 0x000000
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: gd_row_tag2_lbl
+                        x: 2
+                        y: 0
+                        text_font: spleen_8
+                        text_color: 0xFFFFFF
+                        text: ""
+
+              - obj:
+                  id: gd_tick_tag
+                  scrollbar_mode: "OFF"
+                  x: 0
+                  y: 56
+                  width: 18
+                  height: 8
+                  radius: 0
+                  pad_all: 0
+                  border_width: 0
+                  bg_opa: COVER
+                  bg_color: 0x000000
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: gd_tick_tag_lbl
+                        x: 2
+                        y: 0
+                        text_font: spleen_8
+                        text_color: 0xFFFFFF
+                        text: ""
 
               - label:
                   id: tt_away_rec_lbl

@@ -5380,8 +5380,10 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   opts.row_win = wide && this->win_chance_on();
   opts.win_due = playing && this->win_swing_.ticker;
   opts.row_timeout = wide;
-  if (this->row_hold_.event_id == g.event_id)
+  if (this->row_hold_.event_id == g.event_id) {
     opts.held_play = this->row_hold_.play.c_str();
+    opts.held_side = this->row_hold_.play_side;
+  }
   opts.row_down = wide;
 
   auto kickoff_of = [this](const GameSnapshot &s) -> std::string {
@@ -5396,6 +5398,7 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   f.kickoff = kickoff;
   this->kick_fields_(f, opts);  // the board's forecast, and the ticker's in the owner's degrees
   f.status_text = ::espn::status_text(g, opts, kickoff);
+  f.ticker_side = wide && g.valid ? ::espn::basketball_ticker_side(g, opts) : 0;
   // Halftime and the final: ESPN's headline (a final only) and the scores the
   // panel saw, behind the same switch as the last play.
   this->score_log_.update(g, millis());

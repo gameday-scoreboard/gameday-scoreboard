@@ -138,6 +138,7 @@ struct UpdateFields {
   bool opponent_badge{false};
   uint32_t team_badge_rgb{0xFFFFFF};
   uint32_t opponent_badge_rgb{0xFFFFFF};
+  uint8_t ticker_side{0};  // whose play the ticker says (basketball, a wide board), for its tag
   std::string kickoff;  // "Sun 3:25 PM" style label while PRE, else empty
   // Other sports (football leaves these at their defaults).
   uint8_t sport{0};        // ::espn::Sport

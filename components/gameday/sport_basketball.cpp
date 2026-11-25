@@ -153,14 +153,31 @@ bool basketball_junk_play(const GameSnapshot &s) {
          s.last_play.find(" enters the game for ") != std::string::npos;
 }
 
+uint8_t basketball_play_side(const GameSnapshot &s) {
+  if (s.play_athlete.empty() || timeout_play(s.last_play))
+    return 0;
+  return s.play_team == s.team_id ? 1 : s.play_team == s.opp_id ? 2 : 0;
+}
+
+uint8_t basketball_ticker_side(const GameSnapshot &s, const TickerOptions &o) {
+  if (s.sport != Sport::BASKETBALL || s.state != GameState::IN || !o.last_play || s.nba.phase == Phase::HALFTIME ||
+      s.nba.phase == Phase::END_PERIOD)
+    return 0;
+  if (!basketball_junk_play(s))
+    return basketball_play_side(s);
+  return o.held_play != nullptr && o.held_play[0] != '\0' ? o.held_side : 0;
+}
+
 std::string basketball_box_line(const GameSnapshot &s) {
   const Basketball::Box &a = s.nba.team_box, &b = s.nba.opp_box;
   if (!a.has || !b.has)
     return "";
   auto pct = [](const Basketball::Box &x) { return (x.fg_made * 200 + x.fg_tried) / (2 * x.fg_tried); };
-  char buf[72];
-  snprintf(buf, sizeof(buf), "FG %d%% to %d%% | 3PT %u/%u to %u/%u | Rebounds %u-%u", pct(a), pct(b), a.three_made,
-           a.three_tried, b.three_made, b.three_tried, a.rebounds, b.rebounds);
+  const char *us = s.team_abbr.c_str(), *them = s.opp_abbr.c_str();
+  char buf[128];
+  snprintf(buf, sizeof(buf), "FG %s %d%%, %s %d%% | 3PT %s %u/%u, %s %u/%u | Rebounds %s %u, %s %u", us, pct(a), them,
+           pct(b), us, a.three_made, a.three_tried, them, b.three_made, b.three_tried, us, a.rebounds, them,
+           b.rebounds);
   return buf;
 }
 

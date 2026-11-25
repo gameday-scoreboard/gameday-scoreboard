@@ -389,6 +389,7 @@ struct TickerOptions {
   // The last play worth reading, shown while ESPN's last play is a
   // substitution (row_text.h RowHold); nullptr for none. Basketball.
   const char *held_play{nullptr};
+  uint8_t held_side{0};
   // Both records before the start, for a board too narrow to show them
   // under the logos (one 64-wide panel, pages/gameday-live.yaml).
   bool records{false};
@@ -397,6 +398,10 @@ struct TickerOptions {
   // weather.h). "" says the event's own.
   std::string weather;
 };
+
+// Whose basketball play the ticker says, for the tag in front of it; 0 when
+// it says something else.
+uint8_t basketball_ticker_side(const GameSnapshot &s, const TickerOptions &o);
 
 struct Splash {
   std::string text;
@@ -478,8 +483,11 @@ bool timeout_play(const std::string &text);
 // Basketball: a last play that is no news: a player checking in or out, or
 // ESPN's dead ball rebound.
 bool basketball_junk_play(const GameSnapshot &s);
-// Basketball's team stats while a game is on, our side's number first, "FG
-// 47% to 29% | 3PT 3/14 to 5/25 | Rebounds 38-22". "" when ESPN has none.
+// Whose play ESPN's last play is, for a play by a player: 1 ours, 2 theirs, 0
+// when it has no player (a timeout, "South Alabama Defensive Rebound").
+uint8_t basketball_play_side(const GameSnapshot &s);
+// Basketball's team stats while a game is on, "FG USA 47%, FAMU 29% | 3PT
+// USA 3/14, FAMU 5/25 | Rebounds USA 38, FAMU 22". "" when ESPN has none.
 std::string basketball_box_line(const GameSnapshot &s);
 // Whether ESPN has said the board has no game, for no_game_text. In Favorites
 // (favs > 0) only once every favorite's team read has answered (`read` of

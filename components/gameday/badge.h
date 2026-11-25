@@ -72,6 +72,21 @@ inline uint32_t badge_text(uint32_t color, uint32_t alt) {
   return kBadgeNoColorText;
 }
 
+// A tag's fill: the team's color as the board's abbreviations show it, lifted
+// until its brightest channel is at 0xC0, white for black or no color.
+inline uint32_t tag_fill(uint32_t rgb) {
+  const uint32_t m = (uint32_t) badge_peak(rgb);
+  if (m == 0)
+    return 0xFFFFFF;
+  if (m >= 0xC0)
+    return rgb;
+  const uint32_t r = ((rgb >> 16) & 0xFF) * 0xC0 / m, g = ((rgb >> 8) & 0xFF) * 0xC0 / m, b = (rgb & 0xFF) * 0xC0 / m;
+  return r << 16 | g << 8 | b;
+}
+
+// Black letters on the fill, else white.
+inline bool tag_dark_text(uint32_t fill) { return badge_luminance(fill) > 500; }
+
 inline BadgeStyle badge_style(uint32_t fill, uint32_t alt) {
   BadgeStyle s{fill, alt, alt != fill, badge_luminance(fill) > kBadgeDarkTextLum};
   bool fill_dark = badge_luminance(fill) < kBadgeNearBlackLum;
