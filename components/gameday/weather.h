@@ -777,7 +777,9 @@ inline uint8_t wx_icon_at(uint8_t icon, bool night) {
 
 // Where a US venue is, to the degree: about the middle of its state's
 // stadiums, from the state in its place ("Green Bay, WI", "San Diego,
-// California"). False for a place outside the US or one it can't tell.
+// California"). A stadium far from the middle of a big state, like El Paso,
+// can be half an hour off. False for a place outside the US or one it can't
+// tell.
 inline bool wx_state_spot(const std::string &place, float &lat, float &lon) {
   struct St {
     const char *ab, *name;
