@@ -775,92 +775,70 @@ inline uint8_t wx_icon_at(uint8_t icon, bool night) {
   return icon;
 }
 
-// Dark at this local hour (daylight time in summer), roughly: from about the
-// end of dusk at 40 degrees north, the middle of the US, and before 6 AM.
-// 5 PM in December, 9 PM in June. month 1 to 12.
-inline bool wx_dark_at(int month, int hour) {
-  static const int8_t kDarkFrom[12] = {17, 18, 19, 20, 20, 21, 21, 20, 19, 18, 17, 17};
-  if (hour < 6)
-    return true;
-  if (month < 1 || month > 12)
-    return false;
-  return hour >= kDarkFrom[month - 1];
-}
-
-// A US venue's standard UTC offset in hours, from the state in its place
-// ("Green Bay, WI", "San Diego, California"), and whether it keeps daylight
-// time. 0 for a place outside the US or one it can't tell: no swap then. A
-// state split between two zones gets the one most of its stadiums are in.
-inline int wx_state_offset(const std::string &place, bool &dst) {
+// Where a US venue is, to the degree: about the middle of its state's
+// stadiums, from the state in its place ("Green Bay, WI", "San Diego,
+// California"). False for a place outside the US or one it can't tell.
+inline bool wx_state_spot(const std::string &place, float &lat, float &lon) {
   struct St {
     const char *ab, *name;
-    int8_t off;
+    uint8_t north, west;
   };
   static const St kStates[] = {
-      {"AL", "Alabama", -6},      {"AK", "Alaska", -9},         {"AZ", "Arizona", -7},
-      {"AR", "Arkansas", -6},     {"CA", "California", -8},     {"CO", "Colorado", -7},
-      {"CT", "Connecticut", -5},  {"DE", "Delaware", -5},       {"DC", "District of Columbia", -5},
-      {"FL", "Florida", -5},      {"GA", "Georgia", -5},        {"HI", "Hawaii", -10},
-      {"ID", "Idaho", -7},        {"IL", "Illinois", -6},       {"IN", "Indiana", -5},
-      {"IA", "Iowa", -6},         {"KS", "Kansas", -6},         {"KY", "Kentucky", -5},
-      {"LA", "Louisiana", -6},    {"ME", "Maine", -5},          {"MD", "Maryland", -5},
-      {"MA", "Massachusetts", -5}, {"MI", "Michigan", -5},      {"MN", "Minnesota", -6},
-      {"MS", "Mississippi", -6},  {"MO", "Missouri", -6},       {"MT", "Montana", -7},
-      {"NE", "Nebraska", -6},     {"NV", "Nevada", -8},         {"NH", "New Hampshire", -5},
-      {"NJ", "New Jersey", -5},   {"NM", "New Mexico", -7},     {"NY", "New York", -5},
-      {"NC", "North Carolina", -5}, {"ND", "North Dakota", -6}, {"OH", "Ohio", -5},
-      {"OK", "Oklahoma", -6},     {"OR", "Oregon", -8},         {"PA", "Pennsylvania", -5},
-      {"RI", "Rhode Island", -5}, {"SC", "South Carolina", -5}, {"SD", "South Dakota", -6},
-      {"TN", "Tennessee", -6},    {"TX", "Texas", -6},          {"UT", "Utah", -7},
-      {"VT", "Vermont", -5},      {"VA", "Virginia", -5},       {"WA", "Washington", -8},
-      {"WV", "West Virginia", -5}, {"WI", "Wisconsin", -6},     {"WY", "Wyoming", -7},
+      {"AL", "Alabama", 33, 87}, {"AK", "Alaska", 61, 150}, {"AZ", "Arizona", 33, 112},
+      {"AR", "Arkansas", 36, 93}, {"CA", "California", 35, 119}, {"CO", "Colorado", 40, 105},
+      {"CT", "Connecticut", 42, 73}, {"DE", "Delaware", 39, 75}, {"DC", "District of Columbia", 39, 77},
+      {"FL", "Florida", 28, 82}, {"GA", "Georgia", 33, 84}, {"HI", "Hawaii", 21, 158}, {"ID", "Idaho", 44, 116},
+      {"IL", "Illinois", 41, 88}, {"IN", "Indiana", 40, 86}, {"IA", "Iowa", 42, 93}, {"KS", "Kansas", 39, 96},
+      {"KY", "Kentucky", 38, 85}, {"LA", "Louisiana", 30, 91}, {"ME", "Maine", 44, 70},
+      {"MD", "Maryland", 39, 77}, {"MA", "Massachusetts", 42, 71}, {"MI", "Michigan", 42, 84},
+      {"MN", "Minnesota", 45, 93}, {"MS", "Mississippi", 33, 89}, {"MO", "Missouri", 39, 92},
+      {"MT", "Montana", 46, 112}, {"NE", "Nebraska", 41, 97}, {"NV", "Nevada", 37, 116},
+      {"NH", "New Hampshire", 43, 71}, {"NJ", "New Jersey", 41, 74}, {"NM", "New Mexico", 35, 107},
+      {"NY", "New York", 42, 75}, {"NC", "North Carolina", 36, 80}, {"ND", "North Dakota", 47, 97},
+      {"OH", "Ohio", 40, 83}, {"OK", "Oklahoma", 36, 97}, {"OR", "Oregon", 45, 123},
+      {"PA", "Pennsylvania", 40, 77}, {"RI", "Rhode Island", 42, 71}, {"SC", "South Carolina", 34, 81},
+      {"SD", "South Dakota", 44, 97}, {"TN", "Tennessee", 36, 86}, {"TX", "Texas", 31, 97},
+      {"UT", "Utah", 41, 112}, {"VT", "Vermont", 44, 73}, {"VA", "Virginia", 38, 78},
+      {"WA", "Washington", 47, 122}, {"WV", "West Virginia", 39, 81}, {"WI", "Wisconsin", 44, 89},
+      {"WY", "Wyoming", 41, 106},
   };
-  dst = true;
   size_t comma = place.rfind(", ");
   if (comma == std::string::npos)
-    return 0;
+    return false;
   const std::string st = place.substr(comma + 2);
   for (const auto &s : kStates) {
     if (st == s.ab || st == s.name) {
-      dst = strcmp(s.ab, "AZ") != 0 && strcmp(s.ab, "HI") != 0;
-      return s.off;
+      lat = s.north;
+      lon = -(float) s.west;
+      return true;
     }
   }
-  return 0;
+  return false;
 }
 
-// Whether US daylight time is on at this moment, given as the local standard
-// time read as if it were UTC: from 2 AM on the second Sunday in March to
-// 2 AM daylight (1 AM standard) on the first Sunday in November.
-inline bool wx_us_dst(int64_t local_std) {
-  const WxCivil c = wx_civil(local_std);
-  if (c.month < 3 || c.month > 11)
-    return false;
-  if (c.month > 3 && c.month < 11)
-    return true;
-  const int64_t days = local_std >= 0 ? local_std / 86400 : (local_std - 86399) / 86400;
-  const int wday = (int) (((days + 4) % 7 + 7) % 7);  // 1970-01-01 was a Thursday; 0 Sunday
-  const int first_wday = ((wday - (int) (c.day - 1)) % 7 + 7) % 7;
-  const unsigned first_sunday = 1 + (unsigned) ((7 - first_wday) % 7);
-  if (c.month == 3) {
-    const unsigned second_sunday = first_sunday + 7;
-    return c.day > second_sunday || (c.day == second_sunday && c.hour >= 2);
-  }
-  return c.day < first_sunday || (c.day == first_sunday && c.hour < 1);
+// Whether the sun has set at a spot (its upper edge is under the horizon), as
+// Open-Meteo's is_day has it. The Astronomical Almanac's low precision sun,
+// with the equation of time for the hour angle.
+inline bool wx_sun_down(int64_t t, float lat, float lon) {
+  constexpr float kRad = 3.14159265f / 180.0f;
+  const float d = (float) (t - 946728000) / 86400.0f;  // days since noon UTC on 2000-01-01
+  const float g = (357.529f + 0.98560028f * d) * kRad;
+  const float l = (280.459f + 0.98564736f * d + 1.915f * sinf(g) + 0.020f * sinf(2 * g)) * kRad;
+  const float eot = -1.915f * sinf(g) - 0.020f * sinf(2 * g) + 2.466f * sinf(2 * l) - 0.053f * sinf(4 * l);
+  const float sin_dec = 0.39777f * sinf(l);
+  const float cos_dec = sqrtf(1 - sin_dec * sin_dec);
+  const float hour = ((float) (t % 86400) / 240.0f - 180.0f + lon + eot) * kRad;
+  const float sin_up = sinf(lat * kRad) * sin_dec + cosf(lat * kRad) * cos_dec * cosf(hour);
+  return sin_up < -0.01454f;  // 0.833 degrees under
 }
 
-// Whether a kickoff is after dark at a US venue, by the venue's own clock:
-// 1 dark, 0 light, -1 when the venue's time zone isn't known.
+// Whether the sun is down at a kickoff at a US venue: 1 down, 0 up, -1 when
+// the venue's state isn't known.
 inline int wx_venue_dark(int64_t kickoff, const std::string &place) {
-  bool dst;
-  int off = wx_state_offset(place, dst);
-  if (off == 0 || kickoff <= 0)
+  float lat, lon;
+  if (kickoff <= 0 || !wx_state_spot(place, lat, lon))
     return -1;
-  const int64_t local = kickoff + (int64_t) off * 3600;
-  WxCivil c = wx_civil(local);
-  if (dst && wx_us_dst(local))
-    c = wx_civil(local + 3600);
-  return wx_dark_at((int) c.month, c.hour) ? 1 : 0;
+  return wx_sun_down(kickoff, lat, lon) ? 1 : 0;
 }
 
 // ---- When a weather read may start --------------------------------------------
