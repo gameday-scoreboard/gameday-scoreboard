@@ -32,7 +32,8 @@ struct FavName {
 struct FavNames {
   FavName e[kFavNamesMax];
 } __attribute__((packed));
-static_assert(sizeof(FavNames) == 464, "FavNames is a fixed-size blob");
+static_assert(sizeof(FavNames) == 464,
+              "FavNames is saved: a new size needs a new preference key or a migration, not a new number");
 
 // Favorites in these leagues are athletes, who need a kept name.
 inline bool athlete_league(uint8_t league) { return league < kLeagueCount && leaderboard_league((League) league); }
