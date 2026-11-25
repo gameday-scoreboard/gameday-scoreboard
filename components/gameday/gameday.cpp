@@ -6229,8 +6229,8 @@ void GamedayComponent::kick_fields_(UpdateFields &f, ::espn::TickerOptions &o) c
   if (g.weather_f != ::espn::kNoWeatherF) {
     t10 = g.weather_f * 10;
     // ESPN's icon number can be for the hour it read the forecast, not the
-    // kickoff's: the sun or the moon by the kickoff's hour at the venue, when
-    // its time zone is known (a US state), else ESPN's as it is.
+    // kickoff's: the sun or the moon by whether the sun is up at the venue, when
+    // its state is known (a US venue), else ESPN's as it is.
     const std::string words = ::espn::espn_wx_words(g.weather);
     icon = ::espn::espn_wx_icon(g.weather_accu, words);
     int dark = g.time_tbd ? -1 : ::espn::wx_venue_dark(g.kickoff_epoch, g.venue_place);
