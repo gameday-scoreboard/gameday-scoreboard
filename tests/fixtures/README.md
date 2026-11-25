@@ -292,3 +292,11 @@ their second round, and a final read back with `?dates=20261101`:
 | `scoreboard_pga_final_20261101.json` | `.../golf/pga/scoreboard?dates=20261101`, VidantaWorld Mexico Open, Final: Andrew Novak won at -25; 52 of the 120 competitors have only two rounds (the cut) |
 | `scoreboard_pga_20261121_suspended.json` | `.../golf/pga/scoreboard`, The RSM Classic recorded 2026-11-21 as weather stopped round 3: the event is still `in` while the competition reads "Round 3 - Suspended", state `post`; the full 592 KB document, the size the heap budget's `poll_golf` case measures |
 | `scoreboard_pga_team_20260426.json` | `.../golf/pga/scoreboard?dates=20260426`, the Zurich Classic of New Orleans final: a team event whose competitors are pairs (`type` "team", "Smalley/Springer" at -30) with no athlete; trimmed to the first 12 pairs, statistics removed |
+| `scoreboard_pga_20261123_r4_done.json` | `.../golf/pga/scoreboard`, The RSM Classic recorded 2026-11-23 at 13:10 CT: "Round 4 - Play Complete" with four golfers tied at -16, the event still `in`; every golfer kept, trimmed to the keys the card reads (so are the rest below) |
+| `scoreboard_pga_20261123_playoff.json` | The same document at 13:15: "Playoff - In Progress", which ESPN calls period 5; the four in it have a period 5 line with no score |
+| `scoreboard_pga_20261123_final.json` | The same at 13:45, Final: Marco Penge won the playoff and is listed first, still at -16 like the three he beat |
+| `scoreboard_pga_20261124_next.json` | `.../golf/pga/scoreboard` recorded 2026-11-24: the next event, Hero World Challenge, `pre` with no `competitors` key |
+| `scoreboard_pga_20260614_final.json` | `.../golf/pga/scoreboard?dates=20260614`, RBC Canadian Open, Final: Brooks Koepka withdrew in round 4 and is listed next to last at -6, his round 4 line "-" |
+| `scoreboard_lpga_20260830_final.json` | `.../golf/lpga/scoreboard?dates=20260830`, FM Championship, Final: the 77 who missed the cut have lines for rounds 1, 2 and 4 |
+| `scoreboard_eur_20261125_pre.json` | `.../golf/eur/scoreboard` recorded 2026-11-25, before the BMW Australian PGA Championship: `pre` with 156 golfers, all at "E" |
+| `scoreboard_pga_20260924_presidents_cup.json` | `.../golf/pga/scoreboard?dates=20260924`, the Presidents Cup, Final: two sides (`type` "team", USA 17 and INTL 13) and 30 matches, the first kept |

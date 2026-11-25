@@ -840,6 +840,7 @@ inline void fill_golf_competitor_filter(JsonObject c) {
 inline void fill_golf_status_filter(JsonObject s) {
   s["period"] = true;
   s["type"]["state"] = true;
+  s["type"]["completed"] = true;
   s["type"]["detail"] = true;
   s["type"]["shortDetail"] = true;
 }
@@ -870,6 +871,13 @@ struct GolfPending {
   GolfRow row;
   uint8_t lines{0};
   GolfLine line[kGolfLines];
+
+  const GolfLine *round(int period) const {
+    for (uint8_t i = 0; i < this->lines; i++)
+      if (this->line[i].period == period)
+        return &this->line[i];
+    return nullptr;
+  }
 };
 
 // One event of a tour's document, read as it streams in.
@@ -879,12 +887,18 @@ struct GolfEvent {
   bool round_in{false};  // the competition's own state is "in"
   uint8_t top{0};        // rows kept from the top of the leaderboard
   uint8_t favs{0};       // followed golfers kept past the top
+  // Golfers on one score, one after another, share a place: the first one's.
+  uint16_t run_first{0}, run_n{0};
+  uint16_t lead_n{0};  // golfers on the leader's score
+  int run_total{0};
+  bool run_weekend{false};  // they have a line for round 3 (a cut golfer doesn't)
   PsVector<GolfPending> rows;
 
   void clear_field() {
     this->listed = false;
     this->b.field = 0;
     this->top = this->favs = 0;
+    this->run_first = this->run_n = this->lead_n = 0;
     this->rows.clear();
   }
 };
@@ -906,9 +920,10 @@ class GolfRead {
   bool done{false};  // an event in progress is picked, so later events are only skipped
 
   // A second "events" key replaces the first, as it does in ArduinoJson.
-  void restart() {
+  void restart(bool list) {
     this->have_pick_ = false;
     this->done = false;
+    this->seen_ = list;
     this->pick_ = GolfEvent();
   }
 
@@ -962,6 +977,8 @@ class GolfRead {
       detail = str_or_empty(s["type"]["detail"]);
     snprintf(b.detail, sizeof(b.detail), "%s", detail.c_str());
     b.round = (uint8_t) (s["period"] | 0);
+    b.round_done = s["type"]["completed"] | false;
+    b.playoff = strncmp(b.detail, "Playoff", 7) == 0;
   }
 
   // One element of the first competition's competitors, null when it is
@@ -975,6 +992,17 @@ class GolfRead {
     GolfRow &r = p.row;
     r.pos = (uint16_t) (gc["order"] | 0);
     r.id = (uint32_t) atol(str_or_empty(gc["id"]).c_str());
+    int total = 0;
+    const std::string score = str_or_empty(gc["score"]);
+    const bool scored = golf_score(score.c_str(), total);
+    if (scored) {
+      snprintf(r.score, sizeof(r.score), "%s", score.c_str());
+      this->place_(gc, total);
+      r.place = ev.run_first;
+      r.tied = ev.run_n > 1;
+    } else {
+      ev.run_n = 0;
+    }
     const bool is_fav = this->fav_(r.id);
     // The top is full at kGolfTopRows rows even when a document repeats an
     // order or has none, so a read keeps kGolfRowsMax rows at most.
@@ -982,39 +1010,36 @@ class GolfRead {
     if (!top && (!is_fav || ev.favs >= kGolfFavRows))
       return;
     r.favorite = is_fav;
-    snprintf(r.name, sizeof(r.name), "%s", ascii_fold(str_or_empty(gc["athlete"]["shortName"])).c_str());
-    // The surname from the full name, for a narrow panel: the last word.
-    std::string full = ascii_fold(str_or_empty(gc["athlete"]["displayName"]));
-    size_t sp = full.rfind(' ');
-    snprintf(r.last, sizeof(r.last), "%s", (sp == std::string::npos ? full : full.substr(sp + 1)).c_str());
+    // The surname, for a narrow panel, is the short name without its initial
+    // ("H. Varner III"), or the full name's last word.
+    const std::string brief = ascii_fold(str_or_empty(gc["athlete"]["shortName"]));
+    const std::string full = ascii_fold(str_or_empty(gc["athlete"]["displayName"]));
+    const size_t sp = brief.find(' '), cut = full.rfind(' ');
+    snprintf(r.name, sizeof(r.name), "%s", brief.c_str());
+    snprintf(r.last, sizeof(r.last), "%s",
+             sp != std::string::npos ? brief.c_str() + sp + 1 : full.c_str() + (cut == std::string::npos ? 0 : cut + 1));
     // A pair in a team event goes by the pair's name, "Smalley/Springer",
     // and on a single panel by the first name and the second's initial,
-    // "Smalley/S", which fits the row.
+    // "Smalley/S". A side of a team match (the Presidents Cup) is no pair.
     if (r.name[0] == '\0' && r.last[0] == '\0') {
       const std::string pair = ascii_fold(str_or_empty(gc["team"]["displayName"]));
-      snprintf(r.name, sizeof(r.name), "%s", pair.c_str());
       const size_t slash = pair.find('/');
-      const std::string narrow = slash != std::string::npos && slash + 1 < pair.size() ? pair.substr(0, slash + 2) : pair;
-      snprintf(r.last, sizeof(r.last), "%s", narrow.c_str());
+      if (slash != std::string::npos) {
+        snprintf(r.name, sizeof(r.name), "%s", pair.c_str());
+        snprintf(r.last, sizeof(r.last), "%s", pair.substr(0, slash + 2).c_str());
+      }
     }
-    // Neither a golfer nor a pair (a team game's document read by mistake):
-    // it counts in the field but is never a row.
+    // Neither a golfer nor a pair (a team match, a team game's document read
+    // by mistake): it counts in the field but is never a row.
     if (r.name[0] == '\0' && r.last[0] == '\0')
       return;
-    int total = 0;
-    const std::string score = str_or_empty(gc["score"]);
-    if (golf_score(score.c_str(), total))
-      snprintf(r.score, sizeof(r.score), "%s", score.c_str());
     // Each round's score to par and how many holes of it the document
     // shows. The PGA Tour's document lists the holes, the LPGA's and the DP
     // World Tour's don't, so their rows have no thru. A later line for the
     // same round wins, as does a later score that reads as one.
     for (JsonObjectConst gl : gc["linescores"].as<JsonArrayConst>()) {
       const int period = gl["period"] | 0;
-      GolfLine *line = nullptr;
-      for (uint8_t i = 0; i < p.lines && line == nullptr; i++)
-        if (p.line[i].period == period)
-          line = &p.line[i];
+      GolfLine *line = const_cast<GolfLine *>(p.round(period));
       if (line == nullptr) {
         if (p.lines >= kGolfLines)
           continue;
@@ -1035,43 +1060,48 @@ class GolfRead {
     ev.rows.push_back(p);
   }
 
-  // The event to show: an in-progress one wins, else the first with a
-  // field.
+  // The event to show: one in progress wins, then the first over, then the
+  // first with a field. An event with no field yet is kept only until one
+  // has: it says when the tour plays next.
   void end_event() {
-    if (!this->cur_.listed)
+    const uint8_t rank = this->rank_(this->cur_);
+    if (this->have_pick_ && rank <= this->rank_(this->pick_))
       return;
-    if (this->cur_.b.state == GolfState::IN) {
-      this->pick_ = std::move(this->cur_);
-      this->have_pick_ = true;
-      this->done = true;
-    } else if (!this->have_pick_) {
-      this->pick_ = std::move(this->cur_);
-      this->have_pick_ = true;
-    }
+    this->pick_ = std::move(this->cur_);
+    this->have_pick_ = true;
+    this->done = rank == 3;
   }
 
   // The picked event's board, with each row's line for the current round.
+  // A tour between events reads well with no rows. False when the document
+  // has no list of events at all.
   bool finish(League league, GolfBoard &out) {
-    if (!this->have_pick_)
+    if (!this->seen_)
       return false;
     GolfEvent &ev = this->pick_;
     GolfBoard &b = ev.b;
     b.league = league;
+    b.valid = true;
     b.round_live = b.state == GolfState::IN && ev.round_in;
     b.rows.clear();
     b.rows.reserve(ev.rows.size());
     for (const GolfPending &p : ev.rows) {
       GolfRow r = p.row;
-      for (uint8_t i = 0; i < p.lines; i++)
-        if (p.line[i].period == (int) b.round) {
-          memcpy(r.today, p.line[i].today, sizeof(r.today));
-          r.thru = p.line[i].thru;
-        }
+      const GolfLine *line = p.round(b.round);
+      if (line != nullptr) {
+        memcpy(r.today, line->today, sizeof(r.today));
+        r.thru = line->thru;
+      }
+      r.gone = this->gone_(ev, p);
+      // A playoff leaves its golfers on one score: the winner is listed
+      // first, and the rest share second.
+      if (b.state == GolfState::POST && r.place == 1 && ev.lead_n > 1) {
+        const bool won = b.rows.empty();
+        r.place = won ? 1 : 2;
+        r.tied = !won && ev.lead_n > 2;
+      }
       b.rows.push_back(r);
     }
-    if (b.rows.empty())
-      return false;
-    b.valid = true;
     out = std::move(b);
     return true;
   }
@@ -1084,12 +1114,56 @@ class GolfRead {
     return false;
   }
 
+  static uint8_t rank_(const GolfEvent &ev) {
+    return !ev.listed ? 0 : ev.b.state == GolfState::IN ? 3 : ev.b.state == GolfState::POST ? 2 : 1;
+  }
+
+  // The golfer just counted has this total: the run they join or start.
+  void place_(JsonObjectConst gc, int total) {
+    GolfEvent &ev = this->cur_;
+    bool weekend = false;
+    for (JsonObjectConst gl : gc["linescores"].as<JsonArrayConst>())
+      weekend = weekend || (gl["period"] | 0) == 3;
+    if (ev.run_n > 0 && total == ev.run_total && weekend == ev.run_weekend) {
+      ev.run_n++;
+      for (GolfPending &p : ev.rows)
+        p.row.tied = p.row.tied || p.row.place == ev.run_first;
+    } else {
+      ev.run_first = ev.b.field;
+      ev.run_n = 1;
+      ev.run_total = total;
+      ev.run_weekend = weekend;
+    }
+    if (ev.run_first == 1)
+      ev.lead_n = ev.run_n;
+  }
+
+  // Whether a golfer is still in the tournament, against the leader's
+  // rounds: ESPN marks neither a missed cut nor a withdrawal. A playoff's
+  // round is the leaders' alone.
+  static GolfGone gone_(const GolfEvent &ev, const GolfPending &p) {
+    const GolfBoard &b = ev.b;
+    const GolfPending &lead = ev.rows[0];
+    for (int k = 1; k <= 4 && k <= (int) b.round - (b.playoff ? 1 : 0); k++) {
+      const GolfLine *first = lead.round(k), *line = p.round(k);
+      if (first == nullptr)
+        continue;
+      if (line == nullptr && k >= 3)
+        return GolfGone::CUT;
+      const bool over = first->today[0] != '\0' && (k < (int) b.round || b.state == GolfState::POST);
+      if (over && (line == nullptr || line->today[0] == '\0'))
+        return GolfGone::LEFT;
+    }
+    return GolfGone::NO;
+  }
+
   JsonDocument all_;      // the filter that keeps everything
   JsonDocument filters_;  // the status filter and the golfer filter
   const uint32_t *fav_ids_;
   size_t fav_count_;
   GolfEvent cur_, pick_;
   bool have_pick_{false};
+  bool seen_{false};  // the document has a list of events
 };
 
 // The first competition of an event: its status, and its competitors one
@@ -1133,8 +1207,9 @@ template<typename TInput> void golf_competitions(JsonWalk<TInput> &w, GolfRead &
 
 }  // namespace detail
 
-// Parses a tour's scoreboard document (golf.h): the first event with a
-// field, its state and round, and the leaderboard rows the panel keeps.
+// Parses a tour's scoreboard document (golf.h): the event being played, else
+// the one over, else the next one, its state and round, and the leaderboard
+// rows the panel keeps.
 // Those are the top kGolfTopRows, plus the followed golfers (fav_ids, this
 // tour's athlete ids) wherever they stand, up to kGolfFavRows more.
 // Competitors arrive in leaderboard order. The document is 90-600 KB, most
@@ -1155,7 +1230,7 @@ bool parse_golf(TInput &input, League league, const uint32_t *fav_ids, size_t fa
       w.skip(root);
       continue;
     }
-    g.restart();
+    g.restart(w.peek() == '[');
     if (w.peek() != '[') {
       w.skip(root);
       continue;

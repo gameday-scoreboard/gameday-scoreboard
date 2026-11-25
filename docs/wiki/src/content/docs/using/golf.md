@@ -31,34 +31,48 @@ The search needs the phone or computer you're using to reach ESPN. The panel kee
 
 ## When it shows
 
-The leaderboard shows between games, like the [College Top 25](/using/top-25/): it takes a turn every 10 minutes while no game is on, five seconds a page, and never covers a game in progress, a score splash or your [message card](/using/messages/). With more than one tour, the tours take turns.
+The leaderboard shows between games, like the [College Top 25](/using/top-25/): it takes a turn every 10 minutes while no game is on, five seconds a page, and never covers a game in progress, a score splash or your [message card](/using/messages/). The other cards wait until its turn is over. With more than one tour, the tours take turns.
 
-While a round is being played, the panel reads the tour's leaderboard every five minutes. Overnight between rounds, or while weather has stopped play, it reads every half hour. Between tournaments it reads every few hours, and at the first tee time once ESPN has posted the next event. A tournament more than four days over is left off.
+While a round is being played, the panel reads the tour's leaderboard every five minutes. Overnight between rounds, or while weather has stopped play, it reads every half hour. On the last day it keeps to five minutes after the round ends, so a playoff and the final show up soon.
+
+Between tournaments, the last final stays up for four days. After that the card takes no turns until the next tournament has scores: ESPN lists the field before an event with everyone level, in no order, and that isn't a leaderboard. The panel checks every few hours, and every half hour from 12 hours before the event's date.
+
+If the panel can't read a tournament in progress for an hour, its leaderboard stays off until it can, rather than showing old scores.
 
 ## What it looks like
 
-The top line names the tour and the round, like **PGA R2** during the second round, or **PGA FINAL** once the tournament is over. A round stopped for weather or dark still shows its round number. Each row has the golfer's position and score:
+The top line names the tour and the round, like **PGA R2** during the second round, **PGA PLAYOFF** during a playoff, or **PGA FINAL** once the tournament is over. A round stopped for weather or dark still shows its round number. Each row has the golfer's place and score.
+
+A single 64x64 panel shows surnames, five rows a page, cut to fit beside the score:
 
 ```
- 1 James      -11
- 2 Greyserman -10
- 3 Fisk       -10
+ 1 James  -11
+ 2 Greyse -10
+ 2 Fisk   -10
 ```
 
-A single 64x64 panel shows surnames, five rows a page. A 128x64 display shows one full-width column with the golfer's name, and while a round is being played, today's score and the hole they're through:
+A 128x64 display has room for more of the name, with a **T** on a tied place, and while a round is being played, today's score and the hole they're through. **F** means they've finished the round:
 
 ```
- 1 B. James        -11 -4 9
- 2 M. Greyserman   -10 -3 11
+  1 B. James   -11  -4  9
+ T2 Greyserman -10  -3 11
+ T2 S. Fisk    -10  -6  F
 ```
 
-The board holds the top ten, plus up to six golfers you follow who stand below them, in position order. Scores are shown the way ESPN writes them: under par as a negative, level par as **E**.
+The board holds the top ten, plus up to six golfers you follow who stand below them. Golfers on the same score share a place. After a playoff, the winner has first place and the golfers they beat share second. Scores are shown the way ESPN writes them: under par as a negative, level par as **E**.
+
+A golfer you follow who is no longer playing shows this in place of their place:
+
+- **CUT:** they missed the cut.
+- **OUT:** they withdrew or were disqualified. ESPN doesn't say which.
+
+ESPN marks neither, so the panel works them out from the rounds a golfer has no score for, and they can show up a round late.
 
 Some things the board shows only as ESPN has them:
 
 - **Thru:** only the PGA Tour's leaderboard carries hole-by-hole scores. On the LPGA and DP World Tour the hole a golfer is through is left off, not guessed.
-- **Missed cut or withdrawn:** ESPN doesn't mark these. A golfer who missed the cut simply has no weekend rounds.
-- **Team events:** in a pairs event like the Zurich Classic, the board lists the pairs, "Smalley/Springer" on a wide board and "Smalley/S" on a single panel.
+- **Pairs:** in a pairs event like the Zurich Classic, the board lists the pairs, "Smalley/Springer" on a wide board.
+- **Team matches:** the Presidents Cup and Ryder Cup aren't leaderboards, so the card takes no turns for them.
 
 ## Turning it off
 

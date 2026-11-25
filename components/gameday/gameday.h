@@ -625,15 +625,11 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   const std::string &top25_col(int i) const { return this->top25_col_[i == 1 ? 1 : 0]; }
   void set_top25_cols(uint32_t cols) { this->top25_cols_ = cols >= 2 ? 2 : 1; }
   // The golf card's page (gd_golf_card in firmware/pages/gameday-live.yaml):
-  // its header, "" while the card is down, and up to two columns of rows.
-  const char *golf_head() const { return this->golf_ != nullptr ? this->golf_->head.c_str() : ""; }
-  const char *golf_col(int i) const { return this->golf_ != nullptr ? this->golf_->col[i == 1 ? 1 : 0].c_str() : ""; }
-  // cols counts narrow columns; wide says the display has room for the
-  // wide rows (today's score and thru) in one full-width column instead.
-  void set_golf_layout(uint32_t cols, bool wide) {
-    this->golf_cols_ = cols >= 2 ? 2 : 1;
-    this->golf_wide_ = wide;
-  }
+  // its header, "" while the card is down, and its rows. wide says the
+  // display has room for today's score and thru.
+  const char *golf_head() const { return this->golf_ != nullptr ? this->golf_->head : ""; }
+  const char *golf_text() const { return this->golf_ != nullptr ? this->golf_->text : ""; }
+  void set_golf_wide(bool wide) { this->golf_wide_ = wide; }
   bool golf_on() const { return this->card_on(::espn::Card::GOLF); }
   // The news card's headline on the scoreboard page now, "" while it is
   // down, and its top line ("DAL NEWS"); gd_news_card draws them and says
@@ -817,23 +813,25 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     ::espn::GolfBoard board[::espn::kGolfSlots];
     uint32_t read_ms[::espn::kGolfSlots]{};    // millis() of the last good read, 0 = none
     uint32_t fail_ms[::espn::kGolfSlots]{};    // millis() of the last failed read, 0 = none since
-    int64_t read_epoch[::espn::kGolfSlots]{};  // the clock at the last good read, for golf_read_ms
     uint8_t read_slot{0};
     int slot{-1};  // the tour up now, or the last one shown
     uint32_t page{0};
     uint32_t pages{0};
     bool shown{false};
     uint32_t since_ms{0};  // when the page went up, or the card last came down
-    PsString head, col[2];
+    char head[::espn::kGolfHead]{};  // "" while the card is down
+    char text[::espn::kGolfText]{};
   };
   GolfCard *golf_{nullptr};
   GolfCard &golf_card_();
   void golf_free_();
   bool golf_read_due_{false};
   bool golf_wide_{false};
-  uint8_t golf_cols_{1};
   uint32_t golf_tick_ms_{0};
   uint8_t golf_slots_() const;  // bit per slot: the tours with a followed golfer
+  bool golf_shown_() const { return this->golf_ != nullptr && this->golf_->shown; }
+  // The Top 25 or golf card is up: no other card takes its turn over a list.
+  bool list_card_up_() const { return this->top25_shown_ || this->golf_shown_(); }
   void golf_tick_();
   void golf_show_();
   void golf_hide_();

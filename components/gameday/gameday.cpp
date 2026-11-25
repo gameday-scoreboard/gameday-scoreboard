@@ -8020,7 +8020,7 @@ void GamedayComponent::msg_tick_() {
   const bool on = this->card_on(::espn::Card::MESSAGE) && this->card_ok_(::espn::Card::MESSAGE);
   // Nor over the news, Top 25, picture or season card: the message waits for them to come down.
   const bool between = this->card_between_(now) && !this->news_shown_ &&
-                       now - this->news_since_ms_ >= ::espn::kMsgPageMs && !this->top25_shown_ &&
+                       now - this->news_since_ms_ >= ::espn::kMsgPageMs && !this->list_card_up_() &&
                        !this->pic_shown_ && now - this->pic_since_ms_ >= ::espn::kMsgPageMs && !this->season_shown_;
   const uint32_t page_ms = std::max(::espn::kMsgPageMs, this->msg_roll_ms_);
   ::espn::MsgTurn turn =
@@ -8068,7 +8068,7 @@ void GamedayComponent::gdcard_tick_() {
   this->gdcard_tick_ms_ = now;
   const bool between = this->board_between_(now) && !this->msg_shown_ &&
                        now - this->msg_since_ms_ >= ::espn::kMsgPageMs && !this->news_shown_ &&
-                       now - this->news_since_ms_ >= ::espn::kMsgPageMs && !this->top25_shown_ &&
+                       now - this->news_since_ms_ >= ::espn::kMsgPageMs && !this->list_card_up_() &&
                        !this->pic_shown_ && now - this->pic_since_ms_ >= ::espn::kMsgPageMs && !this->season_shown_;
   ::espn::MsgTurn turn = ::espn::msg_turn(this->card_on(::espn::Card::GAMEDAY), between, this->gdcard_shown_,
                                           now - this->gdcard_since_ms_, ::espn::kGamedayCardEveryMin,
@@ -8230,7 +8230,8 @@ void GamedayComponent::top25_tick_() {
   // Between games only, as the message card (msg_tick_), and not over it,
   // the news card, the picture card or the season card.
   const bool between = slots != 0 && this->clock_set_() && this->time_ != nullptr && this->card_between_(now) &&
-                       !this->msg_shown_ && !this->news_shown_ && !this->pic_shown_ && !this->season_shown_;
+                       !this->msg_shown_ && !this->news_shown_ && !this->pic_shown_ && !this->season_shown_ &&
+                       !this->golf_shown_();
   if (!between) {
     this->top25_hide_();
     return;
@@ -8433,9 +8434,7 @@ void GamedayComponent::golf_hide_() {
     return;
   GolfCard &c = *this->golf_;
   c.shown = false;
-  c.head.clear();
-  c.col[0].clear();
-  c.col[1].clear();
+  c.head[0] = '\0';
   c.since_ms = millis();
   this->fire_action_("golf");  // gd_golf_card in firmware/pages/gameday-live.yaml
 }
@@ -8444,16 +8443,8 @@ void GamedayComponent::golf_show_() {
   GolfCard &c = this->golf_card_();
   const ::espn::GolfBoard &b = c.board[c.slot];
   c.shown = true;
-  const std::string head = ::espn::golf_header(b);
-  c.head.assign(head.data(), head.size());
-  // A wide display draws one full-width column of wide rows; the component
-  // counts it as one column, so page math stays golf_pages(board, cols).
-  const uint32_t shown_cols = this->golf_wide_ ? 1 : this->golf_cols_;
-  for (uint32_t col = 0; col < 2; col++) {
-    const std::string text =
-        col < shown_cols ? ::espn::golf_column(b, c.page, shown_cols, col, this->golf_wide_) : std::string();
-    c.col[col].assign(text.data(), text.size());
-  }
+  ::espn::golf_header(b, c.head);
+  ::espn::golf_page(b, c.page, this->golf_wide_, c.text);
   c.since_ms = millis();
   this->fire_action_("golf");
 }
@@ -8490,7 +8481,7 @@ void GamedayComponent::golf_tick_() {
       if (!(slots & (1u << s)))
         continue;
       const bool may_read = c.fail_ms[s] == 0 || now - c.fail_ms[s] >= ::espn::kGolfRetryMs;
-      if (may_read && (c.read_ms[s] == 0 || now - c.read_ms[s] >= ::espn::golf_read_ms(c.board[s], c.read_epoch[s]))) {
+      if (may_read && (c.read_ms[s] == 0 || now - c.read_ms[s] >= ::espn::golf_read_ms(c.board[s]))) {
         this->golf_read_due_ = true;
         c.read_slot = s;
         break;
@@ -8522,9 +8513,9 @@ void GamedayComponent::golf_tick_() {
     return;
   c.slot = next;
   c.page = 0;
-  c.pages = ::espn::golf_pages(c.board[next], this->golf_wide_ ? 1 : this->golf_cols_);
-  ESP_LOGI(TAG, "Golf: a turn, %s, %u pages", ::espn::golf_header(c.board[next]).c_str(), (unsigned) c.pages);
+  c.pages = ::espn::golf_pages(c.board[next]);
   this->golf_show_();
+  ESP_LOGI(TAG, "Golf: a turn, %s, %u pages", c.head, (unsigned) c.pages);
 }
 
 void GamedayComponent::start_golf_job_() {
@@ -8572,11 +8563,18 @@ void GamedayComponent::apply_golf_job_() {
   }
   c.fail_ms[s] = 0;
   c.read_ms[s] = now;
-  c.read_epoch[s] = this->time_ != nullptr ? (int64_t) this->time_->now().timestamp : 0;
   // A turn on the old board ends here; the next turn shows the new one.
   if (c.shown && c.slot == (int) s)
     this->golf_hide_();
-  c.board[s] = std::move(j.golf_board);
+  // PSRAM figures too: the boards and every read's document live there.
+  char head[::espn::kGolfHead];
+  ::espn::golf_header(j.golf_board, head);
+  ESP_LOGI(TAG, "Golf: %s %s, %u of %u golfers (%u bytes), PSRAM free %u KB, largest block %u KB", head,
+           j.golf_board.event, (unsigned) j.golf_board.rows.size(), (unsigned) j.golf_board.field,
+           (unsigned) j.golf_bytes, (unsigned) (heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024),
+           (unsigned) (heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) / 1024));
+  ::espn::golf_take(c.board[s], std::move(j.golf_board),
+                    this->time_ != nullptr ? (int64_t) this->time_->now().timestamp : 0);
   // A followed golfer added without a name (an app that sends none) takes
   // ESPN's from the board. A kept name is never replaced, so flash is
   // written once per golfer.
@@ -8590,11 +8588,6 @@ void GamedayComponent::apply_golf_job_() {
     this->sync_prefs_();
     this->rebuild_state_(&this->last_fields_);
   }
-  // PSRAM figures too: the boards and every read's document live there.
-  ESP_LOGI(TAG, "Golf: %s %s, %u of %u golfers (%u bytes), PSRAM free %u KB, largest block %u KB",
-           ::espn::golf_header(b).c_str(), b.event, (unsigned) b.rows.size(), (unsigned) b.field,
-           (unsigned) j.golf_bytes, (unsigned) (heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024),
-           (unsigned) (heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) / 1024));
 }
 
 // ---- The news card (news.h) -------------------------------------------------
@@ -8649,7 +8642,7 @@ void GamedayComponent::news_tick_() {
   // Nor over the message card (and 10 s after it), the Top 25 card, the
   // picture card (and 10 s after it) or the season card.
   const bool between = this->card_between_(now) && !this->msg_shown_ &&
-                       now - this->msg_since_ms_ >= ::espn::kMsgPageMs && !this->top25_shown_ &&
+                       now - this->msg_since_ms_ >= ::espn::kMsgPageMs && !this->list_card_up_() &&
                        !this->pic_shown_ && now - this->pic_since_ms_ >= ::espn::kMsgPageMs && !this->season_shown_;
   const uint32_t page_ms = std::max(::espn::kMsgPageMs, this->news_roll_ms_);
   ::espn::MsgTurn turn = ::espn::msg_turn(this->news_on(), between, this->news_shown_, now - this->news_since_ms_,
@@ -8797,7 +8790,7 @@ void GamedayComponent::season_tick_() {
   // Top 25 card.
   const bool between = this->clock_set_() && this->card_between_(now) && !this->msg_shown_ &&
                        now - this->msg_since_ms_ >= ::espn::kMsgPageMs && !this->news_shown_ &&
-                       now - this->news_since_ms_ >= ::espn::kMsgPageMs && !this->top25_shown_ &&
+                       now - this->news_since_ms_ >= ::espn::kMsgPageMs && !this->list_card_up_() &&
                        !this->pic_shown_ && now - this->pic_since_ms_ >= ::espn::kMsgPageMs;
   const uint32_t page_ms = std::max(::espn::kMsgPageMs, this->season_roll_ms_);
   ::espn::MsgTurn turn = ::espn::msg_turn(sched_on || recap_on, between, this->season_shown_,
@@ -8985,7 +8978,7 @@ void GamedayComponent::picture_tick_() {
   // card or the season card.
   const bool between = this->card_between_(now) && !this->msg_shown_ &&
                        now - this->msg_since_ms_ >= ::espn::kMsgPageMs && !this->news_shown_ &&
-                       now - this->news_since_ms_ >= ::espn::kMsgPageMs && !this->top25_shown_ &&
+                       now - this->news_since_ms_ >= ::espn::kMsgPageMs && !this->list_card_up_() &&
                        !this->season_shown_;
   const int next = ::espn::pic_next_slot(slots, this->pic_last_);
   const bool on = next >= 0 && this->card_on(::espn::Card::PICTURE);

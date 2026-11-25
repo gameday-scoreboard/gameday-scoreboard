@@ -13,7 +13,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <string>
+#include <utility>
 
 #include "leagues.h"
 #include "psram.h"
@@ -32,16 +32,26 @@ constexpr uint32_t kGolfEveryMs = 10u * 60 * 1000;  // from the end of one turn 
 // scoreboard read is the tour's whole document, so golf never polls at the
 // ten-second pace of a game. ESPN calls the event in progress from the first
 // tee time to the last putt, overnight and through a weather stop too, so
-// between rounds the board is read every half hour. Between tournaments it
-// is read every few hours, and at the next event's first tee time once ESPN
-// has posted it, so a Thursday start is never missed by long.
+// between rounds the board is read every half hour. On the last day, with
+// play complete, it stays at the live pace: a playoff starts within minutes
+// and the final lands soon after. Between tournaments the board is read
+// every few hours, and every half hour from kGolfLeadSecs before the next
+// event's date. ESPN dates an event at midnight Eastern, and a first round
+// in Australia tees off about nine hours before that.
 constexpr uint32_t kGolfLiveReadMs = 5u * 60 * 1000;
 constexpr uint32_t kGolfBreakReadMs = 30u * 60 * 1000;
 constexpr uint32_t kGolfIdleReadMs = 6u * 60 * 60 * 1000;
 constexpr uint32_t kGolfRetryMs = 5u * 60 * 1000;  // after a failed read
+constexpr int64_t kGolfLeadSecs = 12LL * 60 * 60;
 // A board is left off once its event ended more than this long ago: the
-// last round of one week to the first of the next is four days.
+// last round of one week to the first of the next is four days. An event
+// that hasn't started this long after its date is looked for at the slow
+// pace again.
 constexpr int64_t kGolfStaleSecs = 4LL * 24 * 60 * 60;
+// A tournament in progress is left off when its last good read is older than
+// this (a game was on, the screen was dark, the reads fail): the scores have
+// moved on. Twice the slowest read pace of an event in progress.
+constexpr int64_t kGolfOldSecs = 60LL * 60;
 
 inline bool golf_league(League l) { return l == League::PGA || l == League::LPGA || l == League::EUR; }
 
@@ -50,8 +60,16 @@ inline int golf_slot(League l) { return l == League::PGA ? 0 : l == League::LPGA
 inline League golf_slot_league(int slot) { return slot == 0 ? League::PGA : slot == 1 ? League::LPGA : League::EUR; }
 constexpr int kGolfSlots = 3;
 
+// A golfer no longer in the tournament. CUT has no line for round 3 or 4
+// where the leader has one; LEFT has no score for a round that is over (ESPN
+// doesn't say whether that is a withdrawal or a disqualification).
+enum class GolfGone : uint8_t { NO, CUT, LEFT };
+
 struct GolfRow {
   uint16_t pos{0};       // the document's order: 1 is the leader
+  uint16_t place{0};     // the place shown: golfers on the same score share one; 0 before a score
+  bool tied{false};      // another golfer has the same place
+  GolfGone gone{GolfGone::NO};
   uint32_t id{0};        // ESPN athlete id
   char name[24]{};       // ESPN's short name, "B. James"
   char last[16]{};       // the surname alone, for a narrow panel: "James"
@@ -66,11 +84,15 @@ struct GolfBoard {
   League league{League::PGA};
   GolfState state{GolfState::PRE};  // the tournament's: IN from the first round's start to the final
   bool round_live{false};           // a round is being played now (not overnight, not stopped for weather)
+  bool round_done{false};           // the round is complete (not stopped part way through)
+  bool playoff{false};              // ESPN counts a playoff as one more round
   char event[48]{};    // "World Wide Technology Championship"
   char detail[32]{};   // ESPN's word for where the event is: "Round 2 - In Progress", "Final"
   uint8_t round{0};    // the round in progress or last played, 0 when ESPN gives none
   int64_t start_epoch{0};
   int64_t end_epoch{0};  // the event's last day, for golf_fresh
+  int64_t next_epoch{0};  // on a final kept between events: the next event's start
+  int64_t read_epoch{0};  // the clock at the last good read
   uint16_t field{0};     // competitors in the document
   PsVector<GolfRow> rows;  // the top of the board, then followed golfers, in position order
 };
@@ -91,97 +113,119 @@ inline bool golf_score(const char *text, int &out) {
   return true;
 }
 
-// Up, and its event not long over. With no clock nothing is fresh.
+// Whether the board has anything to show: before an event starts ESPN lists
+// the field in no order, level par or no score for everyone.
+inline bool golf_scored(const GolfBoard &b) {
+  return b.valid && b.state != GolfState::PRE && !b.rows.empty() && b.rows[0].score[0] != '\0';
+}
+
+// Up, its event not long over, and the scores of one in progress not old.
+// With no clock nothing is fresh.
 inline bool golf_fresh(const GolfBoard &b, int64_t now) {
-  return b.valid && !b.rows.empty() && now > 0 && (b.end_epoch == 0 || now - b.end_epoch <= kGolfStaleSecs);
+  if (!golf_scored(b) || now <= 0 || (b.end_epoch != 0 && now - b.end_epoch > kGolfStaleSecs))
+    return false;
+  return b.state == GolfState::POST || now - b.read_epoch <= kGolfOldSecs;
 }
 
-// When a tour's board is read again, from the last read at now_epoch: soon
-// while a round is being played, every half hour between the rounds of an
-// event in progress, and otherwise every few hours or at the next event's
-// start, whichever comes first.
-inline uint32_t golf_read_ms(const GolfBoard &b, int64_t now_epoch) {
-  if (!b.valid)
+// A good read at now replaces the board kept, except that a final stays up
+// until it is stale or the next event has scores: ESPN drops a final for the
+// next event, listed with no field or no scores, a day or two later.
+inline void golf_take(GolfBoard &kept, GolfBoard &&read, int64_t now) {
+  if (!golf_scored(read) && kept.state == GolfState::POST && golf_scored(kept))
+    kept.next_epoch = read.start_epoch;
+  else
+    kept = std::move(read);
+  kept.read_epoch = now;
+}
+
+// When a tour's board is read again, from its last read.
+inline uint32_t golf_read_ms(const GolfBoard &b) {
+  const int64_t now = b.read_epoch;
+  if (!b.valid || now <= 0)
     return kGolfIdleReadMs;
-  if (b.state == GolfState::IN)
-    return b.round_live ? kGolfLiveReadMs : kGolfBreakReadMs;
-  if (b.state == GolfState::PRE && b.start_epoch > now_epoch && now_epoch > 0) {
-    const int64_t until = b.start_epoch - now_epoch;
-    if (until < (int64_t) (kGolfIdleReadMs / 1000))
-      return until * 1000 < (int64_t) kGolfLiveReadMs ? kGolfLiveReadMs : (uint32_t) (until * 1000);
-  }
-  return kGolfIdleReadMs;
-}
-
-// "PGA R2", over the rows; a final reads "PGA FINAL", and before the first
-// round just the tour.
-inline std::string golf_header(const GolfBoard &b) {
-  const LeagueInfo *l = league_info(b.league);
-  std::string out = l != nullptr ? l->prefix : "GOLF";
-  if (b.state == GolfState::POST)
-    out += " FINAL";
-  else if (b.round > 0) {
-    char buf[8];
-    snprintf(buf, sizeof(buf), " R%u", (unsigned) b.round);
-    out += buf;
-  }
-  return out;
-}
-
-// One row for the wide board: " 1 B. James -11 -4 9" (position, name, total,
-// today's score and the hole the golfer is through, the last two only while
-// a round is being played and the document carries them).
-inline std::string golf_row_wide(const GolfBoard &b, const GolfRow &r) {
-  char buf[48];
-  std::string tail;
   if (b.state == GolfState::IN) {
-    if (r.today[0] != '\0' && strcmp(r.today, "-") != 0) {
-      tail += ' ';
-      tail += r.today;
-    }
-    if (r.thru > 0) {
-      char tbuf[8];
-      snprintf(tbuf, sizeof(tbuf), " %u", (unsigned) r.thru);
-      tail += tbuf;
+    const int64_t over = now - b.end_epoch;
+    const bool last_day = b.end_epoch != 0 && over >= 0 && over < 24 * 60 * 60;
+    return b.round_live || (b.round_done && last_day) ? kGolfLiveReadMs : kGolfBreakReadMs;
+  }
+  const int64_t start = b.state == GolfState::PRE ? b.start_epoch : b.next_epoch;
+  if (start == 0 || now > start + kGolfStaleSecs)
+    return kGolfIdleReadMs;
+  const int64_t until = start - kGolfLeadSecs - now;
+  if (until >= (int64_t) (kGolfIdleReadMs / 1000))
+    return kGolfIdleReadMs;
+  return until * 1000 <= (int64_t) kGolfBreakReadMs ? kGolfBreakReadMs : (uint32_t) (until * 1000);
+}
+
+// "PGA R2", over the rows; a playoff reads "PGA PLAYOFF", a final "PGA
+// FINAL", and before the first round just the tour.
+constexpr size_t kGolfHead = 24;
+inline void golf_header(const GolfBoard &b, char (&out)[kGolfHead]) {
+  const LeagueInfo *l = league_info(b.league);
+  const char *tour = l != nullptr ? l->prefix : "GOLF";
+  if (b.state == GolfState::POST)
+    snprintf(out, sizeof(out), "%s FINAL", tour);
+  else if (b.playoff)
+    snprintf(out, sizeof(out), "%s PLAYOFF", tour);
+  else if (b.round > 0)
+    snprintf(out, sizeof(out), "%s R%u", tour, (unsigned) b.round);
+  else
+    snprintf(out, sizeof(out), "%s", tour);
+}
+
+// Columns of the 5x8 font a row fills: 13 on a single panel (the last
+// column of the last digit is blank, so 65 px fit in 64), 25 on a wide one.
+constexpr int kGolfNarrow = 13;
+constexpr int kGolfWide = 25;
+
+// One row, in fixed columns so the page lines up. A single panel: the place,
+// the surname and the total, " 1 Greyse -16". A wide display: "T10", more of
+// the name, the total, and while a round is being played today's score and
+// the hole the golfer is through ("F" finished), where the document has them:
+// " T1 M. Penge   -16  -5  F".
+inline void golf_row(const GolfBoard &b, const GolfRow &r, bool wide, char (&out)[kGolfWide + 1]) {
+  char place[8], thru[4] = "", tail[9] = "";
+  if (r.gone != GolfGone::NO)
+    snprintf(place, sizeof(place), "%s", r.gone == GolfGone::CUT ? "CUT" : "OUT");
+  else if (r.place == 0)
+    snprintf(place, sizeof(place), "-");
+  else
+    snprintf(place, sizeof(place), "%s%u", wide && r.tied ? "T" : "", (unsigned) r.place);
+  bool today = false, holes = false;
+  if (wide && b.state == GolfState::IN && !b.playoff) {
+    for (const GolfRow &g : b.rows) {
+      today = today || g.today[0] != '\0';
+      holes = holes || g.thru != 0;
     }
   }
-  snprintf(buf, sizeof(buf), "%2u %-14s %4s%s", (unsigned) r.pos, r.name, r.score[0] != '\0' ? r.score : "-", tail.c_str());
-  std::string out = buf;
-  while (!out.empty() && out.back() == ' ')
-    out.pop_back();
-  return out;
+  if (r.thru == 18)
+    snprintf(thru, sizeof(thru), "F");
+  else if (r.thru != 0)
+    snprintf(thru, sizeof(thru), "%u", (unsigned) r.thru);
+  if (holes)
+    snprintf(tail, sizeof(tail), " %3.3s %2s", r.today, thru);
+  else if (today)
+    snprintf(tail, sizeof(tail), " %3.3s", r.today);
+  const int pw = wide ? 3 : 2;
+  const int len = (int) strlen(place);
+  const int nw = (wide ? kGolfWide : kGolfNarrow) - (len > pw ? len : pw) - 5 - (int) strlen(tail);
+  const char *name = r.name[0] != '\0' && (r.last[0] == '\0' || (wide && (int) strlen(r.name) <= nw)) ? r.name : r.last;
+  snprintf(out, sizeof(out), "%*s %-*.*s %3.3s%s", pw, place, nw, nw, name, r.score[0] != '\0' ? r.score : "-", tail);
 }
 
-// One row for a single panel: " 1 James -11".
-inline std::string golf_row(const GolfRow &r) {
-  char buf[32];
-  snprintf(buf, sizeof(buf), "%2u %-9s %4s", (unsigned) r.pos, r.last[0] != '\0' ? r.last : r.name,
-           r.score[0] != '\0' ? r.score : "-");
-  std::string out = buf;
-  while (!out.empty() && out.back() == ' ')
-    out.pop_back();
-  return out;
-}
+// Pages a turn takes.
+inline uint32_t golf_pages(const GolfBoard &b) { return ((uint32_t) b.rows.size() + kGolfRows - 1) / kGolfRows; }
 
-// Pages a turn takes: rows per column times columns on each.
-inline uint32_t golf_pages(const GolfBoard &b, uint32_t cols) {
-  uint32_t per = kGolfRows * (cols == 0 ? 1 : cols);
-  return ((uint32_t) b.rows.size() + per - 1) / per;
-}
-
-// Column col of page page, one row per line. The wide board's rows carry
-// the round score and thru; a single panel's only the total.
-inline std::string golf_column(const GolfBoard &b, uint32_t page, uint32_t cols, uint32_t col, bool wide) {
-  if (cols == 0)
-    cols = 1;
-  std::string out;
-  size_t first = (size_t) (page * cols + col) * kGolfRows;
-  for (size_t i = first; i < first + kGolfRows && i < b.rows.size(); i++) {
-    if (!out.empty())
-      out += '\n';
-    out += wide ? golf_row_wide(b, b.rows[i]) : golf_row(b.rows[i]);
+// Page page, one row per line.
+constexpr size_t kGolfText = kGolfRows * (kGolfWide + 1) + 1;
+inline void golf_page(const GolfBoard &b, uint32_t page, bool wide, char (&out)[kGolfText]) {
+  size_t at = 0;
+  out[0] = '\0';
+  for (size_t i = (size_t) page * kGolfRows; i < ((size_t) page + 1) * kGolfRows && i < b.rows.size(); i++) {
+    char row[kGolfWide + 1];
+    golf_row(b, b.rows[i], wide, row);
+    at += (size_t) snprintf(out + at, sizeof(out) - at, "%s%s", at != 0 ? "\n" : "", row);
   }
-  return out;
 }
 
 // The tour the next turn shows: of the fresh ones the panel follows (bit

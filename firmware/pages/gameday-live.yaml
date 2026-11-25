@@ -141,9 +141,9 @@ script:
           const int W = lv_disp_get_hor_res(lv_disp_get_default());
           const bool wide = W >= 128;
           id(gameday_ctl).set_top25_cols(wide ? 2 : 1);  // gd_top25_card's columns
-          // The golf card: surname rows on a single panel, one full-width
-          // column of wide rows (with today's score and thru) from 128 up.
-          id(gameday_ctl).set_golf_layout(1, wide);
+          // The golf card: surname rows on a single panel, wide rows (with
+          // today's score and thru) from 128 up.
+          id(gameday_ctl).set_golf_wide(wide);
           lv_obj_set_size(id(tt_game_container), W, 64);
           lv_obj_set_size(id(tt_no_game_container), W, 64);
           lv_obj_set_size(id(tt_splash), W, 64);
@@ -1148,17 +1148,17 @@ script:
       - lambda: |-
           const char *head = id(gameday_ctl).golf_head();
           if (head[0] == 0) {
-            lv_obj_add_flag(id(tt_golf), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_golf), true);
             return;
           }
-          const int W = lv_disp_get_hor_res(lv_disp_get_default());
+          const int32_t W = lv_display_get_horizontal_resolution(lv_display_get_default());
           lv_obj_set_size(id(tt_golf), W, 64);
           lv_obj_set_width(id(tt_golf_head_lbl), W);
           lv_label_set_text(id(tt_golf_head_lbl), head);
-          lv_obj_set_width(id(tt_golf_col0_lbl), W - 2);
-          lv_label_set_text(id(tt_golf_col0_lbl), id(gameday_ctl).golf_col(0));
+          lv_obj_set_width(id(tt_golf_lbl), W + 2);
+          lv_label_set_text(id(tt_golf_lbl), id(gameday_ctl).golf_text());
           lv_obj_move_foreground(id(tt_golf));
-          lv_obj_clear_flag(id(tt_golf), LV_OBJ_FLAG_HIDDEN);
+          lv_obj_set_hidden(id(tt_golf), false);
 
   # The news card (components/gameday/news.h): its top line ("DAL NEWS")
   # and one headline under it, or nothing. Sent as "news", like "msg".
@@ -2395,10 +2395,10 @@ lvgl:
                   text_color: 0xFFB000
                   text_font: spleen_8
               - label:
-                  id: tt_golf_col0_lbl
-                  x: 1
+                  id: tt_golf_lbl
+                  x: 0
                   y: 10
-                  width: 62
+                  width: 66
                   long_mode: CLIP
                   text: ""
                   text_color: 0xFFFFFF

@@ -232,6 +232,7 @@ bool golf_whole_document(const uint8_t *data, size_t size, const uint32_t *fav_i
   JsonObject comp = ev["competitions"].add<JsonObject>();
   comp["status"]["period"] = true;
   comp["status"]["type"]["state"] = true;
+  comp["status"]["type"]["completed"] = true;
   comp["status"]["type"]["detail"] = true;
   comp["status"]["type"]["shortDetail"] = true;
   JsonObject c = comp["competitors"].add<JsonObject>();
@@ -249,19 +250,22 @@ bool golf_whole_document(const uint8_t *data, size_t size, const uint32_t *fav_i
   if (deserializeJson(doc, (const char *) data, size, DeserializationOption::Filter(filter),
                       DeserializationOption::NestingLimit(20)))
     return false;
+  if (!doc["events"].is<JsonArrayConst>())
+    return false;
+  // In progress, then over, then listed with a field, then any.
   JsonObjectConst pick;
+  int best = -1;
   for (JsonObjectConst e : doc["events"].as<JsonArrayConst>()) {
-    if (e["competitions"][0]["competitors"].as<JsonArrayConst>().size() == 0)
+    if (e.isNull())
       continue;
-    if (pick.isNull())
+    const std::string st = espn::detail::str_or_empty(e["status"]["type"]["state"]);
+    const bool listed = e["competitions"][0]["competitors"].as<JsonArrayConst>().size() != 0;
+    const int rank = !listed ? 0 : st == "in" ? 3 : st == "post" ? 2 : 1;
+    if (rank > best && best < 3) {
       pick = e;
-    if (espn::detail::str_or_empty(e["status"]["type"]["state"]) == "in") {
-      pick = e;
-      break;
+      best = rank;
     }
   }
-  if (pick.isNull())
-    return false;
   JsonObjectConst comp0 = pick["competitions"][0];
   GolfBoard b;
   b.league = League::PGA;
@@ -274,12 +278,32 @@ bool golf_whole_document(const uint8_t *data, size_t size, const uint32_t *fav_i
     detail = espn::detail::str_or_empty(comp0["status"]["type"]["detail"]);
   snprintf(b.detail, sizeof(b.detail), "%s", detail.c_str());
   b.round = (uint8_t) (comp0["status"]["period"] | 0);
+  b.round_done = comp0["status"]["type"]["completed"] | false;
+  b.playoff = strncmp(b.detail, "Playoff", 7) == 0;
   b.start_epoch = parse_iso8601_z(espn::detail::str_or_empty(pick["date"]));
   b.end_epoch = parse_iso8601_z(espn::detail::str_or_empty(pick["endDate"]));
   size_t fav_kept = 0, top = 0;
+  std::vector<espn::detail::GolfPending> kept;
+  // Every golfer's total and whether they have a round 3 line, for the places.
+  struct Total {
+    bool scored;
+    int total;
+    bool weekend;
+  };
+  std::vector<Total> totals;
   for (JsonObjectConst gc : comp0["competitors"].as<JsonArrayConst>()) {
     b.field++;
-    GolfRow r;
+    espn::detail::GolfPending p;
+    GolfRow &r = p.row;
+    Total t{false, 0, false};
+    const std::string score = espn::detail::str_or_empty(gc["score"]);
+    t.scored = golf_score(score.c_str(), t.total);
+    if (t.scored)
+      snprintf(r.score, sizeof(r.score), "%s", score.c_str());
+    for (JsonObjectConst gl : gc["linescores"].as<JsonArrayConst>())
+      t.weekend = t.weekend || (gl["period"] | 0) == 3;
+    totals.push_back(t);
+    r.place = (uint16_t) totals.size();  // for now, which golfer of the field this is
     r.pos = (uint16_t) (gc["order"] | 0);
     r.id = (uint32_t) atol(espn::detail::str_or_empty(gc["id"]).c_str());
     bool is_fav = false;
@@ -293,47 +317,85 @@ bool golf_whole_document(const uint8_t *data, size_t size, const uint32_t *fav_i
     snprintf(r.name, sizeof(r.name), "%s", ascii_fold(espn::detail::str_or_empty(gc["athlete"]["shortName"])).c_str());
     std::string full = ascii_fold(espn::detail::str_or_empty(gc["athlete"]["displayName"]));
     size_t sp = full.rfind(' ');
-    snprintf(r.last, sizeof(r.last), "%s", (sp == std::string::npos ? full : full.substr(sp + 1)).c_str());
+    std::string last = sp == std::string::npos ? full : full.substr(sp + 1);
+    const std::string brief = ascii_fold(espn::detail::str_or_empty(gc["athlete"]["shortName"]));
+    if (brief.find(' ') != std::string::npos)
+      last = brief.substr(brief.find(' ') + 1);
+    snprintf(r.last, sizeof(r.last), "%s", last.c_str());
     if (r.name[0] == '\0' && r.last[0] == '\0') {
       const std::string pair = ascii_fold(espn::detail::str_or_empty(gc["team"]["displayName"]));
-      snprintf(r.name, sizeof(r.name), "%s", pair.c_str());
       const size_t slash = pair.find('/');
-      const std::string narrow = slash != std::string::npos && slash + 1 < pair.size() ? pair.substr(0, slash + 2) : pair;
-      snprintf(r.last, sizeof(r.last), "%s", narrow.c_str());
+      if (slash != std::string::npos) {
+        snprintf(r.name, sizeof(r.name), "%s", pair.c_str());
+        snprintf(r.last, sizeof(r.last), "%s", pair.substr(0, slash + 2).c_str());
+      }
     }
     if (r.name[0] == '\0' && r.last[0] == '\0')
       continue;
     if (r.pos > kGolfTopRows)
       fav_kept++;
-    int total = 0;
-    const std::string score = espn::detail::str_or_empty(gc["score"]);
-    if (golf_score(score.c_str(), total))
-      snprintf(r.score, sizeof(r.score), "%s", score.c_str());
-    int periods[espn::detail::kGolfLines];
-    size_t seen = 0;
     for (JsonObjectConst gl : gc["linescores"].as<JsonArrayConst>()) {
       const int period = gl["period"] | 0;
-      bool known = false;
-      for (size_t i = 0; i < seen; i++)
-        known = known || periods[i] == period;
-      if (!known) {
-        if (seen >= espn::detail::kGolfLines)
+      size_t i = 0;
+      while (i < p.lines && p.line[i].period != period)
+        i++;
+      if (i == p.lines) {
+        if (p.lines >= espn::detail::kGolfLines)
           continue;
-        periods[seen++] = period;
+        p.line[p.lines++].period = period;
       }
-      if (period != (int) b.round)
-        continue;
       const std::string dv = espn::detail::str_or_empty(gl["displayValue"]);
       int round_score = 0;
       if (golf_score(dv.c_str(), round_score))
-        snprintf(r.today, sizeof(r.today), "%s", dv.c_str());
+        snprintf(p.line[i].today, sizeof(p.line[i].today), "%s", dv.c_str());
       size_t holes = gl["linescores"].as<JsonArrayConst>().size();
-      r.thru = (uint8_t) (holes > 18 ? 18 : holes);
+      p.line[i].thru = (uint8_t) (holes > 18 ? 18 : holes);
+    }
+    kept.push_back(p);
+  }
+  auto same = [&totals](size_t i, size_t j) {
+    return totals[i].scored && totals[j].scored && totals[i].total == totals[j].total &&
+           totals[i].weekend == totals[j].weekend;
+  };
+  for (const auto &p : kept) {
+    GolfRow r = p.row;
+    size_t first = r.place - 1, last = first;
+    r.place = 0;
+    if (totals[first].scored) {
+      while (first > 0 && same(first - 1, first))
+        first--;
+      while (last + 1 < totals.size() && same(last, last + 1))
+        last++;
+      r.place = (uint16_t) (first + 1);
+      r.tied = last > first;
+      if (b.state == GolfState::POST && first == 0 && last > 0) {
+        r.place = b.rows.empty() ? 1 : 2;
+        r.tied = !b.rows.empty() && last > 1;
+      }
+    }
+    auto line = [](const espn::detail::GolfPending &g, int period) {
+      for (uint8_t i = 0; i < g.lines; i++)
+        if (g.line[i].period == period)
+          return &g.line[i];
+      return (const espn::detail::GolfLine *) nullptr;
+    };
+    const int rounds = std::min(4, (int) b.round - (b.playoff ? 1 : 0));
+    for (int k = 1; k <= rounds && r.gone == GolfGone::NO; k++) {
+      const auto *lead = line(kept[0], k), *mine = line(p, k);
+      if (lead == nullptr)
+        continue;
+      if (mine == nullptr && k >= 3)
+        r.gone = GolfGone::CUT;
+      else if (lead->today[0] != '\0' && (mine == nullptr || mine->today[0] == '\0') &&
+               (k < (int) b.round || b.state == GolfState::POST))
+        r.gone = GolfGone::LEFT;
+    }
+    if (const auto *now = line(p, b.round)) {
+      memcpy(r.today, now->today, sizeof(r.today));
+      r.thru = now->thru;
     }
     b.rows.push_back(r);
   }
-  if (b.rows.empty())
-    return false;
   b.valid = true;
   out = std::move(b);
   return true;
@@ -341,7 +403,8 @@ bool golf_whole_document(const uint8_t *data, size_t size, const uint32_t *fav_i
 
 // Every field of two boards, or what differs first.
 const char *golf_differs(const GolfBoard &a, const GolfBoard &b) {
-  if (a.valid != b.valid || a.state != b.state || a.round_live != b.round_live || a.round != b.round)
+  if (a.valid != b.valid || a.state != b.state || a.round_live != b.round_live || a.round != b.round ||
+      a.round_done != b.round_done || a.playoff != b.playoff)
     return "state or round";
   if (strcmp(a.event, b.event) != 0 || strcmp(a.detail, b.detail) != 0)
     return "event or detail";
@@ -351,7 +414,7 @@ const char *golf_differs(const GolfBoard &a, const GolfBoard &b) {
     return "row count";
   for (size_t i = 0; i < a.rows.size(); i++) {
     const GolfRow &x = a.rows[i], &y = b.rows[i];
-    if (x.pos != y.pos || x.id != y.id || x.thru != y.thru || x.favorite != y.favorite || strcmp(x.name, y.name) != 0 ||
+    if (x.pos != y.pos || x.place != y.place || x.tied != y.tied || x.gone != y.gone || x.id != y.id || x.thru != y.thru || x.favorite != y.favorite || strcmp(x.name, y.name) != 0 ||
         strcmp(x.last, y.last) != 0 || strcmp(x.score, y.score) != 0 || strcmp(x.today, y.today) != 0)
       return "a row";
   }
@@ -457,10 +520,17 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         fprintf(stderr, "parse_golf kept %zu rows\n", a.rows.size());
         abort();
       }
-      for (uint32_t pg = 0; pg < golf_pages(a, 2); pg++)
-        for (uint32_t col = 0; col < 2; col++)
-          sink = sink + golf_column(a, pg, 2, col, true).size() + golf_column(a, pg, 2, col, false).size();
-      sink = sink + golf_header(a).size() + golf_read_ms(a, now) + (golf_fresh(a, now) ? 1 : 0);
+      char head[kGolfHead], text[kGolfText];
+      for (uint32_t pg = 0; pg < golf_pages(a); pg++)
+        for (bool wide : {false, true}) {
+          golf_page(a, pg, wide, text);
+          sink = sink + strlen(text);
+        }
+      golf_header(a, head);
+      GolfBoard kept;
+      golf_take(kept, std::move(b), now);
+      golf_take(kept, std::move(w), now + 60);
+      sink = sink + strlen(head) + golf_read_ms(kept) + (golf_fresh(kept, now + 60) ? 1 : 0);
     }
   }
 
