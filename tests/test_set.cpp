@@ -631,11 +631,14 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["sport"] = sport_row_has(rows(s), (uint8_t) s.sport) ? kSportKeys[s.sport - 1] : "";
   doc["today"] = s.today;
   std::vector<uint8_t> fav_leagues;
+  bool team = false;  // a golfer is a favorite, not a team
   for (const auto &f : s.favs)
-    if (f.id != 0)
+    if (f.id != 0) {
       fav_leagues.push_back(f.league);
+      team = team || !leaderboard_league((League) f.league);
+    }
   JsonArray live = doc["live"].to<JsonArray>();
-  bool no_team = no_team_default((uint8_t) s.mode, !fav_leagues.empty());
+  bool no_team = no_team_default((uint8_t) s.mode, team);
   for (League l : no_team ? no_team_leagues() : live_leagues(s.live_mask, fav_leagues))
     live.add(league_key(l));
   doc["live_auto"] = s.live_mask == 0;
@@ -1125,6 +1128,11 @@ void test_playlists() {
   SCHECK(sport_bit((uint8_t) League::NCAA) == sport_bit((uint8_t) League::NFL) &&
              sport_bit((uint8_t) League::MCBB) == 1u << (uint8_t) Sport::BASKETBALL && sport_bit(200) == 0,
          "a bit per sport, none for an unknown league");
+  SCHECK(sport_bit((uint8_t) League::PGA) == 0 && sport_bit((uint8_t) League::EUR) == 0, "no sport row for a golfer");
+  uint16_t lgs = 0;
+  SCHECK(list_league_token("@lg:pga", lgs) && lgs == 0 && list_league_token("@lg:nfl", lgs) &&
+             lgs == 1u << (uint8_t) League::NFL && list_leagues_known(0xffff) == (uint16_t) (list_leagues_known(0xffff) & ~(0x7u << (uint8_t) League::PGA)),
+         "a playlist takes no golf tour");
   uint8_t football = sport_bit((uint8_t) League::NFL), hoops = sport_bit((uint8_t) League::NBA);
   SCHECK(sport_rows(0) == 0 && sport_rows(football) == 0, "one sport or none: no rows");
   SCHECK(sport_rows(football | hoops) == (football | hoops), "two sports: a row each");
@@ -1196,6 +1204,8 @@ void test_list_sports() {
          "a league it doesn't know drops, and isn't an option; a repeat is one");
   SCHECK(l[1].leagues == 0, "@lgx isn't a sport");
   for (const auto &lg : kLeagues) {
+    if (leaderboard_sport(lg.sport))
+      continue;
     uint16_t m = 0;
     SCHECK(list_league_token(std::string("@lg:") + lg.key, m) && m == (1u << (uint8_t) lg.league), "%s reads", lg.key);
     SCHECK(list_leagues_text(m) == std::string(",@lg:") + lg.key, "%s back", lg.key);

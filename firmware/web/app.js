@@ -1661,7 +1661,7 @@
         row.classList.add("btnonly");
         name.appendChild(el("small", null, (t ? lgInfo(t[0]).name + " · " : "") + "Button only" + (btn ? " (button " + btn + ")" : "")));
       } else if (t) name.appendChild(el("small", null, lgInfo(t[0]).name + (btn && remotePaired ? " · remote button " + btn : "")));
-      else if (golf) name.appendChild(el("small", null, lgInfo(key.split(":")[0]).name + " golfer" + (btn && remotePaired ? " · remote button " + btn : "")));
+      else if (golf) name.appendChild(el("small", null, lgInfo(key.split(":")[0]).name + " golfer"));
       row.appendChild(name);
       const ctl = el("span", "favmove");
       const mk = (label, title, fn) => {
@@ -1831,7 +1831,8 @@
       chips.setAttribute("role", "group");
       chips.setAttribute("aria-label", "Teams in " + l.n);
       favSlots.forEach((key, fi) => {
-        if (!key || btnKeys.includes(key)) return;
+        // A golfer has no games to play in a playlist.
+        if (!key || btnKeys.includes(key) || (LEAGUES[key.split(":")[0]] || {}).golf) return;
         const t = teamByKey(key);
         const on = l.f.includes(fi);
         const c = el("button", "chip", t ? t[2] : key);

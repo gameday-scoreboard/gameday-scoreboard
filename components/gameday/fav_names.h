@@ -39,7 +39,9 @@ static_assert(sizeof(FavNames) == 464,
 inline bool athlete_league(uint8_t league) { return league < kLeagueCount && leaderboard_league((League) league); }
 
 // One line, no emoji or control characters, no list separators, at most
-// kAthleteNameMax - 1 bytes and never cut inside a character.
+// kAthleteNameMax - 1 bytes and never cut inside a character. A string, like
+// the rest of parse_set's values and the cleaners it goes through
+// (message.h): made and freed with the one request that follows a golfer.
 inline std::string athlete_name_clean(const std::string &v) {
   std::string s;
   for (char c : v)

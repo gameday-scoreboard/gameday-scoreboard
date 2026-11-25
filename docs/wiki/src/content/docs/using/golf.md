@@ -25,7 +25,7 @@ A golfer you follow:
 
 A golfer who isn't playing this week simply isn't on the board. They come back the next time they play.
 
-Golf has no games, so it never joins [Live games](/using/modes/). A panel in Live games that follows only golfers watches the NFL until you pick leagues, and a golf tour can't be picked there.
+Golf has no games, so it never joins [Live games](/using/modes/), and a golfer isn't offered in a [playlist](/using/favorites/) or on a remote button. A panel in Live games that follows only golfers watches the NFL until you pick leagues, and a golf tour can't be picked there. A panel in Favorite teams that follows only golfers has no team yet, so it plays every league's live games and shows the **Pick your team in the app** code until you add one.
 
 The search needs the phone or computer you're using to reach ESPN. The panel keeps each golfer's name with their ESPN number, so the golfer shows by name on any phone or computer you open the device page on, and in a [backup](/using/backup/).
 

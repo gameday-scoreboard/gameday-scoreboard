@@ -6415,7 +6415,7 @@ static void test_golf() {
   CHECK_EQ(std::string(fisk.today), std::string("-1"));
 
   // The LPGA in Japan: Nasa Hataoka leads at -12. The document has no
-  // hole-by-hole linescores, so no thru — the rows say what ESPN said.
+  // hole-by-hole linescores, so no thru: the rows say what ESPN said.
   std::string lpga = slurp("fixtures/scoreboard_lpga_20261106.json");
   GolfBoard lb;
   CHECK(parse_golf(lpga, League::LPGA, nullptr, 0, lb));

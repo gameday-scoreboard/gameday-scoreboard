@@ -106,7 +106,9 @@ inline std::string team_ref_text(JsonObjectConst t) {
 }
 
 // A favorite as the backup's favs list writes it: the ref, and an athlete's
-// kept name after it, "pga:9478:Scottie Scheffler" (fav_names.h).
+// kept name after it, "pga:9478:Scottie Scheffler" (fav_names.h). Strings
+// as the whole export builds (team_ref_text), only when a backup is taken or
+// checked.
 inline std::string fav_ref_text(JsonObjectConst t) {
   std::string ref = team_ref_text(t);
   const LeagueInfo *info = league_by_key(t["l"] | "");

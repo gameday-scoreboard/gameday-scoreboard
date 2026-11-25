@@ -2631,6 +2631,19 @@ test("a golf tab finds golfers by name with ESPN's search and follows one", asyn
   await expect(page.locator("#q")).toHaveAttribute("placeholder", "Search teams");
 });
 
+test("a golfer followed beside a team: no playlist chip, no sport row, no remote button", async ({ page, request }) => {
+  await reset(request, {
+    favs: [{ l: "nfl", id: 6, abbr: "DAL", name: "Dallas Cowboys" }, { l: "pga", id: 9478, name: "Scottie Scheffler", abbr: "Scheffler" }],
+    lists: [{ n: "Sunday", f: [] }], mode: 4,
+  });
+  await page.goto("/");
+  await tab(page, "teams");
+  await expect(page.locator("#favCtls .ctl.fav").last()).toContainText("Scottie Scheffler");
+  await expect(page.locator("#favCtls .ctl.fav").last()).not.toContainText("remote button");
+  await expect(page.locator("#listCtls .plist").nth(0).locator(".pteams .chip")).toHaveText(["DAL"]);
+  expect((await deviceState(request)).sports).toEqual([]);
+});
+
 test("the Golf leaderboard card picks its tours with chips", async ({ page, request }) => {
   await reset(request);
   await page.goto("/");

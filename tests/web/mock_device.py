@@ -534,13 +534,13 @@ def live_auto_leagues():
 
 def no_team_default():
     """set_request.h no_team_default(): Favorites with none set."""
-    return STATE["mode"] == 4 and not any(counts(t) for t in STATE["favs"])
+    return STATE["mode"] == 4 and not any(counts(t) and t["l"] in GAME_LEAGUES for t in STATE["favs"])
 
 
 def sport_rows():
     """sport_rows_(): a row per sport among the favorites, with two sports or more."""
     have = {LEAGUE_SPORT.get(t["l"]) for t in STATE["favs"] if counts(t)}
-    rows = [k for k in SPORT_KEYS if k in have]
+    rows = [k for k in SPORT_KEYS if k in have and k not in LEADERBOARD_SPORTS]
     return rows if len(rows) >= 2 else []
 
 
