@@ -23,18 +23,21 @@ Basketball teams have no Up next list on the device page: their season schedules
 
 - **The clock and period** under the scores, like "1:04 4th", or "45.3 4th" in the last minute, when ESPN drops the minutes. Overtime reads "OT", then "2OT" and so on. Men's college games play halves, so the clock reads "12:34 1st" or "12:34 2nd"; women's college games play quarters, like the WNBA.
 - **Breaks**: "Halftime", or "End" and the period, like "End 3rd".
+
 On a 128-wide board the two bottom rows say one thing at a time, about 5 seconds each. The upper one, under the clock, names a team in its color and says what's happening; the lower one gives the detail behind it:
 
-- **A run**: "USA on a 16-2 run" over "7 of 13 shooting". The longest stretch that still counts as one, like 8-0, 12-2 or 16-4, while its team has the last basket, and who ended it: "FAMU Williford ends run".
-- **A drought**: "FAMU scoreless 4:24" over "0 of 6, 0 of 5 on 3s", from two minutes on the game clock.
-- **The score's story**: "USA takes the lead", "USA biggest lead, 22", "FAMU was down 14", "FAMU has never led", and "USA up 2" over "One-possession game" in the last three minutes.
+- **A run**: "USA on a 16-2 run" over "7 of 13 shooting". The longest stretch that still counts as one, like 8-0, 12-2 or 16-4, while its team has the last basket, and who ended it: "FAMU Williford ends run". When the shooting isn't known for certain the lower row says who scored it, like "Langsy 8 of the 10", or what it did to the score, like "Was down 6, now up 4".
+- **A drought**: "FAMU scoreless 4:24" over "0 of 6, 0 of 5 on 3s", from two minutes on the game clock. Otherwise over "Outscored 9-0" or the last basket, like "Last: Williford layup".
+- **The score's story**: "USA takes the lead" over the basket that did it, "USA biggest lead, 22" over "22-8 since it was tied", "FAMU was down 14" over "21-12 since then", "FAMU has never led" over "Down as many as 19", and in the last three minutes of a one-possession game how long the lead has lasted, "USA ahead since 4:10" over "Were down 6".
+- **A period**: "USA 24-11 this half" over "10 of 14 shooting", when a team is 8 or more ahead of the other in the half or quarter, from the second period on.
+- **A hot hand**: "USA Langsy has 8" over "of their last 10 points".
 - **The last play**: "FAMU three" over "Baker Jr. from 25 feet". Baskets, free throws, steals, blocks and turnovers, for up to 45 seconds or until another basket. Misses, rebounds, fouls and players checking in aren't shown. A new one shows right away. It follows **Last play**.
-- **Each team's points leader**: "USA Langsy 21 pts" over the team's rebounds or assists leader, like "Roman 9 reb".
+- **Each team's points leader**: "USA Langsy 21 pts" over the team's rebounds or assists leader, like "Roman 9 reb", or the team's shooting before anyone has three of either.
 - **The win chance**, like "MIN 56% to win", for the team ESPN favors, when the game first comes up and when ESPN's number moves 10 points or more since it last showed, no more than once every 3 minutes. **Win chance** under **Live pictures** on the device page's Display tab turns it off.
 - **The playoff series**, like "NY 2  CLE 1" over "Playoff series", in a playoff game.
 - **The team stats**: both teams' shooting, threes and rebounds, each number after its team's name, like "USA 47%  FAMU 29%" over "Shooting". First in a timeout and between periods, and when nothing else is going on, including the end of a blowout.
 
-The panel works all of it out from the scores, plays and team stats it reads, and shows only what those prove. Shooting in a run or a drought waits until ESPN's team stats have caught up with the score, and the team's leader takes the lower row until then. A line about the whole game, like "has never led", needs the panel to have watched from the start. A team color too dark to read is brightened for the name.
+The panel works all of it out from the scores, plays and team stats it reads, and shows only what those prove. Shooting in a run, a drought or a period waits until ESPN's team stats have caught up with the score, and the lower row says something the score itself shows until then. A line about the whole game, like "has never led", needs the panel to have watched from the start. A team color too dark to read is brightened for the name.
 
 At halftime the rows go back to the playoff series and the ticker, and the line score and leaders cards take their turns. When the panel has something to tell you, like "no update for 5 min", the ticker takes the bottom row until it's over.
 

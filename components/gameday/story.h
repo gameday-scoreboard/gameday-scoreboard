@@ -856,7 +856,9 @@ class Story {
         snprintf(more, sizeof(more), "Were down %d", this->flip_down_);
       this->put_(StoryKind::TAKES_LEAD, side, late ? 95 : 74, this->flip_at_, "takes the lead", more);
     }
-    if (late && this->left_ > 0 && this->left_ <= 180 && lead >= 1 && lead <= 3) {
+    // Not while the lead change itself is on the row.
+    if (late && this->left_ > 0 && this->left_ <= 180 && lead >= 1 && lead <= 3 &&
+        !(this->flip_at_ >= 0 && this->at_ - this->flip_at_ <= 45)) {
       const int side = margin > 0 ? 1 : 2;
       buf[0] = more[0] = '\0';
       if (this->never_trailed(side)) {
