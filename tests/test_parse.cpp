@@ -9088,6 +9088,13 @@ static void test_story_rows() {
   CHECK_EQ((int) r.play_at, 0);
   CHECK_EQ(r.line[0].form(1).substr(0, 9), std::string("McDaniels"));
   CHECK(rows_say(r, g, "MIN 56% to win / Edwards 19 pts"));
+  // A low leader, never the whole game's shooting; nobody leaves it empty.
+  GameSnapshot low = g;
+  low.nba.opp_scorer = "Edwards 3";
+  low.nba.opp_extra[0] = '\0';
+  CHECK(rows_say(story_rows(low, &st, on), low, "MIN 56% to win / Edwards 3 pts"));
+  low.nba.opp_scorer.clear();
+  CHECK(rows_say(story_rows(low, &st, on), low, "MIN 56% to win / "));
   // The switches.
   RowLines q = story_rows(g, &st, off);
   CHECK_EQ((int) q.play_at, 0xFF);

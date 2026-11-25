@@ -98,16 +98,21 @@ inline std::string row_shooting(const GameSnapshot &g, const Story *st, int side
 
 // What the bottom row says for a story with no detail of its own: the team's
 // leader.
-inline std::string row_leader(const GameSnapshot &g, const Story *st, int side) {
+inline std::string row_leader(const GameSnapshot &g, int side) {
   const std::string s = row_scorer(g, side, 4);
   if (!s.empty())
     return s + " pts";
   const char *extra = side == 1 ? g.nba.team_extra : g.nba.opp_extra;
-  return extra[0] != '\0' ? std::string(extra) : row_shooting(g, st, side);
+  if (extra[0] != '\0')
+    return extra;
+  // Never the whole game's shooting: under a drought, "2 of 10 shooting"
+  // would read as the drought's own.
+  const std::string few = row_scorer(g, side, 1);
+  return few.empty() ? "" : few + " pts";
 }
 
 inline void add_story_pair(RowLines &r, const GameSnapshot &g, const Story *st, const StoryLine &s) {
-  add_pair(r, g, s.side, s.text, s.detail[0] != '\0' ? std::string(s.detail) : row_leader(g, st, s.side), 6);
+  add_pair(r, g, s.side, s.text, s.detail[0] != '\0' ? std::string(s.detail) : row_leader(g, s.side), 6);
 }
 
 // "USA Langsy 21 pts" over "Roman 9 reb".
@@ -180,7 +185,7 @@ inline void fill_story_rows(RowLines &r, const GameSnapshot &g, const Story *st,
   if (o.win_chance && g.team_win_pct >= 1 && g.team_win_pct <= 99) {
     const int side = g.team_win_pct >= 50 ? 1 : 2;
     const int pct = side == 1 ? g.team_win_pct : 100 - g.team_win_pct;
-    add_pair(r, g, side, std::to_string(pct) + "% to win", row_leader(g, st, side), 5);
+    add_pair(r, g, side, std::to_string(pct) + "% to win", row_leader(g, side), 5);
   }
   if (g.nba.team_wins >= 0 && g.nba.opp_wins >= 0)
     add_both(r, g, std::to_string(g.nba.team_wins), std::to_string(g.nba.opp_wins), "Playoff series");
@@ -191,7 +196,7 @@ inline void fill_story_rows(RowLines &r, const GameSnapshot &g, const Story *st,
     const std::string n = std::to_string(by);
     std::string more = row_shooting(g, st, lead_side);
     if (more.empty())
-      more = row_leader(g, st, lead_side);
+      more = row_leader(g, lead_side);
     if (!add_pair(r, g, lead_side, "led by as many as " + n, more, 5))
       add_pair(r, g, lead_side, "led by " + n, more, 5);
   }
