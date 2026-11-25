@@ -225,28 +225,8 @@ bool golf_whole_document(const uint8_t *data, size_t size, const uint32_t *fav_i
                          bool &top_full) {
   top_full = false;
   JsonDocument filter;
-  JsonObject ev = filter["events"].add<JsonObject>();
-  ev["name"] = true;
-  ev["date"] = true;
-  ev["endDate"] = true;
-  ev["status"]["type"]["state"] = true;
-  JsonObject comp = ev["competitions"].add<JsonObject>();
-  comp["status"]["period"] = true;
-  comp["status"]["type"]["state"] = true;
-  comp["status"]["type"]["completed"] = true;
-  comp["status"]["type"]["detail"] = true;
-  comp["status"]["type"]["shortDetail"] = true;
-  JsonObject c = comp["competitors"].add<JsonObject>();
-  c["id"] = true;
-  c["order"] = true;
-  c["score"] = true;
-  c["athlete"]["shortName"] = true;
-  c["athlete"]["displayName"] = true;
-  c["team"]["displayName"] = true;
-  JsonObject ls = c["linescores"].add<JsonObject>();
-  ls["period"] = true;
-  ls["displayValue"] = true;
-  ls["linescores"].add<JsonObject>()["period"] = true;
+  // The read's own filter: a bad value fails a read only where it is kept.
+  espn::detail::fill_golf_filter(filter);
   JsonDocument doc;
   if (deserializeJson(doc, (const char *) data, size, DeserializationOption::Filter(filter),
                       DeserializationOption::NestingLimit(20)))
