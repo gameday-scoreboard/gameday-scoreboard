@@ -1292,7 +1292,8 @@
     const now = (S.cards || []).find((x) => x.id === id);
     const set = { cards: id + ":" + (now && now.on ? 0 : 1) };
     // On with no tour and no golfer: it would have nothing to show, so it starts with the PGA Tour.
-    if (id === "golf" && now && !now.on && !now.ok && golfTours().includes("pga")) set.leaderboards = "golf:pga";
+    const bare = !(lbParse(S.leaderboards).get("golf") || []).length && !favKeys.some((k) => (LEAGUES[k.split(":")[0]] || {}).golf);
+    if (id === "golf" && now && !now.on && bare && golfTours().includes("pga")) set.leaderboards = "golf:pga";
     setGD(set);
   };
   // A card's own settings go inside its row; while it is off they wait here,
