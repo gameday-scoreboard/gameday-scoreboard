@@ -207,7 +207,7 @@ static void check_skip(const Zone &z, const NightPrefs &p, int64_t press, int mi
           "ends " + strf("%a %H:%M", z.tm[Zone::slot(until)]) + ", " + hours());
   int64_t held = until;
   auto state = [&](int k) {
-    if (held != 0 && night_skip_over(p, z.minute[k], Zone::at(k), held))
+    if (held != 0 && night_skip_over(p, z.minute[k], Zone::at(k), held, night_offset))
       held = 0;
     return night_state(p, true, z.minute[k], false, held != 0);
   };
@@ -258,14 +258,6 @@ static void sweep_night(const Zone &z) {
       const Night want = inside(i) ? Night::DIM : Night::DAY;
       SWEEP(night_state(p, true, z.minute[i], false) == want, "night_state", Zone::at(i), night_word(want));
       if (!inside(i))
-        continue;
-      // Known bug: a night that starts inside the hour the clocks go back
-      // over. The clock reads before the start again, which ends the skip, so
-      // the panel dims at the second start.
-      bool before_start_again = false;
-      for (int k = i + 1; k < i + 5 && k < end[i] - 4; k++)
-        before_start_again |= !inside(k);
-      if (before_start_again)
         continue;
       // Every quarter hour of the nights around a clock change, and of one
       // night in four weeks.

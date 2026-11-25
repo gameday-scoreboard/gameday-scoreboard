@@ -3086,7 +3086,7 @@ void GamedayComponent::night_tick_() {
   // A skip lasts to the end of the night it was made in; outside the hours,
   // or with the schedule off, it is over (night_skip_over).
   if (this->night_skip_until_ != 0 && valid &&
-      ::espn::night_skip_over(this->night_, minute, (int64_t) now.timestamp, this->night_skip_until_)) {
+      ::espn::night_skip_over(this->night_, minute, (int64_t) now.timestamp, this->night_skip_until_, utc_offset_at)) {
     this->night_skip_until_ = 0;
     this->save_night_skip_();
   }
