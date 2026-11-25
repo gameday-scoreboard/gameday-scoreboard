@@ -24,6 +24,7 @@
 
 #include <cctype>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <string>
 
@@ -224,7 +225,9 @@ inline void add_basket(RowLines &r, const std::string &basket, uint32_t rgb) {
 
 // A side's points leader, "IND Nesmith 19 pts".
 inline void add_scorer(RowLines &r, const std::string &abbr, const std::string &scorer, uint32_t rgb) {
-  if (scorer.empty())
+  // Under 6 points it says nothing yet.
+  const size_t sp = scorer.rfind(' ');
+  if (sp == std::string::npos || atoi(scorer.c_str() + sp) < 6)
     return;
   RowLine *l = r.add(abbr + " " + scorer + " pts", rgb);
   if (l == nullptr)
@@ -240,6 +243,29 @@ inline void add_extra(RowLines &r, const std::string &abbr, const char *extra, u
   RowLine *l = r.add(abbr + " " + extra, rgb);
   if (l != nullptr)
     l->add_form(::esphome::gameday::panel_text(extra));
+}
+
+// The team stats a line at a time, our side's number first: "Shooting 47% to
+// 29%", "Threes 3/14 to 5/25", "Rebounds 38-22". Each once it has a few
+// behind it.
+inline void add_box(RowLines &r, const GameSnapshot &g, uint32_t rgb) {
+  const Basketball::Box &a = g.nba.team_box, &b = g.nba.opp_box;
+  if (!a.has || !b.has)
+    return;
+  char buf[32];
+  auto pct = [](const Basketball::Box &x) { return (x.fg_made * 200 + x.fg_tried) / (2 * x.fg_tried); };
+  if (a.fg_tried >= 8 && b.fg_tried >= 8) {
+    snprintf(buf, sizeof(buf), "Shooting %d%% to %d%%", pct(a), pct(b));
+    r.add(buf, rgb);
+  }
+  if (a.three_tried >= 4 && b.three_tried >= 4) {
+    snprintf(buf, sizeof(buf), "Threes %u/%u to %u/%u", a.three_made, a.three_tried, b.three_made, b.three_tried);
+    r.add(buf, rgb);
+  }
+  if (a.rebounds + b.rebounds >= 10) {
+    snprintf(buf, sizeof(buf), "Rebounds %u-%u", a.rebounds, b.rebounds);
+    r.add(buf, rgb);
+  }
 }
 
 // Down and distance, "2nd & 17", then "2nd&17" and "2&17" for when the
@@ -292,7 +318,8 @@ inline void fill_row_lines(RowLines &r, const GameSnapshot &g, const RowHold &ho
       int at = 0;
       for (; at < told && story->line(at).score >= Story::kLead; at++)
         r.add(story->line(at).text, white, 5);
-      if (o.last_play && hold.event_id == g.event_id)
+      // Not while the ticker is saying the same basket.
+      if (o.last_play && hold.event_id == g.event_id && g.play_value <= 0)
         add_basket(r, hold.basket, white);
       for (; at < told; at++)
         r.add(story->line(at).text, white, 5);
@@ -305,6 +332,9 @@ inline void fill_row_lines(RowLines &r, const GameSnapshot &g, const RowHold &ho
         add_extra(r, g.team_abbr, g.nba.team_extra, white);
         add_extra(r, g.opp_abbr, g.nba.opp_extra, white);
       }
+      // A quiet stretch: the team stats, unless the ticker has them.
+      if (told == 0 && !timeout_play(g.last_play) && !(basketball_junk_play(g) && hold.play.empty()))
+        add_box(r, g, white);
       break;
     }
     case Sport::SOCCER:

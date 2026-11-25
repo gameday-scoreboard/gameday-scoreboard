@@ -8719,7 +8719,12 @@ static void test_row_text() {
   RowHold hold;
   hold.read(g);
   CHECK_EQ(hold.basket, std::string("McDaniels 2"));
-  RowLines b = row_lines(g, hold, on, true);
+  // While the ticker says the basket, the row doesn't.
+  CHECK_EQ(row_lines(g, hold, on, true).line[0].form(0), std::string("MIN 56% to win"));
+  GameSnapshot after = g;
+  after.play_value = 0;
+  after.play_type = "Defensive Rebound";
+  RowLines b = row_lines(after, hold, on, true);
   CHECK_EQ((int) b.n, 6);
   CHECK_EQ(b.line[0].form(0), std::string("Last: McDaniels 2"));
   CHECK_EQ(b.line[0].rgb, (uint32_t) 0xFFFFFF);
@@ -8800,6 +8805,10 @@ static void test_row_text() {
   tov.play_type = "Turnover";
   tov.play_team = kWolves;
   CHECK_EQ(status_text(tov, tick, ""), std::string("MIN turnover"));
+  tov.last_play = "Foul on Antonio Baker Jr..";
+  CHECK_EQ(status_text(tov, tick, ""), std::string("Foul on Antonio Baker Jr."));
+  tov.last_play = "Mihailo Stijovic bad pass\nturnover";
+  CHECK_EQ(status_text(tov, tick, ""), std::string("Mihailo Stijovic bad pass turnover"));
   // A basket is still the ticker's.
   CHECK(status_text(g, tick, "").find("McDaniels") != std::string::npos);
   // Football's win chance: in the ticker on a single panel, on the row only
@@ -8824,6 +8833,18 @@ static void test_row_text() {
   CHECK_EQ((int) tt.n, 5);  // a team timeout adds no line either
   for (int i = 0; i < tt.n; i++)
     CHECK(tt.line[i].form(0).find("imeout") == std::string::npos);
+  // A quiet game's row fills up with the team stats.
+  GameSnapshot quiet_g = after;
+  quiet_g.nba.team_scorer = "Nesmith 5";  // too few points to mention
+  quiet_g.nba.opp_scorer.clear();
+  quiet_g.nba.team_extra[0] = quiet_g.nba.opp_extra[0] = '\0';
+  RowLines q = row_lines(quiet_g, none, quiet, true);
+  CHECK_EQ((int) q.n, 4);
+  CHECK_EQ(q.line[1].form(0), std::string("Shooting 55% to 53%"));
+  CHECK_EQ(q.line[2].form(0), std::string("Threes 9/21 to 14/23"));
+  CHECK_EQ(q.line[3].form(0), std::string("Rebounds 17-24"));
+  quiet_g.last_play = "Official TV Timeout";  // the ticker has them now
+  CHECK_EQ((int) row_lines(quiet_g, none, quiet, true).n, 1);
   // At halftime only the series is left, and only in the playoffs.
   CHECK_EQ((int) row_lines(g, hold, on, false).n, 0);
   GameSnapshot po = g;
@@ -9023,6 +9044,8 @@ static void test_story() {
     RowHold hold;
     hold.read(g);
     RowOptions o;
+    // The ticker says the basket while it is the last play; then the row.
+    g.play_value = 0;
     RowLines r = row_lines(g, hold, o, true, &st);
     bool run = false, basket = false;
     for (int i = 0; i < r.n; i++) {

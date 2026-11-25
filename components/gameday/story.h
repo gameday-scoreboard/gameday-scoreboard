@@ -238,7 +238,7 @@ class Story {
     int best = 0;
     for (int i = this->n_ - 2; i >= 0; i--) {
       const Mark &m = this->marks_[i];
-      if (now.at - m.at > 420)
+      if (now.at - m.at > 600)
         break;
       const int a = side == 1 ? now.t - m.t : now.o - m.o;
       const int x = side == 1 ? now.o - m.o : now.t - m.t;
@@ -285,7 +285,9 @@ class Story {
       const int a = this->run_(side, b);
       const int since = this->at_ - this->marks_[this->n_ - 1].at;
       if (a > 0 && since <= 120 && !(decided && a < 10)) {
-        snprintf(buf, sizeof(buf), "%s on a %d-%d run", side == 1 ? us : them, a, b);
+        // "a 12-2 run", "an 8-0 run"
+        const bool an = a == 8 || a == 11 || a == 18;
+        snprintf(buf, sizeof(buf), "%s on %s %d-%d run", side == 1 ? us : them, an ? "an" : "a", a, b);
         this->put_(StoryKind::RUN, this->aged_(StoryKind::RUN, side, a * 16 + b, 56 + 2 * (a - b), now_ms), a * 16 + b,
                    buf);
       }

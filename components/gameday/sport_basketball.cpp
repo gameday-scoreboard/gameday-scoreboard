@@ -3,6 +3,7 @@
 // Basketball's parse extras, ticker, clock row and splash (NBA, WNBA, men's
 // college). Pure, no ESPHome includes.
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -179,12 +180,18 @@ static std::string break_line(const GameSnapshot &s, const TickerOptions &o) {
 
 // ESPN's play text, tidied: single spaces, and "team turnover" with the
 // team's abbreviation in place of "team".
-static std::string tidy_play(const GameSnapshot &s) {
+static std::string tidy_play(const GameSnapshot &s, const std::string &play) {
   std::string out;
-  out.reserve(s.last_play.size() + 4);
-  for (char c : s.last_play)
+  out.reserve(play.size() + 4);
+  // ESPN puts a line break in some ("bad pass\nturnover").
+  for (char c : play) {
+    if (isspace((unsigned char) c))
+      c = ' ';
     if (c != ' ' || (!out.empty() && out.back() != ' '))
       out += c;
+  }
+  while (out.size() > 1 && out.compare(out.size() - 2, 2, "..") == 0)
+    out.pop_back();  // "Foul on Antonio Baker Jr.."
   if (strncasecmp(out.c_str(), "team ", 5) == 0 && (s.play_team == s.team_id || s.play_team == s.opp_id))
     out.replace(0, 4, s.play_team == s.team_id ? s.team_abbr : s.opp_abbr);
   return out;
@@ -232,9 +239,9 @@ std::string basketball_status_text(const GameSnapshot &s, const TickerOptions &o
     if (o.row_timeout && timeout_play(s.last_play))
       add_part(out, break_line(s, o));
     else if (!basketball_junk_play(s))
-      add_last_play(out, tidy_play(s));
+      add_last_play(out, tidy_play(s, s.last_play));
     else if (o.held_play != nullptr && o.held_play[0] != '\0')
-      add_last_play(out, o.held_play);
+      add_last_play(out, tidy_play(s, o.held_play));
     else
       add_part(out, break_line(s, o));
   } else if (o.row_timeout && out.empty()) {
