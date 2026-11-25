@@ -83,7 +83,7 @@ enum class StoryKind : uint8_t {
   CLOSE,
   COMEBACK,
   NEVER_LED,
-  HOT,
+  HOT_HAND,
   PERIOD
 };
 
@@ -641,6 +641,15 @@ class Story {
     Mark &m = this->marks_[this->n_ - 1];
     if (m.side != 0 && m.who == 0)
       name_mark_(m, play);
+    // Its name on the lines that were waiting for it.
+    if (m.side != 0)
+      fit_row(this->last_what_[m.side - 1], "Last: " + play.who_what(), std::string("Last: ") + play.who);
+    if (this->over_at_ == m.at && this->over_side_ == m.side) {
+      snprintf(this->over_who_, sizeof(this->over_who_), "%s", play.who);
+      snprintf(this->over_what_, sizeof(this->over_what_), "%s", play.what);
+    }
+    if (this->flip_at_ == m.at)
+      fit_row(this->flip_what_, play.who_what(), play.who);
     this->unnamed_key_ = 0;
   }
 
@@ -923,7 +932,7 @@ class Story {
     for (int side = 1; side <= 2; side++) {
       const int hot = side == run_side ? 0 : this->hot_(side, buf, more);
       if (hot != 0)
-        this->put_(StoryKind::HOT, side, this->aged_(StoryKind::HOT, side, hot, 50, now_ms), hot, buf, more);
+        this->put_(StoryKind::HOT_HAND, side, this->aged_(StoryKind::HOT_HAND, side, hot, 50, now_ms), hot, buf, more);
       if (this->period_line_(side, g, buf, more))
         this->put_(StoryKind::PERIOD, side, 36, 0, buf, more);
     }

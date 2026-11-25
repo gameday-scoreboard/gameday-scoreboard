@@ -9441,6 +9441,23 @@ static void test_story_box() {
     CHECK_EQ(detail_of(st, g, StoryKind::RUN, 1), std::string("Was tied, now up 12"));
   }
   {
+    // ESPN sends a basket's name a read late: the line that waited for it
+    // takes it then.
+    Story st;
+    GameSnapshot g = at("20:00", 0, 0, {}, {}, 0, 0, "");
+    st.read(g, 1000);
+    for (int i = 1; i <= 4; i++) {
+      g = at(i == 1 ? "19:40" : i == 2 ? "19:10" : i == 3 ? "18:40" : "18:20", 2 * i, 0, {}, {}, 6, 2, "A Cooper makes layup");
+      st.read(g, 1000 + 10000 * (uint32_t) i);
+    }
+    g = at("18:00", 8, 2, {}, {}, 50, 2, "team makes layup");
+    st.read(g, 51000);
+    CHECK(rows_say(story_rows(g, &st, RowOptions()), g, "FAMU ends an 8-0 run / First in over 1 minute"));
+    g.last_play = "Daisean Williford makes layup";
+    st.read(g, 53000);
+    CHECK(rows_say(story_rows(g, &st, RowOptions()), g, "FAMU Williford ends run / Layup"));
+  }
+  {
     // Two players with one last name are two players.
     Story st;
     GameSnapshot g = at("20:00", 0, 0, {}, {}, 0, 0, "");
