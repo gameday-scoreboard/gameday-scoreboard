@@ -8761,6 +8761,54 @@ static void test_row_text() {
   plays.read(sub);
   plays.read(to);
   CHECK_EQ(plays.play, kept);
+  CHECK(plays.timeout);
+  // Substitutions in the timeout leave the break's stats up; a play ends it.
+  tick.held_play = plays.play.c_str();
+  tick.held_break = true;
+  CHECK_EQ(status_text(sub, tick, ""), std::string("FG IND 55%, MIN 53% | 3PT IND 9/21, MIN 14/23 | Rebounds IND 17, MIN 24"));
+  plays.read(sub);
+  CHECK(plays.timeout);
+  plays.read(g);
+  CHECK(!plays.timeout);
+  tick.held_break = false;
+  // ESPN's dead ball rebound is no news either.
+  GameSnapshot dead = reb;
+  dead.play_type = "Dead Ball Rebound";
+  dead.last_play = "IND dead ball team rebound";
+  CHECK(basketball_junk_play(dead));
+  // A held play keeps its own team: a turnover by MIN, then Indiana checks a
+  // player in, then a substitution with no team.
+  GameSnapshot held_tov = reb;
+  held_tov.last_play = "team  shot clock turnover";
+  held_tov.play_type = "Turnover";
+  held_tov.play_team = kWolves;
+  RowHold whose;
+  whose.read(held_tov);
+  GameSnapshot sub2 = sub;
+  sub2.play_team = kPacers;
+  whose.read(sub2);
+  tick.held_play = whose.play.c_str();
+  CHECK_EQ(status_text(sub2, tick, ""), std::string("MIN shot clock turnover"));
+  sub2.play_team = 0;
+  whose.read(sub2);
+  CHECK_EQ(status_text(sub2, tick, ""), std::string("MIN shot clock turnover"));
+  tick.held_play = nullptr;
+  // With Last play off the ticker is ESPN's short status, except in a
+  // timeout, which it would otherwise repeat.
+  TickerOptions quiet_tick;
+  quiet_tick.clock = quiet_tick.last_play = false;
+  quiet_tick.row_timeout = true;
+  CHECK_EQ(status_text(reb, quiet_tick, ""), reb.short_detail);
+  CHECK_EQ(status_text(to, quiet_tick, ""), std::string("FG IND 55%, MIN 53% | 3PT IND 9/21, MIN 14/23 | Rebounds IND 17, MIN 24"));
+  // ESPN sent no stats: the network and the arena, then just the records.
+  GameSnapshot nost = to;
+  nost.nba.team_box.has = nost.nba.opp_box.has = false;
+  nost.tv = "ESPN";
+  nost.venue = "Gainbridge Fieldhouse";
+  CHECK_EQ(status_text(nost, quiet_tick, ""), std::string("ESPN | Gainbridge Fieldhouse"));
+  nost.tv.clear();
+  nost.venue.clear();
+  CHECK_EQ(status_text(nost, quiet_tick, ""), espn::detail::records_line(nost));
   // Another game starts the hold over.
   GameSnapshot other = sub;
   other.event_id = "999";

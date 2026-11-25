@@ -93,17 +93,26 @@ struct RowLines {
 // play is a player checking in. Follows one game.
 struct RowHold {
   std::string event_id;
-  std::string play;
+  std::string play;     // tidied for the ticker
+  bool timeout{false};  // a timeout came after it
 
   // One read of the board game.
   void read(const GameSnapshot &g) {
     if (g.event_id != this->event_id) {
       this->event_id = g.event_id;
       this->play.clear();
+      this->timeout = false;
     }
-    if (g.sport == Sport::BASKETBALL && g.state == GameState::IN && !g.last_play.empty() &&
-        !basketball_junk_play(g) && !timeout_play(g.last_play) && g.last_play != this->play)
-      this->play = g.last_play;
+    if (g.sport != Sport::BASKETBALL || g.state != GameState::IN || g.last_play.empty())
+      return;
+    if (timeout_play(g.last_play)) {
+      this->timeout = true;
+    } else if (!basketball_junk_play(g)) {
+      this->timeout = false;
+      // Tidied with this play's own side: the next read's play can be the
+      // other team's.
+      this->play = basketball_tidy_play(g, g.last_play);
+    }
   }
 };
 

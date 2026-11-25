@@ -5391,8 +5391,10 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   opts.row_win = wide && this->win_chance_on();
   opts.win_due = playing && this->win_swing_.ticker;
   opts.row_timeout = wide;
-  if (this->row_hold_.event_id == g.event_id)
+  if (this->row_hold_.event_id == g.event_id) {
     opts.held_play = this->row_hold_.play.c_str();
+    opts.held_break = this->row_hold_.timeout;
+  }
   opts.row_down = wide;
 
   auto kickoff_of = [this](const GameSnapshot &s) -> std::string {

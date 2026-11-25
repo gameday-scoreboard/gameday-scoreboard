@@ -249,11 +249,13 @@ std::string basketball_status_text(const GameSnapshot &s, const TickerOptions &o
       add_part(out, break_line(s, o));
     else if (!basketball_junk_play(s))
       add_last_play(out, basketball_tidy_play(s, s.last_play));
+    else if (o.row_timeout && o.held_break)
+      add_part(out, break_line(s, o));  // the timeout goes on through substitutions
     else if (o.held_play != nullptr && o.held_play[0] != '\0')
-      add_last_play(out, basketball_tidy_play(s, o.held_play));
+      add_last_play(out, o.held_play);  // tidied when it was held
     else
       add_part(out, break_line(s, o));
-  } else if (o.row_timeout && out.empty()) {
+  } else if (o.row_timeout && timeout_play(s.last_play) && out.empty()) {
     add_part(out, break_line(s, o));
   }
   if (out.empty())
