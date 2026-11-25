@@ -6630,9 +6630,26 @@ static void test_night_skip_clock_change(NightPrefs p) {
   CHECK_EQ(skip("2026-11-01T07:10Z"), second_130);  // 1:10 AM CST
   // Between the two passes the clock reads 1:30 to 1:59, outside the hours,
   // and the skip holds through to the second 1:30.
-  CHECK(!night_skip_over(p, 60 + 45, parse_iso8601_z("2026-11-01T06:45Z"), second_130));
-  CHECK(!night_skip_over(p, 60 + 15, parse_iso8601_z("2026-11-01T07:15Z"), second_130));
-  CHECK(night_skip_over(p, 60 + 30, second_130, second_130));
+  CHECK(!night_skip_over(p, 60 + 45, parse_iso8601_z("2026-11-01T06:45Z"), second_130, tz_offset_at));
+  CHECK(!night_skip_over(p, 60 + 15, parse_iso8601_z("2026-11-01T07:15Z"), second_130, tz_offset_at));
+  CHECK(night_skip_over(p, 60 + 30, second_130, second_130, tz_offset_at));
+  // A start of 1:30 AM comes twice too. A skip in the first pass runs on
+  // while the clock reads 1:00 to 1:29 again, with more than an hour to go.
+  {
+    NightPrefs twice = p;
+    twice.start = 60 + 30;
+    twice.end = 7 * 60;
+    CHECK(!night_skip_over(twice, 60 + 30, parse_iso8601_z("2026-11-01T06:30Z"), seven_cst, tz_offset_at));
+    CHECK(!night_skip_over(twice, 60, parse_iso8601_z("2026-11-01T07:00Z"), seven_cst, tz_offset_at));
+    CHECK(!night_skip_over(twice, 60 + 29, parse_iso8601_z("2026-11-01T07:29Z"), seven_cst, tz_offset_at));
+    CHECK(!night_skip_over(twice, 60 + 30, parse_iso8601_z("2026-11-01T07:30Z"), seven_cst, tz_offset_at));
+    CHECK(night_skip_over(twice, 7 * 60, seven_cst, seven_cst, tz_offset_at));
+    // Outside the hours at any other time it is over: the first 1:15 AM of
+    // that night, and 1:15 AM on a night with no clock change.
+    CHECK(night_skip_over(twice, 60 + 15, parse_iso8601_z("2026-11-01T06:15Z"), seven_cst, tz_offset_at));
+    CHECK(night_skip_over(twice, 60 + 15, parse_iso8601_z("2026-11-02T07:15Z"),
+                          parse_iso8601_z("2026-11-02T13:00Z"), tz_offset_at));
+  }
   // An end of 1:00 AM is the first moment the clock goes back to.
   p.end = 60;
   CHECK_EQ(skip("2026-11-01T04:00Z"), parse_iso8601_z("2026-11-01T07:00Z"));
@@ -6717,12 +6734,13 @@ static void test_night() {
   // with more than an hour to go (new hours that leave the night).
   {
     const int64_t t = 1792000000;
-    CHECK(!night_skip_over(p, late, t, t + 3600 * 5));
-    CHECK(night_skip_over(p, late, t + 3600 * 5, t + 3600 * 5));
+    NightUtcOffset fixed = [](int64_t) -> int32_t { return -5 * 3600; };
+    CHECK(!night_skip_over(p, late, t, t + 3600 * 5, fixed));
+    CHECK(night_skip_over(p, late, t + 3600 * 5, t + 3600 * 5, fixed));
     NightPrefs off = p;
     off.on = 0;
-    CHECK(night_skip_over(off, late, t, t + 3600 * 5));
-    CHECK(night_skip_over(p, 12 * 60, t, t + 3600 * 5));
+    CHECK(night_skip_over(off, late, t, t + 3600 * 5, fixed));
+    CHECK(night_skip_over(p, 12 * 60, t, t + 3600 * 5, fixed));
   }
   CHECK(night_holding(Night::DIM));
   CHECK(night_holding(Night::DARK));
