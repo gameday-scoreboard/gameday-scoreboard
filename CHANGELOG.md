@@ -57,6 +57,7 @@ A new Flights page shows the planes over your home, women's college basketball j
 
 ### 🐛 Fixes
 
+- 🏀 Basketball's bottom rows say whose points they show ("USA Langsy 21 pts"), a timeout brings the team stats instead of the records again, and players checking in stay off the ticker
 - 🏙️ A town typed for Weather while the Clock, Effects or the Smart board is up is looked up right away, instead of waiting for the Scoreboard
 - ⏱️ The device page's Weather card counts up the time since the last forecast read, where it could stay on the same number for minutes
 - 🎆 Editing the effect playlist that's playing no longer starts it over: it carries on from the effect that's up, and a change to that effect shows at once

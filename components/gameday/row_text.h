@@ -86,13 +86,18 @@ struct RowLines {
 struct RowHold {
   std::string event_id;
   std::string basket;  // "McDaniels 3", "Burries FT"
+  std::string play;    // the last play worth reading, for the ticker
 
   // One read of the board game.
   void read(const GameSnapshot &g) {
     if (g.event_id != this->event_id) {
       this->event_id = g.event_id;
       this->basket.clear();
+      this->play.clear();
     }
+    if (g.sport == Sport::BASKETBALL && g.state == GameState::IN && !g.last_play.empty() &&
+        !basketball_junk_play(g) && !timeout_play(g.last_play) && g.last_play != this->play)
+      this->play = g.last_play;
     if (g.sport != Sport::BASKETBALL || g.state != GameState::IN || g.play_value <= 0 || g.play_athlete.empty())
       return;
     std::string who = detail::leader_short_surname(g.play_athlete);
@@ -205,6 +210,27 @@ inline void add_win_chance(RowLines &r, const GameSnapshot &g, uint8_t secs) {
   l->add_form(::esphome::gameday::panel_text(num));
 }
 
+// The last basket, "Last: McDaniels 3", so its number isn't read as the
+// player's points in the game.
+inline void add_basket(RowLines &r, const std::string &basket, uint32_t rgb) {
+  if (basket.empty())
+    return;
+  RowLine *l = r.add("Last: " + basket, rgb);
+  if (l != nullptr)
+    l->add_form(::esphome::gameday::panel_text(basket));
+}
+
+// A side's points leader, "IND Nesmith 19 pts".
+inline void add_scorer(RowLines &r, const std::string &abbr, const std::string &scorer, uint32_t rgb) {
+  if (scorer.empty())
+    return;
+  RowLine *l = r.add(abbr + " " + scorer + " pts", rgb);
+  if (l == nullptr)
+    return;
+  l->add_form(::esphome::gameday::panel_text(abbr + " " + scorer));
+  l->add_form(::esphome::gameday::panel_text(scorer + " pts"));
+}
+
 // Down and distance, "2nd & 17", then "2nd&17" and "2&17" for when the
 // clear part of the field strip is narrower (the ball or the line to gain
 // near midfield).
@@ -250,9 +276,9 @@ inline void fill_row_lines(RowLines &r, const GameSnapshot &g, const RowHold &ho
         break;
       }
       if (o.last_play && hold.event_id == g.event_id)
-        r.add(hold.basket, white);
-      r.add(g.nba.team_scorer, white);
-      r.add(g.nba.opp_scorer, white);
+        add_basket(r, hold.basket, white);
+      add_scorer(r, g.team_abbr, g.nba.team_scorer, white);
+      add_scorer(r, g.opp_abbr, g.nba.opp_scorer, white);
       r.add(series, white);
       if (o.win_chance)
         add_win_chance(r, g, 4);
