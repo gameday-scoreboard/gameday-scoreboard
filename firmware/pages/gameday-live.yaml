@@ -128,7 +128,7 @@ script:
             const bool both = two.side == 3, ours = two.side != 2;
             const std::string &name = ours ? u.team_abbr : u.opponent_abbr;
             const std::string text = two.form(0), val2 = both ? two.form(1) : std::string();
-            const int sp = width(" ");
+            const int sp = width("0");  // LVGL measures a lone space as nothing
             int wide_px = width(name) + sp + width(text);
             if (both)
               wide_px += (val2.empty() ? 1 : 2) * sp + width(u.opponent_abbr) + (val2.empty() ? 0 : sp + width(val2));
