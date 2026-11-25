@@ -202,8 +202,10 @@ inline void fill_story_rows(RowLines &r, const GameSnapshot &g, const Story *st,
     add_stats(r, g, std::max(0, clock_left(g.display_clock)) / 60);
   // The first minutes, with nothing to tell yet: where the game is.
   if (r.n == 0) {
-    const std::string where = ::esphome::gameday::panel_text(g.venue);
-    add_both(r, g, "vs", "", !where.empty() && glyph_count(where) <= kRowChars ? where.c_str() : g.tv.c_str());
+    std::string where = ::esphome::gameday::panel_text(g.venue);
+    if (where.empty() || glyph_count(where) > kRowChars)
+      where = glyph_prefix(::esphome::gameday::panel_text(g.tv), kRowChars);
+    add_both(r, g, "vs", "", where.c_str());
   }
 }
 

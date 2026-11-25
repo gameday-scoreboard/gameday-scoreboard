@@ -93,14 +93,16 @@ void basketball_from_event(JsonObjectConst ev, GameSnapshot &s) {
       std::string pts = str_or_empty(top["displayValue"]);
       // Before anyone scores there is no line for the side at all.
       JsonObjectConst reb = top_leader(c, "rebounds"), ast = top_leader(c, "assists");
-      const int rebs = atoi(str_or_empty(reb["displayValue"]).c_str());
-      const int asts = atoi(str_or_empty(ast["displayValue"]).c_str());
+      const int rebs = std::min(99, std::max(0, atoi(str_or_empty(reb["displayValue"]).c_str())));
+      const int asts = std::min(99, std::max(0, atoi(str_or_empty(ast["displayValue"]).c_str())));
       char *extra = ours ? b.team_extra : b.opp_extra;
       const bool dish = asts >= 3 && asts * 4 >= rebs * 3;
-      if (dish || rebs >= 3)
-        snprintf(extra, sizeof(b.team_extra), "%.16s %d %s",
-                 leader_surname(str_or_empty((dish ? ast : reb)["athlete"]["shortName"])).c_str(),
-                 std::min(99, dish ? asts : rebs), dish ? "ast" : "reb");
+      if (dish || rebs >= 3) {
+        std::string name = leader_surname(str_or_empty((dish ? ast : reb)["athlete"]["shortName"]));
+        while (name.size() > 16 && glyph_count(name) > 0)  // bytes, never half a letter
+          name = glyph_prefix(name, glyph_count(name) - 1);
+        snprintf(extra, sizeof(b.team_extra), "%.16s %d %s", name.c_str(), dish ? asts : rebs, dish ? "ast" : "reb");
+      }
       if (who.empty() || pts.empty() || pts == "0")
         continue;
       (ours ? b.team_scorer : b.opp_scorer) = who + " " + pts;

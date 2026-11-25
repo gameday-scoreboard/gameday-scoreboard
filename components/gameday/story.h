@@ -50,10 +50,10 @@ inline int clock_left(const std::string &clock) {
   const char *c = clock.c_str();
   if (!isdigit((unsigned char) c[0]))
     return -1;
-  int left = atoi(c);
+  int left = std::min(1201, atoi(c));
   const char *colon = strchr(c, ':');
   if (colon != nullptr)
-    left = left * 60 + atoi(colon + 1);
+    left = left * 60 + std::min(1201, std::max(0, atoi(colon + 1)));
   return left >= 0 && left <= 1200 ? left : -1;
 }
 
@@ -103,11 +103,11 @@ class Story {
       return;
     const int64_t id = strtoll(g.event_id.c_str(), nullptr, 10);
     if (id != this->event_) {
-      *this = Story();
+      this->reset_();
       this->event_ = id;
     }
     const int left = clock_left(g.display_clock);
-    if (left < 0 || g.period < 1)
+    if (left < 0 || g.period < 1 || g.period > 99)
       return;
     const int t = g.team_score, o = g.opp_score;
     if (!this->started_) {
@@ -128,7 +128,7 @@ class Story {
       if (g.period != this->period_)
         played = this->secs_ + period_length(g, left) - left;
       this->back_ms_ = 0;
-      if (t - this->t_ + o - this->o_ >= kGapPoints || played > kGapSecs || g.period > this->period_ + 1) {
+      if (t - this->t_ + o - this->o_ >= kGapPoints || played > kGapSecs || g.period - 1 > this->period_) {
         // The panel was away (another game on the board, no Wi-Fi).
         this->begin_(g, left);
       } else {
@@ -187,14 +187,18 @@ class Story {
     return this->started_ && g.valid && strtoll(g.event_id.c_str(), nullptr, 10) == this->event_;
   }
 
+  // In place: `*this = Story()` puts 1.3 KB on the loop task's stack.
+  void reset_() { new (this) Story(); }
+
   // Starts the game's story over from this read.
   void begin_(const GameSnapshot &g, int left) {
     const int64_t id = this->event_;
-    const uint32_t news = this->news_;
-    *this = Story();
+    const uint32_t news = this->news_, play_news = this->play_news_;
+    this->reset_();
     const int t = g.team_score, o = g.opp_score;
     this->event_ = id;
     this->news_ = news;
+    this->play_news_ = play_news;
     this->started_ = true;
     this->whole_ = t == 0 || o == 0;
     this->t_ = t;
@@ -663,7 +667,7 @@ class StoryBook {
       for (int i = 1; i < kGames; i++)
         if (this->slots_[i].used < to->used)
           to = &this->slots_[i];
-      *to = Slot();
+      new (to) Slot();
       to->event = id;
     }
     to->used = ++this->turn_;

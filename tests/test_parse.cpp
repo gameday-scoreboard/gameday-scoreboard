@@ -9117,6 +9117,16 @@ static void test_story_rows() {
   po.nba.team_wins = 2;
   po.nba.opp_wins = 1;
   CHECK(rows_say(story_rows(po, nullptr, off), po, "IND 2  MIN 1 / Playoff series"));
+  // Odd clocks and periods from ESPN are no read.
+  {
+    Story odd;
+    GameSnapshot x = story_read(2147483647, "99999999:00", 10, 8);
+    odd.read(x, 1000);
+    CHECK_EQ(odd.count(x), 0);
+    CHECK_EQ(clock_left("99999999:00"), -1);
+    CHECK_EQ(clock_left("20:00"), 1200);
+    CHECK_EQ(clock_left("20:01"), -1);
+  }
   // A leader's rebounds, and his own when he leads both.
   GameSnapshot lead = g;
   snprintf(lead.nba.team_extra, sizeof(lead.nba.team_extra), "Siakam 9 reb");
