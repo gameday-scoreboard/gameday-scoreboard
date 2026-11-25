@@ -7732,38 +7732,16 @@ static void test_kickoff_weather() {
   CHECK(wx_icon_at((uint8_t) WxIcon::MOON, false) == (uint8_t) WxIcon::SUN);  // NU's 11 AM kickoff, read at night
   CHECK(wx_icon_at((uint8_t) WxIcon::SUN, true) == (uint8_t) WxIcon::MOON);
   CHECK(wx_icon_at((uint8_t) WxIcon::RAIN, true) == (uint8_t) WxIcon::RAIN);
-  CHECK(wx_dark_at(10, 18) && !wx_dark_at(10, 17));
-  CHECK(!wx_dark_at(7, 20) && wx_dark_at(7, 21));
-  CHECK(wx_dark_at(12, 17) && !wx_dark_at(12, 16));  // a December 5 PM kickoff is after sunset
-  CHECK(wx_dark_at(1, 5) && !wx_dark_at(1, 6));
-  CHECK(!wx_dark_at(0, 20) && !wx_dark_at(13, 20));
-  // US daylight time, given the local standard time: the second Sunday in
-  // March at 2 AM to the first Sunday in November at 2 AM daylight.
-  CHECK(!wx_us_dst(1804681800));  // 2027-03-10 12:30, before the 14th
-  CHECK(!wx_us_dst(1804987800));  // 2027-03-14 01:30
-  CHECK(wx_us_dst(1804991400));   // 2027-03-14 02:30
-  CHECK(!wx_us_dst(1772933400));  // 2026-03-08 01:30
-  CHECK(wx_us_dst(1772937000));   // 2026-03-08 02:30
-  CHECK(wx_us_dst(1825504200));   // 2027-11-06 12:30, before the 7th
-  CHECK(wx_us_dst(1825547400));   // 2027-11-07 00:30 standard, 01:30 daylight
-  CHECK(!wx_us_dst(1825551000));  // 2027-11-07 01:30 standard
-  CHECK(wx_us_dst(1793493000));   // 2026-11-01 00:30
-  CHECK(!wx_us_dst(1793496600));  // 2026-11-01 01:30
-  CHECK(!wx_us_dst(1772281800));  // February
-  CHECK(!wx_us_dst(1796128200));  // December
-
-  // The sun or the moon by the venue's own clock, not the panel's. NU's
-  // 11 AM kickoff (16:00 UTC, CDT) is daytime; Sunday night in Green Bay
-  // (01:20 UTC Monday, 7:20 PM CST after the change back) is dark, and so is
-  // a 7:30 PM Eastern November game a Pacific panel sees as 4:30 PM.
-  bool dst = false;
-  CHECK_EQ(wx_state_offset("Evanston, IL", dst), -6);
-  CHECK(dst);
-  CHECK_EQ(wx_state_offset("San Diego, California", dst), -8);
-  CHECK_EQ(wx_state_offset("Glendale, AZ", dst), -7);
-  CHECK(!dst);
-  CHECK_EQ(wx_state_offset("London, England", dst), 0);
-  CHECK_EQ(wx_state_offset("Foxborough", dst), 0);
+  // The sun or the moon by the sun at the venue. NU's 11 AM kickoff (16:00
+  // UTC, CDT) is daytime; Sunday night in Green Bay (01:20 UTC Monday, 7:20 PM
+  // CST after the change back) is dark, and so is a 7:30 PM Eastern November
+  // game a Pacific panel sees as 4:30 PM.
+  float lat = 0, lon = 0;
+  CHECK(wx_state_spot("Evanston, IL", lat, lon) && lat == 41 && lon == -88);
+  CHECK(wx_state_spot("San Diego, California", lat, lon) && lat == 35 && lon == -119);
+  CHECK(wx_state_spot("Honolulu, HI", lat, lon) && lat == 21 && lon == -158);
+  CHECK(!wx_state_spot("London, England", lat, lon));
+  CHECK(!wx_state_spot("Foxborough", lat, lon));
   CHECK_EQ(wx_venue_dark(1792857600, "Evanston, IL"), 0);         // 2026-10-24 16:00 UTC
   CHECK_EQ(wx_venue_dark(1793582400, "Green Bay, WI"), 1);        // 2026-11-02 01:20 UTC
   CHECK_EQ(wx_venue_dark(1794961800, "East Rutherford, NJ"), 1);  // 2026-11-18 00:30 UTC
@@ -7774,6 +7752,27 @@ static void test_kickoff_weather() {
   CHECK_EQ(wx_venue_dark(1793491200, "Evanston, IL"), 1);         // 7 PM CDT
   CHECK_EQ(wx_venue_dark(1812849300, "Chicago, IL"), 0);          // 2027-06-12 8:15 PM CDT, still light
   CHECK_EQ(wx_venue_dark(1794961800, "London, England"), -1);     // abroad: ESPN's icon as it is
+  CHECK_EQ(wx_venue_dark(1793570400, "Miami Gardens, FL"), 0);    // 2026-11-01 5 PM EST, sunset at 5:39
+  CHECK_EQ(wx_venue_dark(1793577600, "Miami Gardens, FL"), 1);    // 7 PM EST
+  CHECK_EQ(wx_venue_dark(1825110000, "Denver, CO"), 0);           // 2027-11-01 5 PM, still daylight time
+  CHECK_EQ(wx_venue_dark(1785566700, "Honolulu, HI"), 1);         // 2026-07-31 8:45 PM HST
+  CHECK_EQ(wx_venue_dark(0, "Miami Gardens, FL"), -1);
+  // Sunrise and sunset as Open-Meteo has them, to 3 minutes either way.
+  struct Sun {
+    int64_t t;
+    float lat, lon;
+    bool rise;
+  };
+  static const Sun kSun[] = {
+      {1793532540, 25.96f, -80.24f, true},    // Miami, 2026-11-01 6:29 AM EST
+      {1793572740, 25.96f, -80.24f, false},   // 5:39 PM
+      {1794961500, 33.53f, -112.26f, false},  // Glendale, AZ, 2026-11-17 5:25 PM MST
+      {1782095460, 39.74f, -105.02f, false},  // Denver, 2026-06-21 8:31 PM MDT
+  };
+  for (const auto &x : kSun) {
+    CHECK_EQ(wx_sun_down(x.t - 180, x.lat, x.lon), x.rise);
+    CHECK_EQ(wx_sun_down(x.t + 180, x.lat, x.lon), !x.rise);
+  }
   CHECK_EQ(wx_venue_dark(1783393200, "Chicago, IL"), 1);          // 2026-07-07 03:00 UTC, 10 PM CDT
   CHECK_EQ(wx_venue_dark(1783447200, "Chicago, IL"), 0);          // 1 PM CDT
   WxCivil c = wx_civil(1793582400);
