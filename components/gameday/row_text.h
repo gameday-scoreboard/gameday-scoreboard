@@ -87,6 +87,7 @@ struct RowHold {
   std::string event_id;
   std::string basket;  // "McDaniels 3", "Burries FT"
   std::string play;    // the last play worth reading, for the ticker
+  int total{-1};       // both scores added, at the last read
 
   // One read of the board game.
   void read(const GameSnapshot &g) {
@@ -94,14 +95,24 @@ struct RowHold {
       this->event_id = g.event_id;
       this->basket.clear();
       this->play.clear();
+      this->total = -1;
     }
     if (g.sport == Sport::BASKETBALL && g.state == GameState::IN && !g.last_play.empty() &&
         !basketball_junk_play(g) && !timeout_play(g.last_play) && g.last_play != this->play)
       this->play = g.last_play;
-    if (g.sport != Sport::BASKETBALL || g.state != GameState::IN || g.play_value <= 0 || g.play_athlete.empty())
+    if (g.sport != Sport::BASKETBALL || g.state != GameState::IN)
+      return;
+    // A basket the read didn't name (another play came after it): the one
+    // held isn't the last any more.
+    const int total = g.team_score + g.opp_score;
+    if (total != this->total && this->total >= 0)
+      this->basket.clear();
+    this->total = total;
+    if (g.play_value <= 0 || g.play_athlete.empty())
       return;
     std::string who = detail::leader_short_surname(g.play_athlete);
-    bool ft = g.play_type.find("Free Throw") != std::string::npos;
+    bool ft = g.play_type.find("Free Throw") != std::string::npos ||
+              g.play_type.find("FreeThrow") != std::string::npos;  // the NBA's, college's
     this->basket = who + " " + (ft ? std::string("FT") : std::to_string(g.play_value));
   }
 };

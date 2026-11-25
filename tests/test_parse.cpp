@@ -8746,6 +8746,20 @@ static void test_row_text() {
   RowOptions quiet;
   quiet.last_play = false;
   CHECK_EQ(row_lines(ft, hold, quiet, true).line[0].form(0), std::string("IND Nesmith 19 pts"));
+  // A basket another play hid: the held one isn't the last any more.
+  GameSnapshot hid = reb;
+  hid.team_score += 2;
+  hold.read(hid);
+  CHECK_EQ(hold.basket, std::string(""));
+  hold.read(reb);
+  // College's free throws have no space in their type.
+  GameSnapshot cft = reb;
+  cft.play_value = 1;
+  cft.play_athlete = "S. Williams";
+  cft.play_type = "MadeFreeThrow";
+  RowHold cf;
+  cf.read(cft);
+  CHECK_EQ(cf.basket, std::string("Williams FT"));
   // Another game starts the hold over.
   GameSnapshot other = g;
   other.event_id = "999";
@@ -8797,6 +8811,10 @@ static void test_row_text() {
   tov.play_type = "Turnover";
   tov.play_team = kWolves;
   CHECK_EQ(status_text(tov, tick, ""), std::string("MIN turnover"));
+  tov.last_play = "Foul on Antonio Baker Jr..";
+  CHECK_EQ(status_text(tov, tick, ""), std::string("Foul on Antonio Baker Jr."));
+  tov.last_play = "Mihailo Stijovic bad pass\nturnover";
+  CHECK_EQ(status_text(tov, tick, ""), std::string("Mihailo Stijovic bad pass turnover"));
   // A basket is still the ticker's.
   CHECK(status_text(g, tick, "").find("McDaniels") != std::string::npos);
   // Football's win chance: in the ticker on a single panel, on the row only
