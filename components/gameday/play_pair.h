@@ -26,6 +26,14 @@ namespace espn {
 // The panel's 5 px font: 25 characters on a 128-wide row.
 static constexpr size_t kRowChars = 25;
 
+// Letters drawn, for a C string.
+inline size_t row_glyphs(const char *s) {
+  size_t n = 0;
+  for (; *s != '\0'; s++)
+    n += ((unsigned char) *s & 0xC0) != 0x80;
+  return n;
+}
+
 // The first of the forms that fits the row, into out; "" when none does.
 template<size_t N> inline void fit_row(char (&out)[N], const std::string &a, const std::string &b = "",
                                        const std::string &c = "") {

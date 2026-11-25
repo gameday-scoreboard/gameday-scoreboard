@@ -118,10 +118,18 @@ class Story {
     if (!g.valid || g.sport != Sport::BASKETBALL || g.state != GameState::IN)
       return;
     const int64_t id = strtoll(g.event_id.c_str(), nullptr, 10);
-    if (id != this->event_) {
+    if (id != this->event_ || g.team_id != this->team_) {
       this->reset_();
       this->event_ = id;
+      this->team_ = g.team_id;
     }
+    // A redraw of the same read (the board repaints far more often than ESPN
+    // answers) has nothing to work out, and the work builds strings.
+    const uint32_t sig = read_sig_(g);
+    if (this->started_ && sig == this->sig_ && now_ms - this->sig_ms_ < kSameMs)
+      return;
+    this->sig_ = sig;
+    this->sig_ms_ = now_ms;
     const int left = clock_left(g.display_clock);
     if (left < 0 || g.period < 1 || g.period > 99)
       return;
@@ -205,11 +213,15 @@ class Story {
     uint8_t known;   // bit 0 ours, bit 1 theirs: shots is certain
     uint8_t side;    // whose basket it was, 0 when both scored or it isn't known
     uint32_t who;    // the player's name, hashed; 0 for nobody named
-    char name[18];
+    char name[24];
   };
 
+  // Whether this is the story of g's game as g sees it. The same game read
+  // from the other team's side is another story: every side here is ours or
+  // theirs as the read has it.
   bool is_(const GameSnapshot &g) const {
-    return this->started_ && g.valid && strtoll(g.event_id.c_str(), nullptr, 10) == this->event_;
+    return this->started_ && g.valid && g.team_id == this->team_ &&
+           strtoll(g.event_id.c_str(), nullptr, 10) == this->event_;
   }
 
   // In place: `*this = Story()` puts 1.3 KB on the loop task's stack.
@@ -218,11 +230,15 @@ class Story {
   // Starts the game's story over from this read.
   void begin_(const GameSnapshot &g, int left) {
     const int64_t id = this->event_;
+    const uint32_t team = this->team_, sig = this->sig_, sig_ms = this->sig_ms_;
     const uint32_t news = this->news_, play_news = this->play_news_;
     this->reset_();
     const int t = g.team_score, o = g.opp_score;
     this->reg_ = g.nba.regulation;
     this->event_ = id;
+    this->team_ = team;
+    this->sig_ = sig;
+    this->sig_ms_ = sig_ms;
     this->news_ = news;
     this->play_news_ = play_news;
     this->started_ = true;
@@ -255,6 +271,36 @@ class Story {
       this->dry_ok_[i] = (i == 0 ? t : o) == 0 && g.period == 1;
     if (t == 0 && o == 0 && g.period == 1)
       this->marks_[0].known = 3;
+  }
+
+  // What a read of the game says, hashed: the same for a redraw of it.
+  static uint32_t read_sig_(const GameSnapshot &g) {
+    uint32_t h = 2166136261u;
+    auto mix = [&h](uint32_t v) {
+      for (int i = 0; i < 4; i++, v >>= 8)
+        h = (h ^ (v & 0xFF)) * 16777619u;
+    };
+    auto text = [&h](const std::string &s) {
+      for (char c : s)
+        h = (h ^ (uint8_t) c) * 16777619u;
+      h *= 16777619u;
+    };
+    mix((uint32_t) g.team_score);
+    mix((uint32_t) g.opp_score);
+    mix((uint32_t) g.period);
+    mix((uint32_t) g.play_id);
+    mix((uint32_t) (g.play_id >> 32));
+    mix((uint32_t) g.play_team);
+    mix((uint32_t) g.play_value);
+    mix((uint32_t) g.nba.phase);
+    text(g.display_clock);
+    text(g.last_play);
+    text(g.play_type);
+    for (const Basketball::Box *b : {&g.nba.team_box, &g.nba.opp_box})
+      for (int v : {(int) b->fg_made, (int) b->fg_tried, (int) b->three_made, (int) b->three_tried, (int) b->ft_made,
+                    (int) b->ft_tried, (int) b->rebounds, b->has ? 1 : 0, b->has_ft ? 1 : 0})
+        mix((uint32_t) v);
+    return h;
   }
 
   // What tells one play from the next. ESPN's id; its words when it has none.
@@ -300,8 +346,12 @@ class Story {
         this->play_ = StoryLine();
     }
     // A basket ESPN has no player for yet waits: the words come a read later.
+    // The one on the row before it is done.
     PlayPair p;
-    if (key == 0 || !play_pair(g, p) || p.detail[0] == '\0') {
+    const bool known = key != 0 && play_pair(g, p);
+    if (!known || p.detail[0] == '\0') {
+      if (known && p.basket && key != this->held_key_)
+        this->play_ = StoryLine();
       if (key == this->held_key_)
         this->held_total_ = total;
       return;
@@ -438,13 +488,17 @@ class Story {
     for (int k = 1; k < n; k++)
       if (sum[k] > sum[best])
         best = k;
+    char t[56];
     if (n == 1)
-      fit_row(out, std::string("All ") + std::to_string(points) + " by " + this->marks_[who_mark[0]].name);
+      snprintf(t, sizeof(t), "All %d by %s", points, this->marks_[who_mark[0]].name);
     else if (sum[best] * 2 >= points)
-      fit_row(out, std::string(this->marks_[who_mark[best]].name) + " " + std::to_string(sum[best]) + " of the " +
-                       std::to_string(points));
+      snprintf(t, sizeof(t), "%s %d of the %d", this->marks_[who_mark[best]].name, sum[best], points);
     else if (n >= 3)
-      snprintf(out, sizeof(out), "%d different scorers", n);
+      snprintf(t, sizeof(t), "%d different scorers", n);
+    else
+      t[0] = '\0';
+    if (row_glyphs(t) <= kRowChars)
+      snprintf(out, sizeof(out), "%s", t);
   }
 
   // What the run did to the margin, "Was down 6, now up 4".
@@ -834,21 +888,27 @@ class Story {
       // "Williford ends the run" (or "ends run") over what it was, when that
       // fits beside the team's name; else the run's size over both.
       const std::string &abbr = this->over_side_ == 1 ? g.team_abbr : g.opp_abbr;
-      std::string named = this->over_who_;
-      if (!named.empty()) {
-        const size_t used = abbr.size() + 1 + detail::glyph_count(named);
-        named += used + 13 <= kRowChars ? " ends the run" : " ends run";
+      char named[56]{};
+      if (this->over_who_[0] != '\0') {
+        const size_t used = abbr.size() + 1 + row_glyphs(this->over_who_);
+        snprintf(named, sizeof(named), "%s%s", this->over_who_, used + 13 <= kRowChars ? " ends the run" : " ends run");
       }
       more[0] = '\0';
-      if (!named.empty() && abbr.size() + 1 + detail::glyph_count(named) <= kRowChars && named.size() < sizeof(buf)) {
-        snprintf(buf, sizeof(buf), "%s", named.c_str());
+      if (named[0] != '\0' && abbr.size() + 1 + row_glyphs(named) <= kRowChars && strlen(named) < sizeof(buf)) {
+        snprintf(buf, sizeof(buf), "%s", named);
         snprintf(more, sizeof(more), "%s", this->over_what_);
         more[0] = (char) toupper((unsigned char) more[0]);
       } else {
         const int r = this->over_run_;
         snprintf(buf, sizeof(buf), "ends %s %d-0 run", r == 8 || r == 11 || r == 18 ? "an" : "a", r);
-        if (!named.empty())
-          fit_row(more, std::string(this->over_who_) + " " + this->over_what_, this->over_who_);
+        if (named[0] != '\0') {
+          char t[80];
+          snprintf(t, sizeof(t), "%s %s", this->over_who_, this->over_what_);
+          if (row_glyphs(t) <= kRowChars)
+            snprintf(more, sizeof(more), "%s", t);
+          else if (row_glyphs(this->over_who_) <= kRowChars)
+            snprintf(more, sizeof(more), "%s", this->over_who_);
+        }
       }
       if (more[0] == '\0' && this->over_dry_ >= 60)
         snprintf(more, sizeof(more), "First in over %d minute%s", this->over_dry_ / 60, this->over_dry_ < 120 ? "" : "s");
@@ -938,7 +998,8 @@ class Story {
     }
     const uint32_t key = this->n_lines_ == 0 || this->lines_[0].score < kLead
                              ? 0
-                             : ((uint32_t) this->lines_[0].kind << 16) | this->lines_[0].value;
+                             : ((uint32_t) this->lines_[0].side << 24) | ((uint32_t) this->lines_[0].kind << 16) |
+                                   this->lines_[0].value;
     if (key != this->news_key_) {
       this->news_key_ = key;
       if (key != 0)
@@ -961,6 +1022,7 @@ class Story {
 
   static constexpr int kRun = 6;
   static constexpr uint32_t kOwedMs = 40 * 1000;
+  static constexpr uint32_t kSameMs = 5 * 1000;  // ESPN is read every 10 s
 
   struct Seen {
     uint32_t ms{0};
@@ -968,6 +1030,8 @@ class Story {
   };
 
   int64_t event_{0};
+  uint32_t team_{0};  // whose side the reads are from
+  uint32_t sig_{0}, sig_ms_{0};
   bool started_{false}, whole_{false}, final_{false};
   uint8_t leader_{0}, big_side_{0}, over_side_{0};
   uint32_t back_ms_{0};
@@ -1014,8 +1078,10 @@ class Story {
 };
 
 // The stories of the last few basketball games the panel read, so a game
-// that leaves the board and comes back keeps its own. In PSRAM, from the
-// first basketball read on.
+// that leaves the board and comes back keeps its own. One for each side a
+// game is read from: two favorites playing each other, or a game on Live games
+// that a favorite took over, come from both. In PSRAM, from the first
+// basketball read on.
 class StoryBook {
  public:
   static constexpr int kGames = 4;
@@ -1031,7 +1097,7 @@ class StoryBook {
     const int64_t id = strtoll(g.event_id.c_str(), nullptr, 10);
     Slot *to = nullptr;
     for (int i = 0; i < kGames; i++) {
-      if (this->slots_[i].event == id) {
+      if (this->slots_[i].event == id && this->slots_[i].team == g.team_id) {
         to = &this->slots_[i];
         break;
       }
@@ -1043,6 +1109,7 @@ class StoryBook {
           to = &this->slots_[i];
       new (to) Slot();
       to->event = id;
+      to->team = g.team_id;
     }
     to->used = ++this->turn_;
     to->story.read(g, now_ms);
@@ -1054,7 +1121,7 @@ class StoryBook {
       return nullptr;
     const int64_t id = strtoll(g.event_id.c_str(), nullptr, 10);
     for (int i = 0; i < kGames; i++)
-      if (this->slots_[i].used != 0 && this->slots_[i].event == id)
+      if (this->slots_[i].used != 0 && this->slots_[i].event == id && this->slots_[i].team == g.team_id)
         return &this->slots_[i].story;
     return nullptr;
   }
@@ -1062,6 +1129,7 @@ class StoryBook {
  private:
   struct Slot {
     int64_t event{0};
+    uint32_t team{0};
     uint32_t used{0};
     Story story;
   };

@@ -32,9 +32,10 @@ On a 128-wide board the two bottom rows say one thing at a time, about 5 seconds
 - **A period**: "USA 24-11 this half" over "10 of 14 shooting", when a team is 8 or more ahead of the other in the half or quarter, from the second period on.
 - **A hot hand**: "USA Langsy has 8" over "of their last 10 points".
 - **The last play**: "FAMU three" over "Baker Jr. from 25 feet". Baskets, free throws, steals, blocks and turnovers, for up to 45 seconds or until another basket. Misses, rebounds, fouls and players checking in aren't shown. A new one shows right away. It follows **Last play**.
-- **Each team's points leader**: "USA Langsy 21 pts" over the team's rebounds or assists leader, like "Roman 9 reb", or the team's shooting before anyone has three of either.
+- **Each team's points leader**: "USA Langsy 21 pts" over the team's rebounds or assists leader, like "Roman 9 reb", or the team's shooting before anyone has three of either, or "Team high".
 - **The win chance**, like "MIN 56% to win", for the team ESPN favors, when the game first comes up and when ESPN's number moves 10 points or more since it last showed, no more than once every 3 minutes. **Win chance** under **Live pictures** on the device page's Display tab turns it off.
 - **The playoff series**, like "NY 2  CLE 1" over "Playoff series", in a playoff game.
+- **Where the game is**: "USA vs FAMU" over the arena in the first minutes, before anything has happened.
 - **The team stats**: both teams' shooting, threes and rebounds, each number after its team's name, like "USA 47%  FAMU 29%" over "Shooting". First in a timeout and between periods, and when nothing else is going on, including the end of a blowout.
 
 The panel works all of it out from the scores, plays and team stats it reads, and shows only what those prove. Shooting in a run, a drought or a period waits until ESPN's team stats have caught up with the score, and the lower row says something the score itself shows until then. A line about the whole game, like "has never led", needs the panel to have watched from the start. A team color too dark to read is brightened for the name.

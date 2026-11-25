@@ -21,9 +21,12 @@
 // logos and abbreviations above already carry the colors. Only the team's
 // name on basketball's row is in its color.
 
+#include <algorithm>
 #include <cctype>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <string>
 
 #include "espn_parse.h"
@@ -51,6 +54,25 @@ struct RowLine {
     this->forms += '\n';
     this->forms += f;
   }
+  // Form i into out, cut to fit, "" past the last. The page asks on a timer,
+  // so it takes no memory.
+  template<size_t N> void form_to(int i, char (&out)[N]) const {
+    size_t at = 0;
+    for (; i > 0 && at != std::string::npos; i--) {
+      at = this->forms.find('\n', at);
+      if (at != std::string::npos)
+        at++;
+    }
+    out[0] = '\0';
+    if (at == std::string::npos)
+      return;
+    size_t end = this->forms.find('\n', at);
+    if (end == std::string::npos)
+      end = this->forms.size();
+    const size_t len = std::min(end - at, N - 1);
+    memcpy(out, this->forms.data() + at, len);
+    out[len] = '\0';
+  }
   // Form i, "" past the last.
   std::string form(int i) const {
     size_t at = 0;
@@ -77,6 +99,23 @@ struct RowLines {
   // bottom row from basketball's details.
   bool notice{false};
 
+  // A line of up to three forms, one string for all of them: the update keeps
+  // it like its other strings, so this is the one allocation a line takes.
+  // Already as the panel draws it.
+  RowLine *put(const char *a, const char *b, const char *c, uint8_t secs) {
+    if (n >= kMax || a[0] == '\0')
+      return nullptr;
+    RowLine &l = line[n++];
+    l = RowLine();
+    char buf[128];
+    if (c != nullptr)
+      snprintf(buf, sizeof(buf), "%s\n%s\n%s", a, b, c);
+    else
+      snprintf(buf, sizeof(buf), "%s\n%s", a, b);
+    l.forms.assign(buf);
+    l.secs = secs;
+    return &l;
+  }
   RowLine *add(const std::string &text, uint32_t rgb, uint8_t secs = 4) {
     if (n >= kMax || text.empty())
       return nullptr;

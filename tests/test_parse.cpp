@@ -9441,6 +9441,18 @@ static void test_story_box() {
     CHECK_EQ(detail_of(st, g, StoryKind::RUN, 1), std::string("Was tied, now up 12"));
   }
   {
+    // A newer basket with no name yet takes the old play off the row.
+    Story st;
+    GameSnapshot g = at("20:00", 0, 0, {}, {}, 0, 0, "");
+    st.read(g, 1000);
+    g = at("19:40", 0, 0, {}, {}, 50, 0, "Arquevius Parker Steal.");
+    st.read(g, 11000);
+    CHECK(st.play(g) != nullptr);
+    g = at("19:30", 0, 0, {}, {}, 6, 2, "team makes 3-foot shot");
+    st.read(g, 21000);
+    CHECK(st.play(g) == nullptr);
+  }
+  {
     // ESPN sends a basket's name a read late: the line that waited for it
     // takes it then.
     Story st;
@@ -9540,6 +9552,74 @@ static void test_story_box() {
     CHECK(st.count(g) > 0);
     CHECK(rows_say(story_rows(g, &st, RowOptions()), g, "USA Cooper has 8 / of their last 10 points"));
   }
+}
+
+static void test_story_sides() {
+  // The same game read from the other team's side (two favorites playing each
+  // other, or a game Live games had away team first): each has its own story,
+  // and a side's line is never the other team's.
+  StoryBook book;
+  GameSnapshot g = story_read(1, "20:00", 0, 0);
+  g.team_id = 6, g.opp_id = 50;
+  g.team_abbr = "USA", g.opp_abbr = "FAMU";
+  auto flip = [](const GameSnapshot &x) {
+    GameSnapshot f = x;
+    std::swap(f.team_abbr, f.opp_abbr);
+    std::swap(f.team_score, f.opp_score);
+    std::swap(f.team_id, f.opp_id);
+    std::swap(f.nba.team_box, f.nba.opp_box);
+    std::swap(f.nba.team_scorer, f.nba.opp_scorer);
+    return f;
+  };
+  auto at = [&](const char *clock, int us, int them) {
+    g.display_clock = clock;
+    g.team_score = us;
+    g.opp_score = them;
+    return g;
+  };
+  book.read(at("20:00", 0, 0), 1000);
+  book.read(at("19:20", 2, 0), 11000);
+  book.read(at("18:50", 4, 0), 21000);
+  book.read(at("18:20", 6, 0), 31000);
+  GameSnapshot now = at("18:00", 8, 0);
+  book.read(now, 41000);
+  CHECK(book.find(now) != nullptr);
+  CHECK(story_says(*book.find(now), now, "USA on an 8-0 run"));
+  // Flipped: FAMU is ours now. Nothing of USA's is drawn as FAMU's.
+  GameSnapshot other = flip(now);
+  CHECK(book.find(other) == nullptr);
+  book.read(other, 42000);
+  CHECK(book.find(other) != nullptr);
+  for (int i = 0; i < book.find(other)->count(other); i++)
+    CHECK(book.find(other)->line(i).kind != StoryKind::RUN);
+  CHECK(!story_says(*book.find(other), other, "FAMU on an 8-0 run"));
+  // And back: USA's own story is where it was.
+  CHECK(story_says(*book.find(now), now, "USA on an 8-0 run"));
+  // A read of the same game for a side, over and over, from a redraw.
+  const uint32_t news = book.find(now)->news();
+  for (int i = 0; i < 20; i++)
+    book.read(now, 42000 + 100 * (uint32_t) i);
+  CHECK_EQ(book.find(now)->news(), news);
+}
+
+static void test_row_forms() {
+  RowLines r;
+  RowLine *l = r.put("on an 8-0 run", "3 of 4 shooting", nullptr, 6);
+  CHECK(l != nullptr);
+  char a[40], b[8];
+  l->form_to(0, a);
+  CHECK_EQ(std::string(a), std::string("on an 8-0 run"));
+  l->form_to(1, a);
+  CHECK_EQ(std::string(a), std::string("3 of 4 shooting"));
+  l->form_to(2, a);
+  CHECK_EQ(std::string(a), std::string(""));
+  l->form_to(0, b);  // cut to fit
+  CHECK_EQ(std::string(b), std::string("on an 8"));
+  CHECK_EQ(l->form(0), std::string("on an 8-0 run"));
+  CHECK(r.put("", "x", nullptr, 5) == nullptr);
+  CHECK_EQ((int) r.put("x", "", "what", 5)->secs, 5);
+  CHECK_EQ(row_glyphs("Doncic"), (size_t) 6);
+  CHECK_EQ(row_glyphs("Dončić"), (size_t) 6);
 }
 
 static void test_play_blocks() {
@@ -10495,6 +10575,8 @@ int main() {
   test_story_rows();
   test_story_box();
   test_row_shape();
+  test_story_sides();
+  test_row_forms();
   test_play_blocks();
   test_live_scan_clock();
   test_team_cache();

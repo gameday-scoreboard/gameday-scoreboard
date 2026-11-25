@@ -95,10 +95,10 @@ script:
             if (lv_obj_is_hidden(o) != hidden)
               lv_obj_set_hidden(o, hidden);
           };
-          auto put = [](lv_obj_t *o, const std::string &text) {
+          auto put = [](lv_obj_t *o, const char *text) {
             const char *cur = lv_label_get_text(o);
-            if (cur == nullptr || text != cur)
-              lv_label_set_text(o, text.c_str());
+            if (cur == nullptr || strcmp(text, cur) != 0)
+              lv_label_set_text(o, text);
           };
           if (W < 128 || r.n == 0 || r.line[0].side == 0) {
             for (lv_obj_t *o : pair)
@@ -116,12 +116,14 @@ script:
           // another one waits (the 1 s interval below tries again). Not for
           // another game's.
           const uint32_t teams = ::espn::row_shape(u.team_abbr) * 31 + ::espn::row_shape(u.opponent_abbr);
+          // Nor a line from before the score changed: what it says may be over.
+          const int score = u.team_score * 1000 + u.opponent_score;
           const bool new_line = r.news != id(gd_row_news) || id(gd_row_turn) >= r.n;
           const int want = !new_line ? id(gd_row_turn) : (r.news != id(gd_row_news) && r.jump < r.n) ? r.jump : 0;
           if (r.line[want].side != 0) {
             const uint32_t shape = ::espn::row_shape(r.line[want].forms) + r.line[want].side;
             if (shape != id(gd_row_shape) && id(gd_row_shape) != 0 && teams == id(gd_row_teams) &&
-                millis() - id(gd_row_since) < 2500) {
+                score == id(gd_row_score) && millis() - id(gd_row_since) < 2500) {
               id(gd_row_wait) = true;
               // The read moved the label for football; it is still this line's.
               lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_LEFT, 0);
@@ -133,6 +135,7 @@ script:
               id(gd_row_shape) = shape;
               id(gd_row_since) = millis();
             }
+            id(gd_row_score) = score;
           } else {
             id(gd_row_shape) = 0;
           }
@@ -146,27 +149,33 @@ script:
           if (two.side != 0) {
             // Everything on the row is one run of 5 px letters, centered.
             const lv_font_t *pf = lv_obj_get_style_text_font(lbl, LV_PART_MAIN);
-            auto width = [&](const std::string &s) {
+            // The forms go into buffers here: this runs on every read and turn.
+            auto width = [&](const char *s) {
               lv_point_t sz;
-              lv_text_get_size(&sz, s.c_str(), pf, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+              lv_text_get_size(&sz, s, pf, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
               return (int) sz.x;
             };
             const bool both = two.side == 3, ours = two.side != 2;
-            const std::string &name = ours ? u.team_abbr : u.opponent_abbr;
-            const std::string text = two.form(0), val2 = both ? two.form(1) : std::string();
+            const char *name = (ours ? u.team_abbr : u.opponent_abbr).c_str();
+            char text[64], val2[32], more[64];
+            two.form_to(0, text);
+            val2[0] = '\0';
+            if (both)
+              two.form_to(1, val2);
+            two.form_to(both ? 2 : 1, more);
             const int sp = width("0");  // LVGL measures a lone space as nothing
             int wide_px = width(name) + sp + width(text);
             if (both)
-              wide_px += (val2.empty() ? 1 : 2) * sp + width(u.opponent_abbr) + (val2.empty() ? 0 : sp + width(val2));
+              wide_px += (val2[0] == '\0' ? 1 : 2) * sp + width(u.opponent_abbr.c_str()) + (val2[0] == '\0' ? 0 : sp + width(val2));
             int x = (W - wide_px) / 2;
             if (x < 0)
               x = 0;
-            auto place = [&](lv_obj_t *o, const std::string &s, uint32_t rgb) {
+            auto place = [&](lv_obj_t *o, const char *s, uint32_t rgb) {
               put(o, s);
               lv_obj_set_style_text_color(o, lv_color_hex(rgb), 0);
               lv_obj_set_style_text_opa(o, LV_OPA_COVER, 0);
               lv_obj_set_pos(o, x, 47);
-              hide(o, s.empty());
+              hide(o, s[0] == '\0');
               x += width(s);
             };
             place(pair[0], name, ::espn::row_name_rgb((uint32_t) (ours ? u.team_color : u.opponent_color)));
@@ -176,15 +185,15 @@ script:
             id(gd_row_x) = x;
             place(lbl, text, two.rgb);
             if (both) {
-              x += (val2.empty() ? 1 : 2) * sp;
-              place(pair[1], u.opponent_abbr, ::espn::row_name_rgb((uint32_t) u.opponent_color));
+              x += (val2[0] == '\0' ? 1 : 2) * sp;
+              place(pair[1], u.opponent_abbr.c_str(), ::espn::row_name_rgb((uint32_t) u.opponent_color));
               x += sp;
               place(pair[2], val2, two.rgb);
             } else {
               hide(pair[1], true);
               hide(pair[2], true);
             }
-            put(pair[3], two.form(both ? 2 : 1));
+            put(pair[3], more);
             lv_obj_set_width(pair[3], W);
             hide(pair[3], r.notice);
             hide(ticker, !r.notice);
@@ -1494,13 +1503,18 @@ globals:
     restore_value: no
     initial_value: '0'
   # Basketball's line up now: what it says but for its digits, whose game it
-  # is, when it came up, and whether a read waits for it (gd_row_show).
+  # is, the score it came up at, when, and whether a read waits for it
+  # (gd_row_show).
   - id: gd_row_shape
     type: uint32_t
     restore_value: no
     initial_value: '0'
   - id: gd_row_teams
     type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: gd_row_score
+    type: int
     restore_value: no
     initial_value: '0'
   - id: gd_row_since
