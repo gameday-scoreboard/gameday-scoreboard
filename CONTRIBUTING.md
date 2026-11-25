@@ -120,7 +120,7 @@ A fix we want that is only in an ESPHome beta, in order:
 
 ### Setup
 
-- [ESPHome](https://esphome.io/) 2026.11.0, the version CI builds with.
+- [ESPHome](https://esphome.io/) 2026.11.1, the version CI builds with.
 - g++ for the host tests.
 - Node and Python 3 for the device page tests.
 
