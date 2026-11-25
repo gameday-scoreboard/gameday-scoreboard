@@ -9040,8 +9040,35 @@ static void test_story() {
     read(st, 2, "2:00", 60, 61, 1000);
     GameSnapshot g = read(st, 2, "1:40", 62, 61, 11000);
     CHECK(story_says(st, g, "USA takes the lead"));
+    // Not the score again: since when, and how far behind they were.
     g = read(st, 2, "0:50", 62, 61, 61000);
-    CHECK(story_says(st, g, "USA up 1"));
+    CHECK(!story_says(st, g, "USA up 1"));
+    CHECK(story_says(st, g, "USA ahead since 1:40"));
+    for (int i = 0; i < st.count(g); i++)
+      if (st.line(i).kind == StoryKind::CLOSE)
+        CHECK_EQ(std::string(st.line(i).detail), std::string("Were down 1"));
+    // Tied in between: ahead since the new lead.
+    g = read(st, 2, "0:40", 62, 62, 71000);
+    for (int i = 0; i < st.count(g); i++)
+      CHECK(st.line(i).kind != StoryKind::CLOSE);
+    g = read(st, 2, "0:30", 64, 62, 81000);
+    CHECK(story_says(st, g, "USA ahead since 0:30"));
+    // Both scored between two reads: they could have been tied. Nothing.
+    g = read(st, 2, "0:20", 66, 65, 91000);
+    for (int i = 0; i < st.count(g); i++)
+      CHECK(st.line(i).kind != StoryKind::CLOSE);
+    // Nor at the buzzer.
+    Story late;
+    read(late, 2, "0:30", 60, 61, 1000);
+    g = read(late, 2, "0:00", 62, 61, 11000);
+    for (int i = 0; i < late.count(g); i++)
+      CHECK(late.line(i).kind != StoryKind::CLOSE);
+    // Joined with a lead on: since when isn't known.
+    Story joined;
+    read(joined, 2, "2:30", 62, 61, 1000);
+    g = read(joined, 2, "2:00", 62, 61, 11000);
+    for (int i = 0; i < joined.count(g); i++)
+      CHECK(joined.line(i).kind != StoryKind::CLOSE);
   }
   // The book keeps games apart, and every line fits the row.
   {
@@ -9345,9 +9372,16 @@ static void test_story_box() {
     Story st;
     GameSnapshot g = play(st, 1);
     CHECK(!st.in_step(g, 1));
-    CHECK_EQ(detail_of(st, g, StoryKind::RUN, 1), std::string(""));
+    // Two baskets came in one read, so who scored the 9 isn't known either:
+    // what it did to the score, which is.
+    CHECK_EQ(detail_of(st, g, StoryKind::RUN, 1), std::string("Was tied, now up 9"));
     RowOptions o;
-    CHECK(rows_say(story_rows(g, &st, o), g, "USA on a 9-0 run / Langsy 8 pts"));
+    CHECK(rows_say(story_rows(g, &st, o), g, "USA on a 9-0 run / Was tied, now up 9"));
+    // A drought is never over a leader.
+    CHECK_EQ(detail_of(st, g, StoryKind::DROUGHT, 2), std::string("Outscored 9-0"));
+    for (int i = 0; i < story_rows(g, &st, o).n; i++)
+      CHECK(story_rows(g, &st, o).line[i].form(0).find("scoreless") == std::string::npos ||
+            story_rows(g, &st, o).line[i].form(1).find(" pts") == std::string::npos);
   }
   {
     // A miss ESPN's last play tells of that the box doesn't have yet.
@@ -9357,7 +9391,7 @@ static void test_story_box() {
                         "B Parker misses 22-foot three point jumper");
     st.read(g, 61000);
     CHECK(!st.in_step(g, 2));
-    CHECK_EQ(detail_of(st, g, StoryKind::DROUGHT, 2), std::string(""));
+    CHECK_EQ(detail_of(st, g, StoryKind::DROUGHT, 2), std::string("Outscored 9-0"));
     g.nba.opp_box.fg_tried = 7;
     g.nba.opp_box.three_tried = 5;
     st.read(g, 71000);
@@ -9375,8 +9409,160 @@ static void test_story_box() {
     g = at("8:00", 26, 10, {10, 23, 4, 7, 2, 2}, {4, 17, 1, 5, 1, 2}, 6, 3, "A Cooper makes 24-foot three point jumper");
     st.read(g, 21000);
     const std::string d = detail_of(st, g, StoryKind::RUN, 1);
-    CHECK_EQ(d, std::string(""));
+    CHECK_EQ(d, std::string("All 6 by Cooper"));
   }
+  {
+    // Who scored a run: named when every basket in it was one and named. The
+    // last came with no name, and takes it a read later.
+    Story st;
+    GameSnapshot g = at("20:00", 0, 0, {}, {}, 0, 0, "");
+    st.read(g, 1000);
+    g = at("19:40", 2, 0, {}, {}, 6, 2, "A Cooper makes layup");
+    st.read(g, 11000);
+    g = at("19:10", 4, 0, {}, {}, 6, 2, "A Cooper makes jumper");
+    st.read(g, 21000);
+    g = at("18:40", 6, 0, {}, {}, 6, 2, "team makes layup");
+    st.read(g, 31000);
+    CHECK_EQ(detail_of(st, g, StoryKind::RUN, 1), std::string("Was tied, now up 6"));
+    g.last_play = "B Parker makes layup";
+    st.read(g, 33000);
+    CHECK_EQ(detail_of(st, g, StoryKind::RUN, 1), std::string("Cooper 4 of the 6"));
+    // Another player's share of a longer run isn't enough: three scorers.
+    g = at("18:20", 8, 0, {}, {}, 6, 2, "C Adams makes layup");
+    st.read(g, 41000);
+    CHECK_EQ(detail_of(st, g, StoryKind::RUN, 1), std::string("Cooper 4 of the 8"));
+    g = at("18:00", 10, 0, {}, {}, 6, 2, "D Evans makes layup");
+    st.read(g, 51000);
+    CHECK_EQ(detail_of(st, g, StoryKind::RUN, 1), std::string("4 different scorers"));
+    // A play that went with another basket isn't counted for a second.
+    g = at("17:40", 12, 0, {}, {}, 6, 2, "D Evans makes layup");
+    g.play_id = g.play_id - 1;  // the same play as before
+    st.read(g, 61000);
+    CHECK_EQ(detail_of(st, g, StoryKind::RUN, 1), std::string("Was tied, now up 12"));
+  }
+  {
+    // Two players with one last name are two players.
+    Story st;
+    GameSnapshot g = at("20:00", 0, 0, {}, {}, 0, 0, "");
+    st.read(g, 1000);
+    g = at("19:40", 2, 0, {}, {}, 6, 2, "Stephen Williams makes layup");
+    st.read(g, 11000);
+    g = at("19:10", 4, 0, {}, {}, 6, 2, "Roderick Williams makes jumper");
+    st.read(g, 21000);
+    g = at("18:40", 6, 0, {}, {}, 6, 2, "Stephen Williams makes layup");
+    st.read(g, 31000);
+    CHECK_EQ(detail_of(st, g, StoryKind::RUN, 1), std::string("Williams 4 of the 6"));
+  }
+  {
+    // A drought with the other side scoreless too: the last basket, else that.
+    Story st;
+    GameSnapshot g = at("20:00", 0, 0, {}, {}, 0, 0, "");
+    st.read(g, 1000);
+    g = at("19:40", 0, 2, {}, {}, 50, 2, "B Parker makes layup");
+    st.read(g, 11000);
+    g = at("19:20", 2, 2, {}, {}, 6, 2, "A Cooper makes layup");
+    st.read(g, 21000);
+    g = at("18:20", 2, 2, {}, {}, 6, 0, "A Cooper misses jumper");
+    st.read(g, 31000);
+    g = at("17:20", 2, 2, {}, {}, 6, 0, "A Cooper misses jumper");
+    st.read(g, 41000);
+    g = at("17:10", 2, 2, {}, {}, 6, 0, "A Cooper misses jumper");
+    st.read(g, 51000);
+    CHECK_EQ(detail_of(st, g, StoryKind::DROUGHT, 2), std::string("Outscored 2-0"));
+    CHECK_EQ(detail_of(st, g, StoryKind::DROUGHT, 1), std::string("Last: Cooper layup"));
+  }
+  {
+    // The second half's score, over the shooting since it began.
+    Story st;
+    GameSnapshot g = at("20:00", 0, 0, {}, {}, 0, 0, "");
+    st.read(g, 1000);
+    g = at("0:50", 10, 13, {4, 11, 1, 3, 1, 1}, {5, 13, 1, 4, 2, 2}, 6, 0, "A Cooper Offensive Rebound.");
+    st.read(g, 11000);
+    g = at("0:00", 12, 14, {5, 12, 1, 3, 1, 1}, {6, 14, 1, 4, 1, 2}, 6, 0, "End of the 1st half");
+    st.read(g, 21000);
+    g = at("20:00", 12, 14, {5, 12, 1, 3, 1, 1}, {6, 14, 1, 4, 1, 2}, 6, 0, "A Cooper Offensive Rebound.");
+    g.period = 2;
+    st.read(g, 1200000);
+    g = at("18:40", 16, 15, {7, 14, 1, 3, 1, 1}, {6, 14, 1, 4, 2, 3}, 6, 0, "A Cooper Offensive Rebound.");
+    g.period = 2;
+    st.read(g, 1210000);
+    g = at("17:20", 20, 17, {9, 17, 1, 3, 1, 1}, {7, 15, 1, 4, 2, 3}, 6, 0, "A Cooper Offensive Rebound.");
+    g.period = 2;
+    st.read(g, 1220000);
+    g = at("17:10", 23, 17, {10, 18, 2, 4, 1, 1}, {7, 16, 1, 4, 2, 3}, 6, 0, "A Cooper Offensive Rebound.");
+    g.period = 2;
+    st.read(g, 1230000);
+    CHECK_EQ(detail_of(st, g, StoryKind::PERIOD, 1), std::string("5 of 6 shooting"));
+    // The box behind the score: what halftime was.
+    g = at("16:40", 25, 17, {10, 18, 2, 4, 1, 1}, {7, 16, 1, 4, 2, 3}, 6, 0, "A Cooper Offensive Rebound.");
+    g.period = 2;
+    st.read(g, 1230000);
+    CHECK_EQ(detail_of(st, g, StoryKind::PERIOD, 1), std::string("Down 2 at halftime"));
+    // Never in the first period, whose score is the game's.
+    Story first;
+    g = at("20:00", 0, 0, {}, {}, 0, 0, "");
+    first.read(g, 1000);
+    g = at("15:00", 14, 2, {}, {}, 0, 0, "");
+    first.read(g, 2000);
+    CHECK_EQ(detail_of(first, g, StoryKind::PERIOD, 1), std::string("no line"));
+  }
+  {
+    // A hot hand: 8 of the side's last 10, each named.
+    Story st;
+    GameSnapshot g = at("20:00", 0, 0, {}, {}, 0, 0, "");
+    st.read(g, 1000);
+    const char *who[] = {"A Cooper makes jumper", "A Cooper makes layup", "B Parker makes layup", "A Cooper makes layup",
+                         "A Cooper makes layup"};
+    const char *clock[] = {"19:20", "18:50", "18:20", "17:50", "17:20"};
+    for (int i = 0; i < 5; i++) {
+      g = at(clock[i], 2 + 2 * i, i, {}, {}, 6, 2, who[i]);
+      st.read(g, 11000 + 10000 * (uint32_t) i);
+      g = at(clock[i], 2 + 2 * i, 1 + i, {}, {}, 50, 1, "X Young makes free throw 1 of 1");
+      st.read(g, 15000 + 10000 * (uint32_t) i);
+    }
+    CHECK(st.count(g) > 0);
+    CHECK(rows_say(story_rows(g, &st, RowOptions()), g, "USA Cooper has 8 / of their last 10 points"));
+  }
+}
+
+static void test_play_blocks() {
+  // The NBA's block is the shooter's play in ESPN's data, the blocker's here.
+  GameSnapshot g = story_read(2, "10:00", 40, 38);
+  g.nba.regulation = 4;
+  g.team_id = 6;
+  g.opp_id = 50;
+  g.play_team = 50;
+  g.play_value = 0;
+  g.last_play = "Peyton Watson blocks Josh Giddey's driving dunk";
+  g.play_type = "Driving Dunk Shot";
+  PlayPair p;
+  CHECK(play_pair(g, p));
+  CHECK_EQ((int) p.side, 1);
+  CHECK_EQ(std::string(p.what), std::string("block"));
+  CHECK_EQ(std::string(p.detail), std::string("Watson"));
+  CHECK(!p.basket);
+  bool shot = false;
+  CHECK_EQ(play_shooter(g, shot), 2);
+  CHECK(shot);
+  // No "blocks" in college's: "Koby Brea Block." with his own team.
+  g.play_team = 6;
+  g.last_play = "Koby Brea Block.";
+  CHECK(play_pair(g, p));
+  CHECK_EQ((int) p.side, 1);
+}
+
+static void test_row_shape() {
+  CHECK(row_shape("Langsy 21 pts") == row_shape("Langsy 23 pts"));
+  CHECK(row_shape("Langsy 21 pts") != row_shape("Roman 21 pts"));
+  CHECK(row_shape("on a 9-0 run\n4 of 6 shooting") == row_shape("on a 9-0 run\nOutscored 9-0"));
+  CHECK(row_shape("") != 0);
+  // A substitution in a timeout keeps the stats; a play ends them.
+  GameSnapshot g = story_read(2, "10:00", 40, 38);
+  g.last_play = "Daisean Williford subbing in for Florida A&M";
+  CHECK(!basketball_break(g));
+  CHECK(basketball_break(g, true));
+  CHECK_EQ(row_news(g), std::string(""));
+  CHECK_EQ(row_news(g, true), std::string("break"));
 }
 
 static void test_line_score() {
@@ -10291,6 +10477,8 @@ int main() {
   test_play_pair();
   test_story_rows();
   test_story_box();
+  test_row_shape();
+  test_play_blocks();
   test_live_scan_clock();
   test_team_cache();
   test_boot_hold();

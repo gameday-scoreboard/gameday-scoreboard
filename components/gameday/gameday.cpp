@@ -5303,14 +5303,14 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
       this->stories_.read(g, millis());
     const ::espn::Story *story = this->stories_.find(g);
     if (playing && g.sport == ::espn::Sport::BASKETBALL)
-      ::espn::fill_story_rows(f.row, g, story, ro);
+      ::espn::fill_story_rows(f.row, g, story, ro, this->row_hold_.timeout);
     else
       ::espn::fill_row_lines(f.row, g, ro, playing);
     // Hockey's one line (shots and the last goal, sport_hockey.cpp) on the same row.
     if (g.sport == ::espn::Sport::HOCKEY && g.state == GameState::IN && f.row.n == 0)
       f.row.add(f.situation, 0xFFFFFF);
     // A new down, a break, a story or a play: the row turns to it at once.
-    std::string news = ::espn::row_news(g);
+    std::string news = ::espn::row_news(g, this->row_hold_.timeout);
     const uint32_t told = story != nullptr ? story->news() : 0;
     const uint32_t play = story != nullptr && f.row.play_at < f.row.n ? story->play_news() : this->row_play_n_;
     if (news != this->row_news_ || told != this->row_story_n_) {

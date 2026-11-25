@@ -274,18 +274,32 @@ inline RowLines row_lines(const GameSnapshot &g, const RowOptions &o, bool playi
   return r;
 }
 
-// Basketball stopped: a timeout, or the break between two periods.
-inline bool basketball_break(const GameSnapshot &g) {
-  return timeout_play(g.last_play) || g.nba.phase == Phase::END_PERIOD;
+// A line's text (its first form) but for its digits, hashed, so "Langsy 21
+// pts" and "Langsy 23 pts" are the same line. Never 0.
+inline uint32_t row_shape(const std::string &text) {
+  uint32_t h = 2166136261u;
+  for (char c : text) {
+    if (c == '\n')
+      break;
+    if (!isdigit((unsigned char) c))
+      h = (h ^ (uint8_t) c) * 16777619u;
+  }
+  return h == 0 ? 1 : h;
+}
+
+// Basketball stopped: a timeout (through its substitutions, RowHold), or the
+// break between two periods.
+inline bool basketball_break(const GameSnapshot &g, bool held = false) {
+  return held || timeout_play(g.last_play) || g.nba.phase == Phase::END_PERIOD;
 }
 
 // What counts as news on the row: football's down and distance, a basketball
 // break (the story and the plays have their own). The component bumps
 // RowLines::news when it changes.
-inline std::string row_news(const GameSnapshot &g) {
+inline std::string row_news(const GameSnapshot &g, bool held = false) {
   if (g.sport == Sport::FOOTBALL)
     return g.short_down_distance;
-  return g.sport == Sport::BASKETBALL && basketball_break(g) ? "break" : "";
+  return g.sport == Sport::BASKETBALL && basketball_break(g, held) ? "break" : "";
 }
 
 }  // namespace espn

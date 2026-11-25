@@ -25,6 +25,10 @@
 //   old copy of its box.
 // - Nothing was missed between the basket the stretch began with and the
 //   read that saw it.
+// Until then the detail is one the score alone proves ("Outscored 9-0", "Was
+// down 6, now up 4"), or who scored, when every basket was named. A basket is
+// a play's only when it was the whole change in the score, and the play
+// hadn't been counted for another.
 //
 // Pure, with no ESPHome includes, so the host tests build it. It holds no
 // heap memory.
@@ -69,7 +73,19 @@ inline int period_length(const GameSnapshot &g, int left) {
   return left > 600 ? 720 : 600;
 }
 
-enum class StoryKind : uint8_t { NONE, RUN, RUN_OVER, DROUGHT, TAKES_LEAD, BIG_LEAD, CLOSE, COMEBACK, NEVER_LED };
+enum class StoryKind : uint8_t {
+  NONE,
+  RUN,
+  RUN_OVER,
+  DROUGHT,
+  TAKES_LEAD,
+  BIG_LEAD,
+  CLOSE,
+  COMEBACK,
+  NEVER_LED,
+  HOT,
+  PERIOD
+};
 
 struct StoryLine {
   StoryKind kind{StoryKind::NONE};
@@ -132,11 +148,15 @@ class Story {
         // The panel was away (another game on the board, no Wi-Fi).
         this->begin_(g, left);
       } else {
+        const bool next = g.period != this->period_;
+        if (next)
+          this->period_starts_(g, left);
         this->period_ = g.period;
         this->secs_ = left;
         this->step_(g, t, o, this->at_ + played);
       }
     }
+    this->late_name_(g);
     this->box_(g, now_ms);
     this->hold_play_(g, now_ms);
     this->final_ = g.period >= g.nba.regulation;
@@ -166,6 +186,8 @@ class Story {
     const int max = side == 1 ? this->max_t_ : this->max_o_, could = side == 1 ? this->hi_t_ : this->hi_o_;
     return max >= could ? max : 0;
   }
+  // The other side has never led: hi_ allows for the worst order.
+  bool never_trailed(int side) const { return this->whole_ && (side == 1 ? this->hi_o_ : this->hi_t_) <= 0; }
   // The box score and the score agree, as far as the reads tell.
   bool in_step(const GameSnapshot &g, int side) const { return this->is_(g) && this->now_ok_[side - 1]; }
 
@@ -181,6 +203,9 @@ class Story {
     uint16_t t, o;
     Shots shots[2];  // ours, theirs, when the score became this
     uint8_t known;   // bit 0 ours, bit 1 theirs: shots is certain
+    uint8_t side;    // whose basket it was, 0 when both scored or it isn't known
+    uint32_t who;    // the player's name, hashed; 0 for nobody named
+    char name[18];
   };
 
   bool is_(const GameSnapshot &g) const {
@@ -196,6 +221,7 @@ class Story {
     const uint32_t news = this->news_, play_news = this->play_news_;
     this->reset_();
     const int t = g.team_score, o = g.opp_score;
+    this->reg_ = g.nba.regulation;
     this->event_ = id;
     this->news_ = news;
     this->play_news_ = play_news;
@@ -210,11 +236,19 @@ class Story {
     // now is the biggest yet, and that side hasn't scored since the tip.
     this->max_t_ = this->hi_t_ = std::max(0, t - o);
     this->max_o_ = this->hi_o_ = std::max(0, o - t);
+    this->big_score_[0] = this->big_score_[1] = {(uint16_t) t, (uint16_t) o};
     const int tip = g.period == 1 ? kStart - std::max(0, period_length(g, left) - left) : kStart;
     this->last_t_ = t == 0 ? tip : -1;
     this->last_o_ = o == 0 ? tip : -1;
     this->leader_ = t > o ? 1 : o > t ? 2 : 0;
-    this->marks_[0] = {(uint16_t) kStart, (uint16_t) t, (uint16_t) o, {}, 0};
+    this->trail_[0] = std::max(0, o - t);
+    this->trail_[1] = std::max(0, t - o);
+    this->used_key_ = play_key_(g);  // its points are in this score
+    this->last_opp_[0] = t == 0 ? 0 : -1;
+    this->last_opp_[1] = o == 0 ? 0 : -1;
+    this->start_t_ = this->start_o_ = 0;
+    this->start_ok_ = this->whole_ && g.period == 1;
+    this->marks_[0] = {(uint16_t) kStart, (uint16_t) t, (uint16_t) o, {}, 0, 0, 0, {}};
     this->n_ = 1;
     // A side with no points has only missed, and all of it since the tip.
     for (int i = 0; i < 2; i++)
@@ -231,6 +265,20 @@ class Story {
     for (char c : g.last_play)
       h = (h ^ (uint8_t) c) * 16777619u;
     return g.last_play.empty() ? 0 : (int64_t) h + 1;
+  }
+
+  // A period began: the score and the box it began with. Known when the read
+  // at the end of the last one had 0:00, or this one has the full clock.
+  void period_starts_(const GameSnapshot &g, int left) {
+    this->start_ok_ = this->secs_ == 0 || left == period_length(g, left);
+    this->start_t_ = this->secs_ == 0 ? this->t_ : g.team_score;
+    this->start_o_ = this->secs_ == 0 ? this->o_ : g.opp_score;
+    if (this->secs_ == 0 && left == period_length(g, left) && (this->t_ != g.team_score || this->o_ != g.opp_score))
+      this->start_ok_ = false;  // a basket the two reads disagree on
+    this->start_box_ok_ = this->start_ok_ && this->end_ok_ && this->end_t_ == this->start_t_ && this->end_o_ == this->start_o_;
+    for (int i = 0; i < 2; i++)
+      this->start_box_[i] = this->end_box_[i];
+    this->end_ok_ = false;
   }
 
   bool decided_() const {
@@ -327,6 +375,19 @@ class Story {
       this->good_[i] = now[i];
       this->good_ok_[i] = true;
     }
+    // What the next period begins with, and this one began with.
+    if (this->secs_ == 0) {
+      this->end_ok_ = true;
+      this->end_t_ = score[0];
+      this->end_o_ = score[1];
+      for (int i = 0; i < 2; i++)
+        this->end_box_[i] = now[i];
+    } else if (!this->start_box_ok_ && this->start_ok_ && this->secs_ == period_length(g, this->secs_) &&
+               score[0] == this->start_t_ && score[1] == this->start_o_) {
+      this->start_box_ok_ = true;
+      for (int i = 0; i < 2; i++)
+        this->start_box_[i] = now[i];
+    }
   }
 
   // "7 of 13 shooting" for the run since mark `from`, "" when the reads can't
@@ -344,6 +405,86 @@ class Story {
       snprintf(out, sizeof(out), "%d of %d shooting", n.fm - w.fm, n.fa - w.fa);
     else if (n.la > w.la)
       snprintf(out, sizeof(out), "%d of %d free throws", n.lm - w.lm, n.la - w.la);
+  }
+
+  // Who scored a run's points, "Langsy 8 of the 10", when every basket of
+  // the side's since mark `from` was one player's and named.
+  void share_(int side, int from, int points, char (&out)[56]) const {
+    out[0] = '\0';
+    uint32_t ids[8]{};
+    int sum[8]{}, who_mark[8]{}, n = 0, seen = 0;
+    for (int i = from + 1; i < this->n_; i++) {
+      const Mark &m = this->marks_[i], &was = this->marks_[i - 1];
+      if (m.side == 3 - side)
+        continue;
+      if (m.side != side || m.who == 0)
+        return;
+      const int got = side == 1 ? m.t - was.t : m.o - was.o;
+      int k = 0;
+      while (k < n && ids[k] != m.who)
+        k++;
+      if (k == n) {
+        if (n == 8)
+          return;
+        ids[n++] = m.who;
+        who_mark[k] = i;
+      }
+      sum[k] += got;
+      seen += got;
+    }
+    if (seen != points || n == 0)
+      return;
+    int best = 0;
+    for (int k = 1; k < n; k++)
+      if (sum[k] > sum[best])
+        best = k;
+    if (n == 1)
+      fit_row(out, std::string("All ") + std::to_string(points) + " by " + this->marks_[who_mark[0]].name);
+    else if (sum[best] * 2 >= points)
+      fit_row(out, std::string(this->marks_[who_mark[best]].name) + " " + std::to_string(sum[best]) + " of the " +
+                       std::to_string(points));
+    else if (n >= 3)
+      snprintf(out, sizeof(out), "%d different scorers", n);
+  }
+
+  // What the run did to the margin, "Was down 6, now up 4".
+  void swing_(int side, int from, char (&out)[56]) const {
+    const Mark &m = this->marks_[from];
+    const int was = side == 1 ? m.t - m.o : m.o - m.t, now = side == 1 ? this->t_ - this->o_ : this->o_ - this->t_;
+    char a[16], b[16];
+    if (was == 0)
+      snprintf(a, sizeof(a), "Was tied");
+    else if (was < 0)
+      snprintf(a, sizeof(a), "Was down %d", -was);
+    else
+      snprintf(a, sizeof(a), "Lead was %d", was);
+    if (now == 0)
+      snprintf(b, sizeof(b), "now tied");
+    else
+      snprintf(b, sizeof(b), was > 0 ? "now %d" : now > 0 ? "now up %d" : "now down %d", abs(now));
+    snprintf(out, sizeof(out), "%s, %s", a, b);
+  }
+
+  // What the score says of a drought with no shots to count: how the other
+  // side did, or the last basket. Never a team's leader, which would read
+  // against it.
+  void dry_score_(int side, char (&out)[56]) const {
+    const int i = side - 1, now = side == 1 ? this->o_ : this->t_;
+    out[0] = '\0';
+    if (this->last_opp_[i] >= 0 && now > this->last_opp_[i])
+      snprintf(out, sizeof(out), "Outscored %d-0", now - this->last_opp_[i]);
+    else if (this->last_what_[i][0] != '\0')
+      snprintf(out, sizeof(out), "%s", this->last_what_[i]);
+    else if (this->last_opp_[i] >= 0 && now == this->last_opp_[i])
+      snprintf(out, sizeof(out), "Neither team has scored");
+    else if (this->last_period_[i] == this->period_)
+      snprintf(out, sizeof(out), "None since %d:%02d", this->last_secs_[i] / 60, this->last_secs_[i] % 60);
+    else if (this->last_period_[i] > this->reg_)
+      snprintf(out, sizeof(out), "None since overtime");
+    else if (this->last_period_[i] > 0 && this->reg_ == 2)
+      snprintf(out, sizeof(out), "None since the 1st half");
+    else if (this->last_period_[i] > 0)
+      snprintf(out, sizeof(out), "None since Q%d", this->last_period_[i]);
   }
 
   // "0 of 6, 0 of 5 on 3s" since the side last scored.
@@ -367,67 +508,140 @@ class Story {
   }
 
   void step_(const GameSnapshot &g, int t, int o, int at) {
-    const int dt = t - this->t_, dp = o - this->o_;
+    const int dt = t - this->t_, dp = o - this->o_, was_at = this->at_;
     this->at_ = at;
     if (dt == 0 && dp == 0)
       return;
+    const int margin = this->t_ - this->o_, now_margin = t - o;
     int ended_run = 0;
     if (dt > 0 && dp == 0)
       ended_run = this->unanswered_(2);
     else if (dp > 0 && dt == 0)
       ended_run = this->unanswered_(1);
+    const bool first[2] = {this->hi_t_ <= 0, this->hi_o_ <= 0};  // hasn't led yet
     // The most either side could have led by between the two reads.
-    const int margin = this->t_ - this->o_;
     this->hi_t_ = std::max(this->hi_t_, margin + dt);
     this->hi_o_ = std::max(this->hi_o_, dp - margin);
-    if (t - o > this->max_t_) {
-      this->max_t_ = t - o;
+    if (now_margin > this->max_t_) {
+      this->max_t_ = now_margin;
       this->big_at_ = at;
       this->big_side_ = 1;
-    } else if (o - t > this->max_o_) {
-      this->max_o_ = o - t;
+      this->big_score_[0] = {(uint16_t) t, (uint16_t) o};
+    } else if (-now_margin > this->max_o_) {
+      this->max_o_ = -now_margin;
       this->big_at_ = at;
       this->big_side_ = 2;
+      this->big_score_[1] = {(uint16_t) t, (uint16_t) o};
     }
+    // How long each had gone without one, at least: to the read before.
+    const int dry[2] = {this->last_t_ < 0 ? 0 : was_at - this->last_t_, this->last_o_ < 0 ? 0 : was_at - this->last_o_};
     if (dt > 0) {
       this->last_t_ = at;
       this->dry_ok_[0] = false;
+      this->last_opp_[0] = dp == 0 ? o : -1;  // theirs in the same read could have come after
+      this->last_what_[0][0] = '\0';
+      this->last_period_[0] = g.period;
+      this->last_secs_[0] = this->secs_;
     }
     if (dp > 0) {
       this->last_o_ = at;
       this->dry_ok_[1] = false;
+      this->last_opp_[1] = dt == 0 ? t : -1;
+      this->last_what_[1][0] = '\0';
+      this->last_period_[1] = g.period;
+      this->last_secs_[1] = this->secs_;
     }
     // Who it was, only when that one basket is the whole change: with two
-    // between reads, the last play isn't the one that ended the run.
+    // between reads, the last play isn't the one that ended the run. A play
+    // that went with another change doesn't count again.
     PlayPair play;
-    const bool one = g.play_value == dt + dp && (dt == 0 || dp == 0) && play_pair(g, play) && play.basket &&
+    const int64_t key = play_key_(g);
+    const bool fresh = key != 0 && key != this->used_key_;
+    this->used_key_ = key;
+    const bool one = fresh && g.play_value == dt + dp && (dt == 0 || dp == 0) && play_pair(g, play) && play.basket &&
                      play.side == (dt > 0 ? 1 : 2);
+    if (one)
+      fit_row(this->last_what_[dt > 0 ? 0 : 1], "Last: " + play.who_what(),
+              play.who[0] != '\0' ? std::string("Last: ") + play.who : "");
     if (ended_run >= kRun) {
       this->over_at_ = at;
       this->over_side_ = dt > 0 ? 1 : 2;
       this->over_run_ = ended_run;
+      this->over_dry_ = dry[dt > 0 ? 0 : 1];
       snprintf(this->over_who_, sizeof(this->over_who_), "%s", one ? play.who : "");
       snprintf(this->over_what_, sizeof(this->over_what_), "%s", one ? play.what : "");
     }
-    const uint8_t leader = t > o ? 1 : o > t ? 2 : this->leader_;
+    // How far behind a side has been since it last led.
+    if (now_margin != 0)
+      this->trail_[now_margin > 0 ? 1 : 0] = std::max(this->trail_[now_margin > 0 ? 1 : 0], abs(now_margin));
+    const uint8_t leader = now_margin > 0 ? 1 : now_margin < 0 ? 2 : this->leader_;
     if (leader != this->leader_ && this->leader_ != 0) {
       this->flip_at_ = at;
+      this->flip_first_ = this->whole_ && first[leader - 1];
+      this->flip_down_ = this->trail_[leader - 1];
+      this->trail_[leader - 1] = 0;
       this->flip_what_[0] = '\0';
       if (one)
         fit_row(this->flip_what_, play.who_what(), play.who);
     }
     this->leader_ = leader;
+    // Since when the side in front has been in front: the first read it was.
+    // Not known where the panel came in late, or a lead change between two
+    // reads can't be ruled out.
+    if (now_margin == 0) {
+      this->ahead_at_ = -1;
+      this->tie_score_ = {(uint16_t) t, (uint16_t) o};
+      this->tie_ok_ = true;
+    } else {
+      const bool same = margin != 0 && (margin > 0) == (now_margin > 0);
+      const int low = abs(margin) - (now_margin > 0 ? dp : dt);
+      if (!same) {
+        this->ahead_at_ = at;
+        this->ahead_period_ = g.period;
+        this->ahead_secs_ = this->secs_;
+        this->ahead_flip_ = this->flip_at_ == at;
+      } else if (low <= 0) {
+        this->ahead_at_ = -1;
+      }
+    }
     this->t_ = t;
     this->o_ = o;
     if (this->n_ == kMarks) {
       memmove(this->marks_, this->marks_ + 1, sizeof(Mark) * (kMarks - 1));
       this->n_--;
     }
-    this->marks_[this->n_++] = {(uint16_t) at, (uint16_t) t, (uint16_t) o, {}, 0};
+    this->marks_[this->n_++] = {(uint16_t) at, (uint16_t) t, (uint16_t) o, {}, 0, 0, 0, {}};
     for (int i = 0; i < 2; i++) {
       this->pre_[i] = this->good_[i];
       this->pre_ok_[i] = this->good_ok_[i];
     }
+    // The player of the basket, when there is just the one. ESPN can send
+    // the play before it has the name: the next reads of it fill it in.
+    Mark &m = this->marks_[this->n_ - 1];
+    m.side = dt > 0 && dp > 0 ? 0 : dt > 0 ? 1 : 2;
+    this->unnamed_key_ = 0;
+    if (one && play.who[0] != '\0')
+      name_mark_(m, play);
+    else if (one)
+      this->unnamed_key_ = key;
+  }
+
+  static void name_mark_(Mark &m, const PlayPair &play) {
+    m.who = play.who_id == 0 ? 1 : play.who_id;
+    snprintf(m.name, sizeof(m.name), "%s", play.who);
+  }
+
+  // The newest basket's player, once ESPN has the name.
+  void late_name_(const GameSnapshot &g) {
+    if (this->unnamed_key_ == 0 || play_key_(g) != this->unnamed_key_)
+      return;
+    PlayPair play;
+    if (!play_pair(g, play) || play.who[0] == '\0' || !play.basket)
+      return;
+    Mark &m = this->marks_[this->n_ - 1];
+    if (m.side != 0 && m.who == 0)
+      name_mark_(m, play);
+    this->unnamed_key_ = 0;
   }
 
   // Points side (1 ours, 2 theirs) has scored since the other last did.
@@ -470,6 +684,84 @@ class Story {
     return best;
   }
 
+  // "21-12 since then": both sides' points since a score the panel read.
+  struct Pair {
+    uint16_t t, o;
+  };
+  void since_(int side, const Pair &from, const char *what, char (&out)[56]) const {
+    const int us = this->t_ - from.t, them = this->o_ - from.o;
+    snprintf(out, sizeof(out), "%d-%d %s", side == 1 ? us : them, side == 1 ? them : us, what);
+  }
+
+  // A player with most of the side's last points, "Langsy has 8" over "of
+  // their last 10 points": every one of them named. 0 for none.
+  int hot_(int side, char (&text)[40], char (&more)[56]) const {
+    uint32_t ids[8]{};
+    int sum[8]{}, at[8]{}, n = 0, total = 0, best_mark = -1, best = 0, best_of = 0, last = -1;
+    for (int i = this->n_ - 1; i >= 1; i--) {
+      const Mark &m = this->marks_[i], &was = this->marks_[i - 1];
+      if (m.side == 3 - side)
+        continue;
+      if (m.side != side || m.who == 0)
+        break;
+      if (last < 0) {
+        last = m.at;
+        if (this->at_ - last > 120)
+          return 0;
+      }
+      total += side == 1 ? m.t - was.t : m.o - was.o;
+      int k = 0;
+      while (k < n && ids[k] != m.who)
+        k++;
+      if (k == n) {
+        if (n == 8)
+          break;
+        ids[n++] = m.who;
+        at[k] = i;
+      }
+      sum[k] += side == 1 ? m.t - was.t : m.o - was.o;
+      if (total > 14)
+        break;
+      if (sum[k] >= 8 && sum[k] * 10 >= total * 7 && sum[k] >= best) {
+        best = sum[k];
+        best_of = total;
+        best_mark = at[k];
+      }
+    }
+    if (best_mark < 0)
+      return 0;
+    snprintf(text, sizeof(text), "%s has %d", this->marks_[best_mark].name, best);
+    snprintf(more, sizeof(more), "of their last %d points", best_of);
+    return best * 32 + best_of;
+  }
+
+  // The period's score so far, "24-11 this half" over "10 of 14 shooting":
+  // from the second period on, two minutes in, when a side is 8 up in it.
+  bool period_line_(int side, const GameSnapshot &g, char (&text)[40], char (&more)[56]) const {
+    if (!this->start_ok_ || this->period_ < 2 || this->period_ > g.nba.regulation)
+      return false;
+    const int us = (side == 1 ? this->t_ - this->start_t_ : this->o_ - this->start_o_);
+    const int them = (side == 1 ? this->o_ - this->start_o_ : this->t_ - this->start_t_);
+    if (us - them < 8 || period_length(g, this->secs_) - this->secs_ < 120)
+      return false;
+    snprintf(text, sizeof(text), "%d-%d this %s", us, them, g.nba.regulation == 2 ? "half" : "quarter");
+    more[0] = '\0';
+    const int i = side - 1, down = side == 1 ? this->start_o_ - this->start_t_ : this->start_t_ - this->start_o_;
+    if (this->start_box_ok_ && this->now_ok_[i]) {
+      const Shots &n = this->now_[i], &w = this->start_box_[i];
+      if (n.points() - w.points() == us && n.fa > w.fa)
+        snprintf(more, sizeof(more), "%d of %d shooting", n.fm - w.fm, n.fa - w.fa);
+    }
+    if (more[0] == '\0') {
+      const char *when = g.nba.regulation == 2 ? "at halftime" : this->period_ == 2 ? "after Q1" : this->period_ == 3 ? "at halftime" : "after Q3";
+      if (down == 0)
+        snprintf(more, sizeof(more), "Tied %s", when);
+      else
+        snprintf(more, sizeof(more), "%s %d %s", down > 0 ? "Down" : "Up", abs(down), when);
+    }
+    return true;
+  }
+
   void put_(StoryKind kind, int side, int score, int value, const char *text, const char *detail = "") {
     if (score < kFloor)
       return;
@@ -500,15 +792,21 @@ class Story {
     // Out of reach late: only a bigger run or drought still says anything.
     const bool decided = this->decided_();
 
+    int run_side = 0;
     for (int side = 1; side <= 2; side++) {
       int b = 0, from = 0;
       const int a = this->run_(side, b, from);
       const int since = this->at_ - this->marks_[this->n_ - 1].at;
       if (a > 0 && since <= 120 && !(decided && a < 10)) {
+        run_side = side;
         // "a 12-2 run", "an 8-0 run"
         const bool an = a == 8 || a == 11 || a == 18;
         snprintf(buf, sizeof(buf), "on %s %d-%d run", an ? "an" : "a", a, b);
         this->run_detail_(side, from, a, more);
+        if (more[0] == '\0')
+          this->share_(side, from, a, more);
+        if (more[0] == '\0')
+          this->swing_(side, from, more);
         this->put_(StoryKind::RUN, side, this->aged_(StoryKind::RUN, side, a * 16 + b, 56 + 2 * (a - b), now_ms),
                    a * 16 + b, buf, more);
       }
@@ -517,6 +815,8 @@ class Story {
       if (dry >= (decided ? 240 : 120)) {
         snprintf(buf, sizeof(buf), "scoreless %d:%02d", dry / 60, dry % 60);
         this->dry_detail_(side, more);
+        if (more[0] == '\0')
+          this->dry_score_(side, more);
         this->put_(StoryKind::DROUGHT, side, this->aged_(StoryKind::DROUGHT, side, dry / 60, 44 + dry / 8, now_ms),
                    dry / 60, buf, more);
       }
@@ -541,15 +841,46 @@ class Story {
         if (!named.empty())
           fit_row(more, std::string(this->over_who_) + " " + this->over_what_, this->over_who_);
       }
+      if (more[0] == '\0' && this->over_dry_ >= 60)
+        snprintf(more, sizeof(more), "First in over %d minute%s", this->over_dry_ / 60, this->over_dry_ < 120 ? "" : "s");
       this->put_(StoryKind::RUN_OVER, this->over_side_, 72, this->over_at_, buf, more);
     }
     if (this->flip_at_ >= 0 && this->at_ - this->flip_at_ <= 45 && margin != 0) {
-      this->put_(StoryKind::TAKES_LEAD, margin > 0 ? 1 : 2, late ? 95 : 74, this->flip_at_, "takes the lead",
-                 this->leader_ == (margin > 0 ? 1 : 2) ? this->flip_what_ : "");
+      const int side = margin > 0 ? 1 : 2;
+      more[0] = '\0';
+      if (this->leader_ == side && this->flip_what_[0] != '\0')
+        snprintf(more, sizeof(more), "%s", this->flip_what_);
+      else if (this->leader_ == side && this->flip_first_)
+        snprintf(more, sizeof(more), "First lead of the game");
+      else if (this->leader_ == side && this->flip_down_ > 0)
+        snprintf(more, sizeof(more), "Were down %d", this->flip_down_);
+      this->put_(StoryKind::TAKES_LEAD, side, late ? 95 : 74, this->flip_at_, "takes the lead", more);
     }
-    if (late && this->left_ <= 180 && lead >= 1 && lead <= 3) {
-      snprintf(buf, sizeof(buf), "up %d", lead);
-      this->put_(StoryKind::CLOSE, margin > 0 ? 1 : 2, 78, margin + 8, buf, "One-possession game");
+    if (late && this->left_ > 0 && this->left_ <= 180 && lead >= 1 && lead <= 3) {
+      const int side = margin > 0 ? 1 : 2;
+      buf[0] = more[0] = '\0';
+      if (this->never_trailed(side)) {
+        snprintf(buf, sizeof(buf), "has never trailed");
+        snprintf(more, sizeof(more), "Led by %d at most", side == 1 ? this->max_t_ : this->max_o_);
+        if (this->led_by(side) == 0)
+          more[0] = '\0';
+      } else if (this->ahead_at_ >= 0) {
+        // "ahead since 4:10", "ahead since Q3"; the row says by how many.
+        if (this->ahead_period_ == this->period_)
+          snprintf(buf, sizeof(buf), "ahead since %d:%02d", this->ahead_secs_ / 60, this->ahead_secs_ % 60);
+        else if (this->ahead_period_ > g.nba.regulation)
+          snprintf(buf, sizeof(buf), "ahead since OT");
+        else if (g.nba.regulation == 2)
+          snprintf(buf, sizeof(buf), "ahead since the 1st half");
+        else
+          snprintf(buf, sizeof(buf), "ahead since Q%d", this->ahead_period_);
+        if (this->ahead_flip_ && this->flip_what_[0] != '\0')
+          snprintf(more, sizeof(more), "%s", this->flip_what_);
+        else if (this->ahead_flip_ && this->flip_down_ > 0)
+          snprintf(more, sizeof(more), "Were down %d", this->flip_down_);
+      }
+      if (buf[0] != '\0')
+        this->put_(StoryKind::CLOSE, side, 72, this->ahead_at_ < 0 ? 1 : this->ahead_at_ + 2, buf, more);
     }
     if (this->whole_) {
       // Only while it is the biggest whatever the order between reads.
@@ -558,22 +889,41 @@ class Story {
       if (this->big_side_ != 0 && big >= 10 && big >= top && big >= this->max_t_ && big >= this->max_o_ &&
           lead == big && this->at_ - this->big_at_ <= 60) {
         snprintf(buf, sizeof(buf), "biggest lead, %d", big);
+        more[0] = '\0';
+        if (this->never_trailed(this->big_side_))
+          snprintf(more, sizeof(more), "Has never trailed");
+        else if (this->tie_ok_)
+          this->since_(this->big_side_, this->tie_score_, "since it was tied", more);
+        else if (this->flip_down_ > 0 && this->leader_ == this->big_side_)
+          snprintf(more, sizeof(more), "Were down %d", this->flip_down_);
         this->put_(StoryKind::BIG_LEAD, this->big_side_,
-                   this->aged_(StoryKind::BIG_LEAD, this->big_side_, big, 58, now_ms), big, buf);
+                   this->aged_(StoryKind::BIG_LEAD, this->big_side_, big, 58, now_ms), big, buf, more);
       }
       for (int side = 1; side <= 2; side++) {
         const int down = side == 1 ? this->max_o_ : this->max_t_;
         const int now = side == 1 ? -margin : margin;
         if (down >= 12 && now <= down / 2 && now <= 8) {
           snprintf(buf, sizeof(buf), "was down %d", down);
-          this->put_(StoryKind::COMEBACK, side, this->aged_(StoryKind::COMEBACK, side, down, 64, now_ms), down, buf);
+          this->since_(side, this->big_score_[2 - side], "since then", more);
+          this->put_(StoryKind::COMEBACK, side, this->aged_(StoryKind::COMEBACK, side, down, 64, now_ms), down, buf,
+                     more);
         }
         const int hi = side == 1 ? this->hi_t_ : this->hi_o_;
         if (hi <= 0 && this->half_over_(g) && lead > 0) {
+          more[0] = '\0';
+          if (this->led_by(3 - side) > 0)
+            snprintf(more, sizeof(more), "Down as many as %d", this->led_by(3 - side));
           this->put_(StoryKind::NEVER_LED, side, this->aged_(StoryKind::NEVER_LED, side, side, 46, now_ms), side,
-                     "has never led");
+                     "has never led", more);
         }
       }
+    }
+    for (int side = 1; side <= 2; side++) {
+      const int hot = side == run_side ? 0 : this->hot_(side, buf, more);
+      if (hot != 0)
+        this->put_(StoryKind::HOT, side, this->aged_(StoryKind::HOT, side, hot, 50, now_ms), hot, buf, more);
+      if (this->period_line_(side, g, buf, more))
+        this->put_(StoryKind::PERIOD, side, 36, 0, buf, more);
     }
     const uint32_t key = this->n_lines_ == 0 || this->lines_[0].score < kLead
                              ? 0
@@ -615,6 +965,19 @@ class Story {
   int max_t_{0}, max_o_{0};  // the biggest lead seen
   int hi_t_{0}, hi_o_{0};    // the biggest that could have been between reads
   int last_t_{-1}, last_o_{-1};
+  int last_opp_[2]{-1, -1};      // theirs at the side's last basket, -1 when unsure
+  int last_period_[2]{}, last_secs_[2]{};
+  char last_what_[2][40]{};      // "Last: Williford layup"
+  int over_dry_{0};
+  int trail_[2]{}, flip_down_{0};
+  bool flip_first_{false}, ahead_flip_{false}, tie_ok_{false};
+  int ahead_at_{-1}, ahead_period_{0}, ahead_secs_{0};
+  Pair big_score_[2]{}, tie_score_{};
+  int reg_{4};
+  int start_t_{0}, start_o_{0}, end_t_{0}, end_o_{0};
+  bool start_ok_{false}, start_box_ok_{false}, end_ok_{false};
+  Shots start_box_[2], end_box_[2];
+  int64_t used_key_{0}, unnamed_key_{0};
   int big_at_{-1}, flip_at_{-1}, over_at_{-1};
   int over_run_{0};
   char over_who_[40]{}, over_what_[24]{};  // the basket that ended the last run
@@ -629,7 +992,7 @@ class Story {
   int64_t play_key_seen_{0};
   Mark marks_[kMarks]{};
   int n_{0};
-  Seen seen_[18];
+  Seen seen_[22];
   StoryLine lines_[kShow];
   StoryLine play_;
   int64_t held_key_{0};

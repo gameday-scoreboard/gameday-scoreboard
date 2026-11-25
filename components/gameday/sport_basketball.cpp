@@ -80,7 +80,7 @@ void basketball_from_event(JsonObjectConst ev, GameSnapshot &s) {
   else if (name == "STATUS_HALFTIME")
     b.phase = Phase::HALFTIME;
   // A college game's misses come with the points the shot was worth.
-  if (s.last_play.find("misses ") != std::string::npos)
+  if (s.last_play.find("misses ") != std::string::npos || s.last_play.find("missed ") != std::string::npos)
     s.play_value = 0;
   // The game's points leaders, for the situation row (row_text.h). Before
   // the start ESPN's list is the season's (points per game), so only now.
@@ -255,7 +255,7 @@ std::string basketball_status_text(const GameSnapshot &s, const TickerOptions &o
       add_last_play(out, o.held_play);  // tidied when it was held
     else
       add_part(out, break_line(s, o));
-  } else if (o.row_timeout && timeout_play(s.last_play) && out.empty()) {
+  } else if (o.row_timeout && (timeout_play(s.last_play) || o.held_break) && out.empty()) {
     add_part(out, break_line(s, o));
   }
   if (out.empty())

@@ -111,7 +111,7 @@ inline std::string row_leader(const GameSnapshot &g, int side) {
   return few.empty() ? "" : few + " pts";
 }
 
-inline void add_story_pair(RowLines &r, const GameSnapshot &g, const Story *st, const StoryLine &s) {
+inline void add_story_pair(RowLines &r, const GameSnapshot &g, const StoryLine &s) {
   add_pair(r, g, s.side, s.text, s.detail[0] != '\0' ? std::string(s.detail) : row_leader(g, s.side), 6);
 }
 
@@ -126,6 +126,8 @@ inline void add_leader_pair(RowLines &r, const GameSnapshot &g, const Story *st,
     more = row_shooting(g, st, side);
   else if (more.compare(0, name.size(), name) == 0)
     more = "and " + more.substr(name.size());  // the same player
+  if (more.empty())
+    more = "Team high";
   if (!add_pair(r, g, side, s + " pts", more, 5))
     add_pair(r, g, side, s, more, 5);
 }
@@ -163,25 +165,25 @@ inline void add_stats(RowLines &r, const GameSnapshot &g, int first) {
 
 // Both rows' lines for a basketball game being played, into r, best first.
 // `st` is nullptr when the panel has no story of it.
-inline void fill_story_rows(RowLines &r, const GameSnapshot &g, const Story *st, const RowOptions &o) {
+inline void fill_story_rows(RowLines &r, const GameSnapshot &g, const Story *st, const RowOptions &o, bool held = false) {
   using namespace detail;
   r.n = 0;
   r.play_at = 0xFF;
   if (!g.valid || g.sport != Sport::BASKETBALL || g.state != GameState::IN)
     return;
-  const bool stopped = basketball_break(g);
+  const bool stopped = basketball_break(g, held);
   const bool decided = st != nullptr && st->decided(g);
   const int told = st != nullptr ? st->count(g) : 0;
   int at = 0;
   if (stopped)
     add_stats(r, g, 0);
   for (; at < told && st->line(at).score >= Story::kLead; at++)
-    add_story_pair(r, g, st, st->line(at));
+    add_story_pair(r, g, st->line(at));
   const StoryLine *play = !stopped && o.last_play && st != nullptr ? st->play(g) : nullptr;
   if (play != nullptr && add_pair(r, g, play->side, play->text, play->detail, 5))
     r.play_at = r.n - 1;
   for (; at < told; at++)
-    add_story_pair(r, g, st, st->line(at));
+    add_story_pair(r, g, st->line(at));
   if (o.win_chance && g.team_win_pct >= 1 && g.team_win_pct <= 99) {
     const int side = g.team_win_pct >= 50 ? 1 : 2;
     const int pct = side == 1 ? g.team_win_pct : 100 - g.team_win_pct;
@@ -194,10 +196,9 @@ inline void fill_story_rows(RowLines &r, const GameSnapshot &g, const Story *st,
   const int by = decided ? st->led_by(lead_side) : 0;
   if (by > abs(g.team_score - g.opp_score)) {
     const std::string n = std::to_string(by);
-    std::string more = row_shooting(g, st, lead_side);
-    if (more.empty())
-      more = row_leader(g, lead_side);
-    if (!add_pair(r, g, lead_side, "led by as many as " + n, more, 5))
+    std::string more = st->never_trailed(lead_side) ? std::string("Has never trailed") : row_shooting(g, st, lead_side);
+    // Not over the leader: the next pair is the same player.
+    if (!more.empty() && !add_pair(r, g, lead_side, "led by as many as " + n, more, 5))
       add_pair(r, g, lead_side, "led by " + n, more, 5);
   }
   add_leader_pair(r, g, st, 1);

@@ -42,6 +42,7 @@ struct PlayPair {
   bool basket{false};  // points went up with it
   char what[24]{};     // "three", "driving layup", "steal"
   char who[40]{};      // "Baker Jr.", "" when ESPN names nobody
+  uint32_t who_id{0};  // the full name, hashed: two players can share a last name
   char detail[56]{};   // row 4, "Baker Jr. from 25 feet", at most kRowChars; "" for none
   // The basket in one piece, "Baker Jr. three" (a run's end, a lead change).
   std::string who_what() const {
@@ -103,7 +104,8 @@ inline bool play_pair(const GameSnapshot &g, PlayPair &p) {
   if (side == 0)
     return false;
   const std::string text = ::esphome::gameday::panel_text(basketball_tidy_play(g, g.last_play));
-  std::string who, what, a, b, c;
+  std::string who, what, a, b, c, full_name;
+  bool block_by_other = false;
   size_t at;
   if (g.play_value > 0 && (text.rfind("makes ", 0) == 0 || (at = text.find(" makes ")) != std::string::npos)) {
     at = text.rfind("makes ", 0) == 0 ? 0 : text.find(" makes ");
@@ -111,6 +113,8 @@ inline bool play_pair(const GameSnapshot &g, PlayPair &p) {
     // basketball_tidy_play made it the abbreviation.
     const std::string full = text.substr(0, at);
     who = full == g.team_abbr || full == g.opp_abbr ? "" : play_surname(full);
+    if (!who.empty())
+      full_name = full;
     const std::string shot = text.substr(at + (at == 0 ? 6 : 7));
     what = detail::shot_kind(shot, g.play_value);
     p.basket = true;
@@ -135,6 +139,12 @@ inline bool play_pair(const GameSnapshot &g, PlayPair &p) {
   } else if (ends_with(text, " Steal.")) {
     what = "steal";
     c = who = play_surname(text.substr(0, text.size() - 7));
+  } else if (const size_t mid = text.find(" blocks "); mid != std::string::npos && mid > 0) {
+    // The NBA's and WNBA's: "Peyton Watson blocks Josh Giddey's driving
+    // dunk", sent as the shooter's own play. The block is the other side's.
+    what = "block";
+    c = who = play_surname(text.substr(0, mid));
+    block_by_other = true;
   } else if (ends_with(text, " Block.")) {
     what = "block";
     c = who = play_surname(text.substr(0, text.size() - 7));
@@ -178,10 +188,14 @@ inline bool play_pair(const GameSnapshot &g, PlayPair &p) {
   } else {
     return false;
   }
-  p.side = side;
+  p.side = block_by_other ? (uint8_t) (3 - side) : side;
   snprintf(p.what, sizeof(p.what), "%s", what.c_str());
   if (who.size() < sizeof(p.who))
     memcpy(p.who, who.c_str(), who.size() + 1);
+  uint32_t h = 2166136261u;
+  for (char ch : full_name)
+    h = (h ^ (uint8_t) ch) * 16777619u;
+  p.who_id = full_name.empty() ? 0 : h;
   fit_row(p.detail, a, b, c);
   return true;
 }
@@ -195,7 +209,8 @@ inline int play_shooter(const GameSnapshot &g, bool &shot) {
   if (side == 0)
     return 0;
   const std::string &t = g.last_play;
-  if (detail::play_has(t, "makes ") || detail::play_has(t, "misses ")) {
+  if (detail::play_has(t, "makes ") || detail::play_has(t, "misses ") || detail::play_has(t, "missed ") ||
+      detail::play_has(t, " blocks ")) {
     shot = true;
     return side;
   }

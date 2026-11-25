@@ -109,9 +109,31 @@ script:
           if (W < 128 || r.n == 0) {
             lv_obj_set_hidden(lbl, true);
             id(gd_row_turn) = 0;
+            id(gd_row_shape) = 0;
             return;
           }
-          if (r.news != id(gd_row_news) || id(gd_row_turn) >= r.n) {
+          // A basketball line stays up its first 2.5 s: a read that brings
+          // another one waits (the 1 s interval below tries again). Not for
+          // another game's.
+          const uint32_t teams = ::espn::row_shape(u.team_abbr) * 31 + ::espn::row_shape(u.opponent_abbr);
+          const bool new_line = r.news != id(gd_row_news) || id(gd_row_turn) >= r.n;
+          const int want = !new_line ? id(gd_row_turn) : (r.news != id(gd_row_news) && r.jump < r.n) ? r.jump : 0;
+          if (r.line[want].side != 0) {
+            const uint32_t shape = ::espn::row_shape(r.line[want].forms) + r.line[want].side;
+            if (shape != id(gd_row_shape) && id(gd_row_shape) != 0 && teams == id(gd_row_teams) &&
+                millis() - id(gd_row_since) < 2500) {
+              id(gd_row_wait) = true;
+              return;
+            }
+            if (shape != id(gd_row_shape)) {
+              id(gd_row_shape) = shape;
+              id(gd_row_since) = millis();
+            }
+          } else {
+            id(gd_row_shape) = 0;
+          }
+          id(gd_row_teams) = teams;
+          if (new_line) {
             id(gd_row_turn) = r.news != id(gd_row_news) && r.jump < r.n ? r.jump : 0;
             id(gd_row_news) = r.news;
             id(gd_row_left) = r.line[id(gd_row_turn)].secs;
@@ -1397,6 +1419,10 @@ interval:
       # The situation row's next line when this one's time is up.
       - lambda: |-
           const ::espn::RowLines &r = id(gameday_ctl).last_update().row;
+          if (id(gd_row_wait)) {
+            id(gd_row_wait) = false;
+            id(gd_row_show).execute();
+          }
           if (r.n < 2 || --id(gd_row_left) > 0)
             return;
           id(gd_row_turn) = (id(gd_row_turn) + 1) % r.n;
@@ -1462,6 +1488,24 @@ globals:
     type: uint32_t
     restore_value: no
     initial_value: '0'
+  # Basketball's line up now: what it says but for its digits, whose game it
+  # is, when it came up, and whether a read waits for it (gd_row_show).
+  - id: gd_row_shape
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: gd_row_teams
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: gd_row_since
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: gd_row_wait
+    type: bool
+    restore_value: no
+    initial_value: 'false'
   - id: gd_row_room
     type: int
     restore_value: no
