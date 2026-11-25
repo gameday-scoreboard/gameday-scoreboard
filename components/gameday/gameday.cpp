@@ -5707,7 +5707,6 @@ void GamedayComponent::clock_next_line_(UpdateFields &f, const GameSnapshot &g) 
   return ::espn::countdown_turn(now, next, custom, weather);
 }
 
-// Read only with a day set (countdown_.ymd not 0).
 int64_t GamedayComponent::custom_start_() const {
   return ::espn::countdown_day_start(this->countdown_.ymd, utc_offset_at);
 }
