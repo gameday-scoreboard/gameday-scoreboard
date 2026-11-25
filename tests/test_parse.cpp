@@ -8752,6 +8752,20 @@ static void test_row_text() {
   hold.read(hid);
   CHECK_EQ(hold.basket, std::string(""));
   hold.read(reb);
+  // A college miss comes with the points it was worth: still no basket.
+  {
+    std::string json = slurp("fixtures/event_nba_live.json");
+    const size_t at = json.find("makes ");
+    CHECK(at != std::string::npos);
+    json.replace(at, 6, "misses ");
+    GameSnapshot miss;
+    CHECK(parse_event_str(json, Sport::BASKETBALL, kPacers, miss, root_id(json)));
+    CHECK(miss.last_play.find("misses ") != std::string::npos);
+    CHECK_EQ((int) miss.play_value, 0);
+    RowHold m;
+    m.read(miss);
+    CHECK_EQ(m.basket, std::string(""));
+  }
   // College's free throws have no space in their type.
   GameSnapshot cft = reb;
   cft.play_value = 1;
