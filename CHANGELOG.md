@@ -66,6 +66,7 @@ A new Flights page shows the planes over your home, women's college basketball j
 - 🏷️ Home Assistant lists the panel as **Scoreboard by Game Day** instead of gameday-scoreboard by bharvey88
 - 🔎 Loading the scoreboard says **Looking for** and your team, or the live games it follows, instead of Looking up scores
 - 🖼️ Adding a picture while a message card on **Whenever no game is on** holds the board says so, and which setting to change, instead of "It's up next"
+- 📅 **Date countdown** reads **Today** until midnight on the day the clocks go back, and is gone at midnight on the day they go forward, where it ended an hour early or late
 
 ## v2026.11.5
 

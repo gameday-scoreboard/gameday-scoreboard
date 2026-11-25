@@ -387,26 +387,55 @@ static void sweep_countdown_text() {
 
 // An owner's own day, every date of the sweep: the digits before it, "Today"
 // from its midnight to the next, nothing after. The day is 23 or 25 hours
-// long when the clocks change.
+// long when the clocks change. The card gets the day's start and end from
+// the same two functions the panel calls.
+static const Zone *custom_zone = nullptr;
+static int32_t custom_offset(int64_t epoch) { return custom_zone->off[Zone::slot(epoch)]; }
+
 static void sweep_custom_day(const Zone &z) {
+  custom_zone = &z;
   int start = 0;
   for (int i = Zone::first() + 1; i < Zone::last(); i++) {
     if (z.day[i] == z.day[i - 1])
       continue;
     if (start != 0) {
-      const int64_t from = Zone::at(start), to = Zone::at(i);
+      uint32_t ymd = 0;
+      SWEEP(parse_countdown_date(strf("%Y-%m-%d", z.tm[start]), ymd), "parse_countdown_date", Zone::at(start), "");
+      const int64_t from = countdown_day_start(ymd, custom_offset), to = countdown_day_end(ymd, custom_offset);
+      const int64_t midnight = Zone::at(start), next = Zone::at(i);
+      SWEEP(from == midnight, "countdown_day_start", midnight, std::to_string(from - midnight) + " s off");
+      SWEEP(to == next, "countdown_day_end", next, std::to_string(to - next) + " s off");
       for (int k = start - 8; k < i + 8; k += 2) {
         const std::string s = countdown_card_text(from, to, Zone::at(k));
         if (k < start)
-          check_digits(s, from - Zone::at(k), Zone::at(k));
+          check_digits(s, midnight - Zone::at(k), Zone::at(k));
         else
           SWEEP_EQ(s, z.day[k] == z.day[start] ? "Today" : "", "the custom countdown's day", Zone::at(k));
       }
-      check_digits(countdown_card_text(from, to, from - 1), 1, from - 1);
-      SWEEP_EQ(countdown_card_text(from, to, to - 1), "Today", "the custom countdown's day", to - 1);
-      SWEEP_EQ(countdown_card_text(from, to, to), "", "the custom countdown's day", to);
+      check_digits(countdown_card_text(from, to, midnight - 1), 1, midnight - 1);
+      SWEEP_EQ(countdown_card_text(from, to, next - 1), "Today", "the custom countdown's day", next - 1);
+      SWEEP_EQ(countdown_card_text(from, to, next), "", "the custom countdown's day", next);
     }
     start = i;
+  }
+}
+
+// US Central's two clock changes of 2027, and Christmas, worked out by hand:
+// Nov 7 is 25 hours long, Mar 14 is 23.
+static void check_custom_day_changes(const Zone &central) {
+  custom_zone = &central;
+  static const struct {
+    uint32_t ymd;
+    int64_t start, end;
+  } kWant[] = {
+      {20271107, 1825563600, 1825653600},  // 2027-11-07T05:00Z to 2027-11-08T06:00Z
+      {20270314, 1805004000, 1805086800},  // 2027-03-14T06:00Z to 2027-03-15T05:00Z
+      {20271225, 1829714400, 1829800800},  // 2027-12-25T06:00Z to 2027-12-26T06:00Z
+  };
+  for (const auto &d : kWant) {
+    const int64_t from = countdown_day_start(d.ymd, custom_offset), to = countdown_day_end(d.ymd, custom_offset);
+    SWEEP(from == d.start, "countdown_day_start", d.start, std::to_string(from - d.start) + " s off");
+    SWEEP(to == d.end, "countdown_day_end", d.end, std::to_string(to - d.end) + " s off");
   }
 }
 
@@ -641,6 +670,8 @@ int main() {
     sweep_kickoff_label(z);
     sweep_night(z);
     sweep_custom_day(z);
+    if (strcmp(t.name, "US Central") == 0)
+      check_custom_day_changes(z);
     sweep_clock_text(z);
     sweep_roll_day(z);
     // Noon Eastern is already the next day there.
