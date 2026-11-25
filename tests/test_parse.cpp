@@ -6889,6 +6889,14 @@ static void test_golf_stream() {
   broken.replace(broken.find("\"C. Late\""), 9, "\"C. Late");
   CHECK(!parse_golf(broken, League::PGA, nullptr, 0, no));
 
+  // So does a bad value in a later event, or in a competition after the first.
+  for (const char *bad : {R"({"name":1.2.3})", R"({"name":"x\q"})",
+                          R"({"competitions":[{},{"status":{"period":1-2}}]})",
+                          R"({"competitions":[{},{"competitors":[{"order":1.2.3}]}]})"}) {
+    broken = json.substr(0, json.rfind("],\"provider\"")) + "," + bad + "]}";
+    CHECK(!parse_golf(broken, League::PGA, nullptr, 0, no));
+  }
+
   // A document that repeats an order keeps the top at kGolfTopRows rows.
   json = R"({"events":[{"competitions":[{"competitors":[)";
   for (int i = 0; i < 40; i++)

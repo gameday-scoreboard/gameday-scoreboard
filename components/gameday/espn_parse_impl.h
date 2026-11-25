@@ -927,12 +927,10 @@ class GolfRead {
   }
 
   JsonDocument doc;
-  bool done{false};  // an event in progress is picked, so later events are only skipped
 
   // A second "events" key replaces the first, as it does in ArduinoJson.
   void restart(bool list) {
     this->have_pick_ = false;
-    this->done = false;
     this->seen_ = list;
     this->pick_ = GolfEvent();
   }
@@ -1080,7 +1078,6 @@ class GolfRead {
       return;
     this->pick_ = std::move(this->cur_);
     this->have_pick_ = true;
-    this->done = rank == 3;
   }
 
   // The picked event's board, with each row's line for the current round.
@@ -1195,7 +1192,9 @@ class GolfRead {
 };
 
 // The first competition of an event: its status, and its competitors one
-// at a time. limit is the nesting left at the competitions array.
+// at a time. A later competition is read the same way and dropped, so a bad
+// value in it fails the read as it does for ArduinoJson. limit is the nesting
+// left at the competitions array.
 template<typename TInput> void golf_competitions(JsonWalk<TInput> &w, GolfRead &g, uint8_t limit) {
   g.clear_competition();
   if (w.peek() != '[') {
@@ -1206,19 +1205,20 @@ template<typename TInput> void golf_competitions(JsonWalk<TInput> &w, GolfRead &
   char key[16];
   for (bool first = true, zero = true; w.next_item(first); zero = false) {
     uint8_t comp = limit;
-    if (!zero || w.peek() != '{') {
+    if (w.peek() != '{') {
       w.skip(limit);
       continue;
     }
     w.enter('{', comp);
     for (bool kf = true; w.next_key(kf, key, sizeof(key));) {
       if (strcmp(key, "status") == 0) {
-        if (w.value(g.doc, g.status_filter(), comp))
+        if (w.value(g.doc, g.status_filter(), comp) && zero)
           g.competition_status(g.doc.as<JsonVariantConst>());
       } else if (strcmp(key, "competitors") != 0) {
         w.skip(comp);
       } else {
-        g.clear_field();
+        if (zero)
+          g.clear_field();
         uint8_t list = comp;
         if (w.peek() != '[') {
           w.skip(comp);
@@ -1226,7 +1226,7 @@ template<typename TInput> void golf_competitions(JsonWalk<TInput> &w, GolfRead &
         }
         w.enter('[', list);
         for (bool cf = true; w.next_item(cf);)
-          if (w.value(g.doc, g.golfer_filter(), list))
+          if (w.value(g.doc, g.golfer_filter(), list) && zero)
             g.golfer(g.doc.as<JsonObjectConst>());
       }
     }
@@ -1267,7 +1267,7 @@ bool parse_golf(TInput &input, League league, const uint32_t *fav_ids, size_t fa
     w.enter('[', events);
     for (bool ef = true; w.next_item(ef);) {
       uint8_t ev = events;
-      if (g.done || w.peek() != '{') {
+      if (w.peek() != '{') {
         w.skip(events);
         continue;
       }
