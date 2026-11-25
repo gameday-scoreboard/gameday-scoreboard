@@ -37,7 +37,7 @@ through `update_important` in the panel's state.
 
 ## Unreleased
 
-A new Flights page shows the planes over your home, women's college basketball and volleyball join the panel, it can play an effect whenever no game of yours is on, a Game Day card shows a QR code between games, and Add network lists nearby Wi-Fi.
+A new Flights page shows the planes over your home, women's college basketball and volleyball join in, it can play an effect whenever no game of yours is on, a Game Day card shows a QR code between games, and Add network lists nearby Wi-Fi.
 
 ### ⚠️ Heads up
 

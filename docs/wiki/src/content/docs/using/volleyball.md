@@ -21,9 +21,9 @@ Volleyball teams have the Up next list on the device page, like football and soc
 - **The set and the sets won** are under them, like "Set 3  1-1": the third set, one set each, your team's sets first.
 - **Between sets** the numbers stay on the set that just ended, and the line under them says which, like "End 2  1-1", until the next set starts.
 
-On a 128-wide board the row under that lists the **finished sets**, your team's points first, like "25-19 17-25". The ticker shows both records.
+On a 128-wide board the row under that lists the **finished sets**, your team's points first, like "25-19 17-25". The ticker shows the tournament's name and the TV channel, or both records when there is neither.
 
-On a single 64x64 panel the set and the sets won take the abbreviations' place during play, and the finished sets are in the ticker.
+On a single 64x64 panel the set and the sets won take the abbreviations' place during play, and the finished sets and the records are in the ticker.
 
 ESPN doesn't send who is serving or the last play in volleyball, so the board and ticker show neither, and there are no leader cards.
 

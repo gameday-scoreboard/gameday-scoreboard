@@ -864,7 +864,7 @@ test("a screen reader gets each control's name, role and state", async ({ page, 
   await expect(tabs.getByRole("tab", { name: "NCAAF" })).toBeFocused();
   await expect(page.getByRole("tabpanel").locator(".tile .a").first()).toContainText("NCAAF");
   await page.keyboard.press("End");
-  await expect(tabs.getByRole("tab", { selected: true })).toHaveText("NHL");
+  await expect(tabs.getByRole("tab", { selected: true })).toHaveText("NCAAVB");
   await page.keyboard.press("ArrowRight");
   await expect(tabs.getByRole("tab", { selected: true })).toHaveText("On now");
   await expect(tabs.locator('[tabindex="0"]')).toHaveText("On now");

@@ -291,8 +291,15 @@ static void test_ticker_and_row() {
   TickerOptions o;
   o.clock = false;
   CHECK_EQ(status_text(g, o, ""), std::string("25-19, 17-25 | NEB 30-0 | WIS 25-4"));
-  o.row_sets = true;  // a wide board has the sets on its row
-  CHECK_EQ(status_text(g, o, ""), std::string("NEB 30-0 | WIS 25-4"));
+  o.row_sets = true;  // a wide board has the sets on its row and the records under the logos
+  CHECK_EQ(status_text(g, o, ""), std::string("NEB 30-0 | WIS 25-4"));  // nothing else to say
+  g.game_name = "Big Ten Tournament - Final";
+  g.tv = "BTN";
+  CHECK_EQ(status_text(g, o, ""), std::string("Big Ten Tournament - Final | BTN"));
+  o.odds = false;
+  CHECK_EQ(status_text(g, o, ""), std::string("Big Ten Tournament - Final"));
+  o.row_sets = false;
+  CHECK_EQ(status_text(g, o, ""), std::string("25-19, 17-25 | NEB 30-0 | WIS 25-4 | Big Ten Tournament - Final"));
   GameSnapshot bare = live(0, 0, 1, {3}, {2});
   bare.team_record.clear();
   bare.opp_record.clear();

@@ -104,12 +104,19 @@ std::string volleyball_status_text(const GameSnapshot &s, const TickerOptions &o
   }
   if (o.clock)
     add_part(out, s.short_detail);
-  // A wide board has the finished sets on the row under the clock.
-  if (!o.row_sets)
+  // A wide board has the finished sets on the row under the clock and the
+  // records under the logos.
+  if (!o.row_sets) {
     add_part(out, volleyball_sets(s, ", "));
+    add_part(out, records_line(s));
+  }
   if (o.last_play)
     add_last_play(out, s.last_play);
-  add_part(out, records_line(s));
+  add_part(out, s.game_name);
+  if (o.odds)
+    add_part(out, s.tv);
+  if (out.empty())
+    out = records_line(s);
   if (out.empty())
     out = s.short_detail.empty() ? "In Progress" : s.short_detail;
   return out;
