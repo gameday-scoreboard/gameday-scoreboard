@@ -12,8 +12,9 @@
 //
 // Football: down and distance, then the win chance after a big swing
 // (WinSwing below).
-// Basketball: the last basket, each side's points leader, the playoff
-// series, the win chance after a big swing. No timeout line: the stopped clock already shows
+// Basketball: what is happening in the game (story.h: a run, a drought, a
+// lead change), the last basket, each side's points leader, its rebounds or
+// assists leader, the playoff series, the win chance after a big swing. No timeout line: the stopped clock already shows
 // the break, and ESPN gives no count of basketball timeouts left.
 // Soccer: the latest goal.
 //
@@ -29,6 +30,7 @@
 #include "espn_parse.h"
 #include "game_leaders.h"
 #include "panel_text.h"
+#include "story.h"
 
 namespace espn {
 
@@ -231,6 +233,15 @@ inline void add_scorer(RowLines &r, const std::string &abbr, const std::string &
   l->add_form(::esphome::gameday::panel_text(scorer + " pts"));
 }
 
+// A side's rebounds or assists leader, "IND Siakam 9 reb".
+inline void add_extra(RowLines &r, const std::string &abbr, const char *extra, uint32_t rgb) {
+  if (extra[0] == '\0')
+    return;
+  RowLine *l = r.add(abbr + " " + extra, rgb);
+  if (l != nullptr)
+    l->add_form(::esphome::gameday::panel_text(extra));
+}
+
 // Down and distance, "2nd & 17", then "2nd&17" and "2&17" for when the
 // clear part of the field strip is narrower (the ball or the line to gain
 // near midfield).
@@ -255,7 +266,7 @@ inline void add_down(RowLines &r, const GameSnapshot &g, uint32_t rgb) {
 // game on and not at halftime (gameday.cpp emit_); `hold` has already read
 // this game.
 inline void fill_row_lines(RowLines &r, const GameSnapshot &g, const RowHold &hold, const RowOptions &o,
-                           bool playing) {
+                           bool playing, const Story *story = nullptr) {
   r.n = 0;
   if (!g.valid || g.state != GameState::IN)
     return;
@@ -275,13 +286,25 @@ inline void fill_row_lines(RowLines &r, const GameSnapshot &g, const RowHold &ho
         r.add(series, white);
         break;
       }
+      // The best of the game's story leads; the rest comes after the last
+      // basket. With two stories up, the leaders give way to them.
+      const int told = story != nullptr ? story->count(g) : 0;
+      int at = 0;
+      for (; at < told && story->line(at).score >= Story::kLead; at++)
+        r.add(story->line(at).text, white, 5);
       if (o.last_play && hold.event_id == g.event_id)
         add_basket(r, hold.basket, white);
-      add_scorer(r, g.team_abbr, g.nba.team_scorer, white);
-      add_scorer(r, g.opp_abbr, g.nba.opp_scorer, white);
-      r.add(series, white);
+      for (; at < told; at++)
+        r.add(story->line(at).text, white, 5);
       if (o.win_chance)
         add_win_chance(r, g, 4);
+      r.add(series, white);
+      add_scorer(r, g.team_abbr, g.nba.team_scorer, white);
+      add_scorer(r, g.opp_abbr, g.nba.opp_scorer, white);
+      if (told < 2) {
+        add_extra(r, g.team_abbr, g.nba.team_extra, white);
+        add_extra(r, g.opp_abbr, g.nba.opp_extra, white);
+      }
       break;
     }
     case Sport::SOCCER:
@@ -292,9 +315,10 @@ inline void fill_row_lines(RowLines &r, const GameSnapshot &g, const RowHold &ho
   }
 }
 
-inline RowLines row_lines(const GameSnapshot &g, const RowHold &hold, const RowOptions &o, bool playing) {
+inline RowLines row_lines(const GameSnapshot &g, const RowHold &hold, const RowOptions &o, bool playing,
+                          const Story *story = nullptr) {
   RowLines r;
-  fill_row_lines(r, g, hold, o, playing);
+  fill_row_lines(r, g, hold, o, playing, story);
   return r;
 }
 

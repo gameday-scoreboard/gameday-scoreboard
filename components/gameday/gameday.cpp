@@ -2207,6 +2207,7 @@ void GamedayComponent::apply_fav_job_(uint32_t now) {
   std::swap(e.game, j.game);
   const GameSnapshot &old = j.game;
   this->goal_holds_.update(e.game);
+  this->stories_.read(e.game, millis());
   // A refresh that came back with the same final backs off instead of
   // retrying every minute: six hours when the look-ahead found no game in the
   // coming days, 15 minutes when a read failed or the league does not look
@@ -5108,6 +5109,7 @@ void GamedayComponent::apply_job_() {
   this->cache_unconfirmed_ = false;
   this->gone_event_.clear();
   this->goal_holds_.update(j.game);
+  this->stories_.read(j.game, millis());
   this->prev_ = this->game_;
   this->game_ = j.game;
   this->mark_good_poll_();
@@ -5295,13 +5297,20 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
     ::espn::RowOptions ro;
     ro.win_chance = this->win_chance_on() && win_due;
     ro.last_play = this->ticker_last_play();
-    ::espn::fill_row_lines(f.row, g, this->row_hold_, ro, playing);
+    // The read that filled the board may have come another way than the two
+    // polls; a repeat of the same read changes nothing.
+    if (playing)
+      this->stories_.read(g, millis());
+    const ::espn::Story *story = this->stories_.find(g);
+    ::espn::fill_row_lines(f.row, g, this->row_hold_, ro, playing, story);
     // Hockey's one line (shots and the last goal, sport_hockey.cpp) on the same row.
     if (g.sport == ::espn::Sport::HOCKEY && g.state == GameState::IN && f.row.n == 0)
       f.row.add(f.situation, 0xFFFFFF);
     std::string news = ::espn::row_news(g, this->row_hold_);
-    if (news != this->row_news_) {
+    const uint32_t told = story != nullptr ? story->news() : 0;
+    if (news != this->row_news_ || told != this->row_story_n_) {
       this->row_news_ = news;
+      this->row_story_n_ = told;
       this->row_news_n_++;
     }
     f.row.news = this->row_news_n_;

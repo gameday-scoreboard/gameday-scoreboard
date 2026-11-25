@@ -95,6 +95,10 @@ struct Basketball {
     uint8_t fg_made{0}, fg_tried{0}, three_made{0}, three_tried{0}, rebounds{0};
   };
   Box team_box, opp_box;
+  // Each side's rebounds or assists leader, whichever is more of a night,
+  // "Roman 9 reb"; "" under 7 rebounds and 6 assists. Arrays, not strings,
+  // as hockey's goal is.
+  char team_extra[24]{}, opp_extra[24]{};
 };
 
 // Hockey's extras. ESPN's period 5 is the shootout in a regular-season or

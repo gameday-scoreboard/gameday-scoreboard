@@ -8720,13 +8720,16 @@ static void test_row_text() {
   hold.read(g);
   CHECK_EQ(hold.basket, std::string("McDaniels 2"));
   RowLines b = row_lines(g, hold, on, true);
-  CHECK_EQ((int) b.n, 4);
+  CHECK_EQ((int) b.n, 6);
   CHECK_EQ(b.line[0].form(0), std::string("Last: McDaniels 2"));
   CHECK_EQ(b.line[0].rgb, (uint32_t) 0xFFFFFF);
-  CHECK_EQ(b.line[1].form(0), std::string("IND Nesmith 19 pts"));
-  CHECK_EQ(b.line[1].rgb, (uint32_t) 0xFFFFFF);
-  CHECK_EQ(b.line[2].form(0), std::string("MIN Edwards 19 pts"));
-  CHECK_EQ(b.line[3].form(0), std::string("MIN 56% to win"));  // home 0.444
+  CHECK_EQ(b.line[1].form(0), std::string("MIN 56% to win"));  // home 0.444
+  CHECK_EQ(b.line[2].form(0), std::string("IND Nesmith 19 pts"));
+  CHECK_EQ(b.line[2].rgb, (uint32_t) 0xFFFFFF);
+  CHECK_EQ(b.line[3].form(0), std::string("MIN Edwards 19 pts"));
+  // Each side's rebounds or assists leader after them.
+  CHECK(b.line[4].form(0).rfind("IND ", 0) == 0);
+  CHECK(b.line[5].form(0).rfind("MIN ", 0) == 0);
   // The basket stays through the plays after it, until the next one.
   GameSnapshot reb = g;
   reb.play_value = 0;
@@ -8745,7 +8748,7 @@ static void test_row_text() {
   // The last play switch off drops the basket only.
   RowOptions quiet;
   quiet.last_play = false;
-  CHECK_EQ(row_lines(ft, hold, quiet, true).line[0].form(0), std::string("IND Nesmith 19 pts"));
+  CHECK_EQ(row_lines(ft, hold, quiet, true).line[0].form(0), std::string("MIN 56% to win"));
   // Another game starts the hold over.
   GameSnapshot other = g;
   other.event_id = "999";
@@ -8758,7 +8761,7 @@ static void test_row_text() {
   to.last_play = "Official TV Timeout";
   to.play_team = 0;
   RowLines t = row_lines(to, hold, on, true);
-  CHECK_EQ((int) t.n, 3);  // the two leaders and the win chance; the held basket went with the other game
+  CHECK_EQ((int) t.n, 5);  // the leaders and the win chance; the held basket went with the other game
   for (int i = 0; i < t.n; i++)
     for (int k = 0; k < 3; k++)
       CHECK(t.line[i].form(k).find("imeout") == std::string::npos);
@@ -8818,7 +8821,7 @@ static void test_row_text() {
   team_to.last_play = "Timberwolves Full Timeout";
   team_to.play_team = kWolves;
   RowLines tt = row_lines(team_to, hold, on, true);
-  CHECK_EQ((int) tt.n, 3);  // a team timeout adds no line either
+  CHECK_EQ((int) tt.n, 5);  // a team timeout adds no line either
   for (int i = 0; i < tt.n; i++)
     CHECK(tt.line[i].form(0).find("imeout") == std::string::npos);
   // At halftime only the series is left, and only in the playoffs.
@@ -8839,6 +8842,197 @@ static void test_row_text() {
   CHECK_EQ((int) so.n, 1);
   CHECK_EQ(so.line[0].form(0), std::string("28' Lescano"));
 
+}
+
+// The game's story (story.h): what the reads prove and nothing else.
+static GameSnapshot story_read(int period, const char *clock, int us, int them, int reg = 2) {
+  GameSnapshot g;
+  g.valid = true;
+  g.sport = Sport::BASKETBALL;
+  g.state = GameState::IN;
+  g.event_id = "401929421";
+  g.team_abbr = "USA";
+  g.opp_abbr = "FAMU";
+  g.team_id = 6;
+  g.opp_id = 50;
+  g.period = period;
+  g.display_clock = clock;
+  g.team_score = us;
+  g.opp_score = them;
+  g.nba.regulation = reg;
+  return g;
+}
+
+static bool story_says(const Story &st, const GameSnapshot &g, const char *text) {
+  for (int i = 0; i < st.count(g); i++)
+    if (std::string(st.line(i).text) == text)
+      return true;
+  return false;
+}
+
+static void test_story() {
+  auto read = [](Story &st, int p, const char *clock, int us, int them, uint32_t ms) {
+    GameSnapshot g = story_read(p, clock, us, them);
+    st.read(g, ms);
+    return g;
+  };
+  // Watched from the tip: a run, the drought behind it, the biggest lead.
+  {
+    Story st;
+    read(st, 1, "20:00", 0, 0, 1000);
+    CHECK(st.whole_game());
+    read(st, 1, "19:30", 2, 0, 11000);
+    read(st, 1, "19:00", 2, 2, 21000);
+    read(st, 1, "18:30", 5, 2, 31000);
+    read(st, 1, "18:00", 7, 2, 41000);
+    GameSnapshot g = read(st, 1, "17:30", 8, 2, 51000);
+    CHECK(story_says(st, g, "USA on a 6-0 run"));
+    g = read(st, 1, "17:00", 12, 2, 61000);
+    CHECK(story_says(st, g, "USA on a 10-0 run"));
+    // 2:00 since FAMU's basket at 19:00.
+    CHECK(story_says(st, g, "FAMU scoreless 2:00"));
+    uint32_t news = st.news();
+    // The run ends, by name.
+    GameSnapshot end = story_read(1, "16:50", 12, 4);
+    end.play_value = 2;
+    end.play_team = 50;
+    end.play_athlete = "D. Williford";
+    st.read(end, 71000);
+    CHECK(story_says(st, end, "Williford ends run"));
+    CHECK(st.news() != news);
+    CHECK(!story_says(st, end, "USA on a 10-0 run"));
+    // A redraw of the same read changes nothing.
+    news = st.news();
+    st.read(end, 72000);
+    CHECK_EQ(st.news(), news);
+    // Another game has no lines here.
+    GameSnapshot other = end;
+    other.event_id = "1";
+    CHECK_EQ(st.count(other), 0);
+  }
+  // Joined late: the run is fine, nothing is said of the whole game.
+  {
+    Story st;
+    read(st, 1, "8:00", 54, 34, 1000);
+    CHECK(!st.whole_game());
+    read(st, 1, "7:30", 56, 34, 11000);
+    read(st, 1, "7:00", 58, 34, 21000);
+    GameSnapshot g = read(st, 1, "5:30", 60, 34, 31000);
+    CHECK(story_says(st, g, "USA on a 6-0 run"));
+    for (int i = 0; i < st.count(g); i++) {
+      CHECK(st.line(i).kind != StoryKind::NEVER_LED);
+      CHECK(st.line(i).kind != StoryKind::BIG_LEAD);
+      CHECK(st.line(i).kind != StoryKind::COMEBACK);
+      // FAMU's drought began before the panel looked, so it isn't counted.
+      CHECK(st.line(i).kind != StoryKind::DROUGHT);
+    }
+  }
+  // "Never led" allows for the worst order between two reads: down 2, both
+  // sides scored, so FAMU may have led for a moment.
+  {
+    Story st;
+    read(st, 1, "20:00", 0, 0, 1000);
+    read(st, 1, "19:00", 4, 0, 11000);
+    read(st, 1, "18:00", 4, 2, 21000);
+    GameSnapshot g = read(st, 2, "19:50", 7, 5, 31000);
+    for (int i = 0; i < st.count(g); i++)
+      CHECK(st.line(i).kind != StoryKind::NEVER_LED);
+  }
+  {
+    Story st;
+    read(st, 1, "20:00", 0, 0, 1000);
+    read(st, 1, "19:20", 4, 0, 11000);
+    read(st, 1, "18:40", 4, 2, 21000);
+    for (int left = 18, i = 0; left > 0; left--, i++) {
+      char c[8];
+      snprintf(c, sizeof(c), "%d:00", left);
+      read(st, 1, c, 4 + i, 2 + i, 31000 + i * 1000);
+      snprintf(c, sizeof(c), "%d:30", left - 1);
+      read(st, 1, c, 5 + i, 2 + i, 31500 + i * 1000);
+    }
+    GameSnapshot g = read(st, 2, "19:50", 22, 19, 90000);
+    CHECK(story_says(st, g, "FAMU has never led"));
+  }
+  // Ten-minute quarters: the break isn't time without a basket.
+  {
+    Story st;
+    GameSnapshot a = story_read(1, "0:20", 20, 18, 4);
+    st.read(a, 1000);
+    a = story_read(1, "0:10", 22, 18, 4);
+    st.read(a, 11000);
+    a = story_read(2, "9:50", 22, 18, 4);
+    st.read(a, 21000);
+    for (int i = 0; i < st.count(a); i++)
+      CHECK(st.line(i).kind != StoryKind::DROUGHT);
+  }
+  // An old copy of the document passes; a correction that stays starts over.
+  {
+    Story st;
+    read(st, 1, "20:00", 0, 0, 1000);
+    read(st, 1, "19:00", 3, 0, 11000);
+    read(st, 1, "19:20", 0, 0, 21000);
+    read(st, 1, "18:50", 3, 0, 31000);
+    CHECK(st.whole_game());
+    read(st, 1, "18:40", 3, 2, 41000);
+    read(st, 1, "18:40", 2, 2, 51000);
+    read(st, 1, "18:40", 2, 2, 145000);
+    CHECK(!st.whole_game());
+  }
+  // Away too long (another game on the board): start over.
+  {
+    Story st;
+    read(st, 1, "20:00", 0, 0, 1000);
+    read(st, 1, "12:00", 18, 10, 500000);
+    CHECK(!st.whole_game());
+  }
+  // The lead changes, and the end of a close one.
+  {
+    Story st;
+    read(st, 2, "2:00", 60, 61, 1000);
+    GameSnapshot g = read(st, 2, "1:40", 62, 61, 11000);
+    CHECK(story_says(st, g, "USA takes the lead"));
+    g = read(st, 2, "0:50", 62, 61, 61000);
+    CHECK(story_says(st, g, "One-possession game"));
+  }
+  // The book keeps games apart, and every line fits the row.
+  {
+    StoryBook book;
+    GameSnapshot g = story_read(1, "20:00", 0, 0);
+    CHECK(book.find(g) == nullptr);
+    book.read(g, 1000);
+    for (int i = 1; i <= 5; i++) {
+      GameSnapshot x = story_read(1, "20:00", 0, 0);
+      x.event_id = std::to_string(i);
+      book.read(x, 1000 + i);
+    }
+    CHECK(book.find(g) == nullptr);  // the oldest gave its place up
+    GameSnapshot last = g;
+    last.event_id = "5";
+    CHECK(book.find(last) != nullptr);
+  }
+  // On the row: the best line before the last basket, the rest after.
+  {
+    Story st;
+    read(st, 1, "20:00", 0, 0, 1000);
+    read(st, 1, "19:30", 3, 0, 11000);
+    GameSnapshot g = story_read(1, "19:00", 7, 0);
+    g.play_value = 2;
+    g.play_athlete = "J. Langsy";
+    g.play_team = 6;
+    st.read(g, 21000);
+    RowHold hold;
+    hold.read(g);
+    RowOptions o;
+    RowLines r = row_lines(g, hold, o, true, &st);
+    bool run = false, basket = false;
+    for (int i = 0; i < r.n; i++) {
+      run |= r.line[i].form(0) == "USA on a 7-0 run";
+      basket |= r.line[i].form(0) == "Last: Langsy 2";
+      CHECK(r.line[i].form(0).size() <= 21);
+    }
+    CHECK(run);
+    CHECK(basket);
+  }
 }
 
 static void test_line_score() {
@@ -9749,6 +9943,7 @@ int main() {
   test_game_viz();
   test_win_swing();
   test_row_text();
+  test_story();
   test_live_scan_clock();
   test_team_cache();
   test_boot_hold();
