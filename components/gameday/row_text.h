@@ -86,17 +86,42 @@ struct RowLines {
 struct RowHold {
   std::string event_id;
   std::string basket;  // "McDaniels 3", "Burries FT"
+  std::string play;    // the last play worth reading, tidied for the ticker
+  bool timeout{false};  // a timeout came after it
+  int total{-1};       // both scores added, at the last read
 
   // One read of the board game.
   void read(const GameSnapshot &g) {
     if (g.event_id != this->event_id) {
       this->event_id = g.event_id;
       this->basket.clear();
+      this->play.clear();
+      this->timeout = false;
+      this->total = -1;
     }
-    if (g.sport != Sport::BASKETBALL || g.state != GameState::IN || g.play_value <= 0 || g.play_athlete.empty())
+    if (g.sport == Sport::BASKETBALL && g.state == GameState::IN && !g.last_play.empty()) {
+      if (timeout_play(g.last_play)) {
+        this->timeout = true;
+      } else if (!basketball_junk_play(g)) {
+        this->timeout = false;
+        // Tidied with this play's own side: the next read's play can be the
+        // other team's.
+        this->play = basketball_tidy_play(g, g.last_play);
+      }
+    }
+    if (g.sport != Sport::BASKETBALL || g.state != GameState::IN)
+      return;
+    // A basket the read didn't name (another play came after it): the one
+    // held isn't the last any more.
+    const int total = g.team_score + g.opp_score;
+    if (total != this->total && this->total >= 0)
+      this->basket.clear();
+    this->total = total;
+    if (g.play_value <= 0 || g.play_athlete.empty())
       return;
     std::string who = detail::leader_short_surname(g.play_athlete);
-    bool ft = g.play_type.find("Free Throw") != std::string::npos;
+    bool ft = g.play_type.find("Free Throw") != std::string::npos ||
+              g.play_type.find("FreeThrow") != std::string::npos;  // the NBA's, college's
     this->basket = who + " " + (ft ? std::string("FT") : std::to_string(g.play_value));
   }
 };
@@ -205,6 +230,27 @@ inline void add_win_chance(RowLines &r, const GameSnapshot &g, uint8_t secs) {
   l->add_form(::esphome::gameday::panel_text(num));
 }
 
+// The last basket, "Last: McDaniels 3", so its number isn't read as the
+// player's points in the game.
+inline void add_basket(RowLines &r, const std::string &basket, uint32_t rgb) {
+  if (basket.empty())
+    return;
+  RowLine *l = r.add("Last: " + basket, rgb);
+  if (l != nullptr)
+    l->add_form(::esphome::gameday::panel_text(basket));
+}
+
+// A side's points leader, "IND Nesmith 19 pts".
+inline void add_scorer(RowLines &r, const std::string &abbr, const std::string &scorer, uint32_t rgb) {
+  if (scorer.empty())
+    return;
+  RowLine *l = r.add(abbr + " " + scorer + " pts", rgb);
+  if (l == nullptr)
+    return;
+  l->add_form(::esphome::gameday::panel_text(abbr + " " + scorer));
+  l->add_form(::esphome::gameday::panel_text(scorer + " pts"));
+}
+
 // Down and distance, "2nd & 17", then "2nd&17" and "2&17" for when the
 // clear part of the field strip is narrower (the ball or the line to gain
 // near midfield).
@@ -250,9 +296,9 @@ inline void fill_row_lines(RowLines &r, const GameSnapshot &g, const RowHold &ho
         break;
       }
       if (o.last_play && hold.event_id == g.event_id)
-        r.add(hold.basket, white);
-      r.add(g.nba.team_scorer, white);
-      r.add(g.nba.opp_scorer, white);
+        add_basket(r, hold.basket, white);
+      add_scorer(r, g.team_abbr, g.nba.team_scorer, white);
+      add_scorer(r, g.opp_abbr, g.nba.opp_scorer, white);
       r.add(series, white);
       if (o.win_chance)
         add_win_chance(r, g, 4);

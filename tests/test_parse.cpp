@@ -3092,7 +3092,7 @@ static void test_nba_live() {
   GameSnapshot e = hoops_event("fixtures/event_nba_end.json", kThunder);
   CHECK(e.nba.phase == Phase::END_PERIOD);
   CHECK_EQ(clock_text(e), std::string("End 1st"));
-  CHECK_EQ(status_text(e, o, ""), std::string("OKC 0-1 | MIL 0-1"));
+  CHECK_EQ(status_text(e, o, ""), std::string("FG 62% to 48% | 3PT 7/13 to 5/16 | Rebounds 12-14"));
 
   // Overtime, from the period number: OT is period 5 with four quarters.
   GameSnapshot ot = g;
@@ -8738,11 +8738,11 @@ static void test_row_text() {
   CHECK_EQ(hold.basket, std::string("McDaniels 2"));
   RowLines b = row_lines(g, hold, on, true);
   CHECK_EQ((int) b.n, 4);
-  CHECK_EQ(b.line[0].form(0), std::string("McDaniels 2"));
+  CHECK_EQ(b.line[0].form(0), std::string("Last: McDaniels 2"));
   CHECK_EQ(b.line[0].rgb, (uint32_t) 0xFFFFFF);
-  CHECK_EQ(b.line[1].form(0), std::string("Nesmith 19"));
+  CHECK_EQ(b.line[1].form(0), std::string("IND Nesmith 19 pts"));
   CHECK_EQ(b.line[1].rgb, (uint32_t) 0xFFFFFF);
-  CHECK_EQ(b.line[2].form(0), std::string("Edwards 19"));
+  CHECK_EQ(b.line[2].form(0), std::string("MIN Edwards 19 pts"));
   CHECK_EQ(b.line[3].form(0), std::string("MIN 56% to win"));  // home 0.444
   // The basket stays through the plays after it, until the next one.
   GameSnapshot reb = g;
@@ -8762,7 +8762,35 @@ static void test_row_text() {
   // The last play switch off drops the basket only.
   RowOptions quiet;
   quiet.last_play = false;
-  CHECK_EQ(row_lines(ft, hold, quiet, true).line[0].form(0), std::string("Nesmith 19"));
+  CHECK_EQ(row_lines(ft, hold, quiet, true).line[0].form(0), std::string("IND Nesmith 19 pts"));
+  // A basket another play hid: the held one isn't the last any more.
+  GameSnapshot hid = reb;
+  hid.team_score += 2;
+  hold.read(hid);
+  CHECK_EQ(hold.basket, std::string(""));
+  hold.read(reb);
+  // A college miss comes with the points it was worth: still no basket.
+  {
+    std::string json = slurp("fixtures/event_nba_live.json");
+    const size_t at = json.find("makes ");
+    CHECK(at != std::string::npos);
+    json.replace(at, 6, "misses ");
+    GameSnapshot miss;
+    CHECK(parse_event_str(json, Sport::BASKETBALL, kPacers, miss, root_id(json)));
+    CHECK(miss.last_play.find("misses ") != std::string::npos);
+    CHECK_EQ((int) miss.play_value, 0);
+    RowHold m;
+    m.read(miss);
+    CHECK_EQ(m.basket, std::string(""));
+  }
+  // College's free throws have no space in their type.
+  GameSnapshot cft = reb;
+  cft.play_value = 1;
+  cft.play_athlete = "S. Williams";
+  cft.play_type = "MadeFreeThrow";
+  RowHold cf;
+  cf.read(cft);
+  CHECK_EQ(cf.basket, std::string("Williams FT"));
   // Another game starts the hold over.
   GameSnapshot other = g;
   other.event_id = "999";
@@ -8785,9 +8813,87 @@ static void test_row_text() {
   CHECK(status_text(to, tick, "").find("Official TV Timeout") != std::string::npos);
   tick.row_timeout = true;
   CHECK(status_text(to, tick, "").find("Timeout") == std::string::npos);
-  // Nor the clock, which has its own row: the records, as in a break.
-  CHECK_EQ(status_text(to, tick, ""), espn::detail::records_line(to));
+  // Nor the clock, which has its own row, nor the records, which are under
+  // the logos: the team stats, ours first.
+  CHECK_EQ(status_text(to, tick, ""), std::string("FG 55% to 53% | 3PT 9/21 to 14/23 | Rebounds 17-24"));
+  GameSnapshot bare = to;
+  bare.nba.team_box.has = false;
+  CHECK(status_text(bare, tick, "").find(espn::detail::records_line(bare)) == std::string::npos);
   CHECK(!espn::detail::records_line(to).empty());
+  // A player checking in isn't news: the last play worth reading stays.
+  GameSnapshot sub = reb;
+  sub.play_type = "Substitution";
+  sub.last_play = "Daisean Williford subbing in for Florida A&M";
+  CHECK(basketball_junk_play(sub));
+  CHECK(status_text(sub, tick, "").find("subbing") == std::string::npos);
+  tick.held_play = "Diego Roman makes layup";
+  CHECK_EQ(status_text(sub, tick, ""), std::string("Diego Roman makes layup"));
+  tick.held_play = nullptr;
+  RowHold plays;
+  plays.read(g);
+  std::string kept = plays.play;
+  CHECK(!kept.empty());
+  plays.read(sub);
+  plays.read(to);
+  CHECK_EQ(plays.play, kept);
+  CHECK(plays.timeout);
+  // Substitutions in the timeout leave the break's stats up; a play ends it.
+  tick.held_play = plays.play.c_str();
+  tick.held_break = true;
+  CHECK_EQ(status_text(sub, tick, ""), std::string("FG 55% to 53% | 3PT 9/21 to 14/23 | Rebounds 17-24"));
+  plays.read(sub);
+  CHECK(plays.timeout);
+  plays.read(g);
+  CHECK(!plays.timeout);
+  tick.held_break = false;
+  // ESPN's dead ball rebound is no news either.
+  GameSnapshot dead = reb;
+  dead.play_type = "Dead Ball Rebound";
+  dead.last_play = "IND dead ball team rebound";
+  CHECK(basketball_junk_play(dead));
+  // A held play keeps its own team: a turnover by MIN, then Indiana checks a
+  // player in, then a substitution with no team.
+  GameSnapshot held_tov = reb;
+  held_tov.last_play = "team  shot clock turnover";
+  held_tov.play_type = "Turnover";
+  held_tov.play_team = kWolves;
+  RowHold whose;
+  whose.read(held_tov);
+  GameSnapshot sub2 = sub;
+  sub2.play_team = kPacers;
+  whose.read(sub2);
+  tick.held_play = whose.play.c_str();
+  CHECK_EQ(status_text(sub2, tick, ""), std::string("MIN shot clock turnover"));
+  sub2.play_team = 0;
+  whose.read(sub2);
+  CHECK_EQ(status_text(sub2, tick, ""), std::string("MIN shot clock turnover"));
+  tick.held_play = nullptr;
+  // With Last play off the ticker is ESPN's short status, except in a
+  // timeout, which it would otherwise repeat.
+  TickerOptions quiet_tick;
+  quiet_tick.clock = quiet_tick.last_play = false;
+  quiet_tick.row_timeout = true;
+  CHECK_EQ(status_text(reb, quiet_tick, ""), reb.short_detail);
+  CHECK_EQ(status_text(to, quiet_tick, ""), std::string("FG 55% to 53% | 3PT 9/21 to 14/23 | Rebounds 17-24"));
+  // ESPN sent no stats: the network and the arena, then just the records.
+  GameSnapshot nost = to;
+  nost.nba.team_box.has = nost.nba.opp_box.has = false;
+  nost.tv = "ESPN";
+  nost.venue = "Gainbridge Fieldhouse";
+  CHECK_EQ(status_text(nost, quiet_tick, ""), std::string("ESPN | Gainbridge Fieldhouse"));
+  nost.tv.clear();
+  nost.venue.clear();
+  CHECK_EQ(status_text(nost, quiet_tick, ""), espn::detail::records_line(nost));
+  // "team  turnover" says whose.
+  GameSnapshot tov = reb;
+  tov.last_play = "team  turnover";
+  tov.play_type = "Turnover";
+  tov.play_team = kWolves;
+  CHECK_EQ(status_text(tov, tick, ""), std::string("MIN turnover"));
+  tov.last_play = "Foul on Antonio Baker Jr..";
+  CHECK_EQ(status_text(tov, tick, ""), std::string("Foul on Antonio Baker Jr."));
+  tov.last_play = "Mihailo Stijovic bad pass\nturnover";
+  CHECK_EQ(status_text(tov, tick, ""), std::string("Mihailo Stijovic bad pass turnover"));
   // A basket is still the ticker's.
   CHECK(status_text(g, tick, "").find("McDaniels") != std::string::npos);
   // Football's win chance: in the ticker on a single panel, on the row only

@@ -5302,7 +5302,9 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
     std::string news = ::espn::row_news(g, this->row_hold_);
     if (news != this->row_news_) {
       this->row_news_ = news;
-      this->row_news_n_++;
+      // A basket cleared by one it didn't name is no news.
+      if (!news.empty())
+        this->row_news_n_++;
     }
     f.row.news = this->row_news_n_;
   }
@@ -5372,6 +5374,10 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   opts.win_due = playing && this->win_swing_.ticker;
   opts.row_timeout = wide;
   opts.row_sets = wide;
+  if (this->row_hold_.event_id == g.event_id) {
+    opts.held_play = this->row_hold_.play.c_str();
+    opts.held_break = this->row_hold_.timeout;
+  }
   opts.row_down = wide;
 
   auto kickoff_of = [this](const GameSnapshot &s) -> std::string {

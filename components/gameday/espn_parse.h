@@ -89,6 +89,12 @@ struct Basketball {
   // Each side's points leader in this game, "Edwards 24", while it is on;
   // "" before anyone scores or when ESPN lists none.
   std::string team_scorer, opp_scorer;
+  // Each side's team stats in this game; `has` only when ESPN sent them all.
+  struct Box {
+    bool has{false};
+    uint8_t fg_made{0}, fg_tried{0}, three_made{0}, three_tried{0}, rebounds{0};
+  };
+  Box team_box, opp_box;
 };
 
 // Hockey's extras. ESPN's period 5 is the shootout in a regular-season or
@@ -377,6 +383,11 @@ struct TickerOptions {
   bool row_down{false};
   bool row_timeout{false};
   bool row_sets{false};  // volleyball's finished sets
+  // The last play worth reading, shown while ESPN's last play is a
+  // substitution (row_text.h RowHold); nullptr for none. Basketball.
+  const char *held_play{nullptr};
+  // The held play came before a timeout that goes on through it. Basketball.
+  bool held_break{false};
   // Both records before the start, for a board too narrow to show them
   // under the logos (one 64-wide panel, pages/gameday-live.yaml).
   bool records{false};
@@ -463,6 +474,15 @@ std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std
 std::string win_chance(const GameSnapshot &s);
 // ESPN's last play is a timeout ("Official TV Timeout", "Full timeout").
 bool timeout_play(const std::string &text);
+// Basketball: a last play that is no news: a player checking in or out, or
+// ESPN's dead ball rebound.
+bool basketball_junk_play(const GameSnapshot &s);
+// Basketball's team stats while a game is on, our side's number first, "FG
+// 47% to 29% | 3PT 3/14 to 5/25 | Rebounds 38-22". "" when ESPN has none.
+std::string basketball_box_line(const GameSnapshot &s);
+// ESPN's play text, tidied: single spaces, one full stop, and "team turnover"
+// with the team's abbreviation in place of "team".
+std::string basketball_tidy_play(const GameSnapshot &s, const std::string &play);
 // Whether ESPN has said the board has no game, for no_game_text. In Favorites
 // (favs > 0) only once every favorite's team read has answered (`read` of
 // them): one answered favorite says nothing of the others.
