@@ -123,6 +123,10 @@ script:
             if (shape != id(gd_row_shape) && id(gd_row_shape) != 0 && teams == id(gd_row_teams) &&
                 millis() - id(gd_row_since) < 2500) {
               id(gd_row_wait) = true;
+              // The read moved the label for football; it is still this line's.
+              lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_LEFT, 0);
+              lv_obj_set_pos(lbl, id(gd_row_x), 47);
+              lv_obj_set_width(lbl, W);
               return;
             }
             if (shape != id(gd_row_shape)) {
@@ -169,6 +173,7 @@ script:
             x += sp;
             lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_LEFT, 0);
             lv_obj_set_width(lbl, W);
+            id(gd_row_x) = x;
             place(lbl, text, two.rgb);
             if (both) {
               x += (val2.empty() ? 1 : 2) * sp;
@@ -1500,6 +1505,10 @@ globals:
     initial_value: '0'
   - id: gd_row_since
     type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: gd_row_x
+    type: int
     restore_value: no
     initial_value: '0'
   - id: gd_row_wait
