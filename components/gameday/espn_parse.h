@@ -376,6 +376,7 @@ struct TickerOptions {
   bool win_due{true};
   bool row_down{false};
   bool row_timeout{false};
+  bool row_sets{false};  // volleyball's finished sets
   // Both records before the start, for a board too narrow to show them
   // under the logos (one 64-wide panel, pages/gameday-live.yaml).
   bool records{false};
@@ -595,6 +596,23 @@ Splash basketball_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool
 // The playoff series in at most 12 characters for the situation row
 // ("NY lead 2-1", "Series 2-2"), else "".
 std::string basketball_series(const GameSnapshot &s);
+
+// Volleyball (sport_volleyball.cpp).
+std::string volleyball_status_text(const GameSnapshot &s, const TickerOptions &o, const std::string &kickoff_local);
+std::string volleyball_clock_text(const GameSnapshot &s);
+Splash volleyball_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool opponent_splashes, bool neutral);
+// The board's two big numbers: each side's score, except while a volleyball
+// match is on, when they are the points in the set under way (its score is
+// sets won, which the clock row says).
+int board_team_score(const GameSnapshot &s);
+int board_opp_score(const GameSnapshot &s);
+// Between sets: the set ESPN names is decided and the next hasn't started.
+bool volleyball_set_over(const GameSnapshot &s);
+// A side can win the match on the next point.
+bool volleyball_match_point(const GameSnapshot &s);
+// The finished sets' points, ours first: "25-19 17-25". "" before the first
+// one ends, and before the match.
+std::string volleyball_sets(const GameSnapshot &s, const char *sep = " ");
 
 namespace detail {
 // Ticker helpers shared by the sport files.

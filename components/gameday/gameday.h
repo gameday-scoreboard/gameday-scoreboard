@@ -247,7 +247,7 @@ class GamedaySelect : public select::Select, public Component {
 //                                    beta=0/1 (follow the beta channel; release builds only)
 //                                    lists=Name=nfl:6,nba:6;Name2=... (every playlist, playlists.h)
 //                                    list=0-16 (the playlist Favorite teams plays, 0 = every favorite)
-//                                    sport=football|baseball|basketball|hockey|soccer|none (a sport row)
+//                                    sport=football|baseball|basketball|hockey|soccer|volleyball|none (a sport row)
 //                                    a playlist's teams may carry its options as @ tokens (playlists.h ListOpt)
 //                                    fxlists=Name=Matrix|Party|128|128|15,...,@shuffle;Name2=... (every
 //                                    effect playlist, fx_playlists.h) fxlist=0-4 (play one, 0 stops)
@@ -2006,14 +2006,13 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t recap_step_ms_{0};  // when the card on the board went up, 0 = none yet
   std::string recap_message_, recap_ticker_;
   int64_t recap_scan_next_{0};  // the last scan's next kickoff today, 0 for none
-  static_assert(::espn::leagues_fill_indexes(), "League values must run 0 to kLeagueCount - 1");
-  // Per league, indexed by League: the walks back and forward (recap.h,
+  // Per league, at its game_league_slot: the walks back and forward (recap.h,
   // RecapWalk), the kickoff the forward walk found (0 for none) and its
   // fwd_match: "BOS at NYR", the first game on that day.
-  ::espn::RecapWalk recap_back_[::espn::kLeagueCount];
-  ::espn::RecapWalk recap_fwd_[::espn::kLeagueCount];
-  int64_t recap_fwd_next_[::espn::kLeagueCount]{};
-  std::string recap_fwd_match_[::espn::kLeagueCount];
+  ::espn::RecapWalk recap_back_[::espn::kGameLeagueCount];
+  ::espn::RecapWalk recap_fwd_[::espn::kGameLeagueCount];
+  int64_t recap_fwd_next_[::espn::kGameLeagueCount]{};
+  std::string recap_fwd_match_[::espn::kGameLeagueCount];
   bool recap_job_(Job &j, int64_t tnow);  // fills j with the next walk step, if any
   void apply_recap_job_();
   void recap_absorb_(const Job &j, int64_t tnow);  // a scan's finals, games to come and next kickoff

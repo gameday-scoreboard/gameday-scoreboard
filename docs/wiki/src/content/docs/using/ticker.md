@@ -26,11 +26,11 @@ Before a football game the ticker also shows each team's passing leader for the 
 
 Baseball, basketball and hockey get season leaders too, after the odds: the home run leader in baseball, like "Bauers 26 HR", with the RBIs when the same player leads both, like "Machado 30 HR 91 RBI"; points per game in basketball, like "Allen 21.0 PPG"; and points in hockey, like "McDavid 9 pts".
 
-On a single 64x64 panel, which has no room for the records on the board, the ticker shows both teams' records before the game, in football, baseball, basketball and hockey. They come after the kickoff time, or after the playoff series in baseball, basketball and hockey when there is one.
+On a single 64x64 panel, which has no room for the records on the board, the ticker shows both teams' records before the game, in football, baseball, basketball, hockey and volleyball. They come after the kickoff time, or after the playoff series in baseball, basketball and hockey when there is one.
 
 At halftime and the final, with **Last play** on, the ticker also runs the scoring plays the panel saw in football, baseball and hockey, like "Q1 7:12 Lamb 12 yd pass, DAL 7-0", and at the final ESPN's headline for the game when it has one. The board takes turns with the line score at the same time, whatever the switches say.
 
-Each sport's page has the details: [Football](/using/football/), [Baseball](/using/baseball/), [Basketball](/using/basketball/), [Hockey](/using/hockey/) and [Soccer](/using/soccer/).
+Each sport's page has the details: [Football](/using/football/), [Baseball](/using/baseball/), [Basketball](/using/basketball/), [Hockey](/using/hockey/), [Soccer](/using/soccer/) and [Volleyball](/using/volleyball/).
 
 Accented letters in names, like the é in Atlético or the ñ in Peña, show in the pre-game ticker and the panel's other small text. Two places still spell names without them, like "Martinez" for Martínez: soccer's ticker once the match starts, and the scoring plays and headline at halftime and the final.
 

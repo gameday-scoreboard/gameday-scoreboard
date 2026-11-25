@@ -110,7 +110,7 @@
   "jump": false,
   "banner": true,
   "favtake": true,
-  "live": ["nfl", "ncaa", "mlb", "mls", "epl", "nba", "wnba", "mcbb", "wcbb", "nhl"],
+  "live": ["nfl", "ncaa", "mlb", "mls", "epl", "nba", "wnba", "mcbb", "wcbb", "nhl", "wcvb"],
   "live_auto": true,
   "live_only": "",
   "tz": 1,

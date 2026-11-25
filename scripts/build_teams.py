@@ -18,7 +18,8 @@ conference id.
 
 The college basketball team lists (men's and women's) are Division I only,
 but they can trail a school that just finished moving up; see
-college_basketball_teams().
+college_basketball_teams(). Women's college volleyball's list is not Division
+I's at all; see college_volleyball_teams().
 """
 
 import argparse
@@ -31,6 +32,7 @@ from pathlib import Path
 SITE_ROOT = "https://site.api.espn.com/apis/site/v2/sports"
 STANDINGS_ROOT = "https://site.api.espn.com/apis/v2/sports"
 D1_GROUP = "50"  # NCAA Division I, the parent of every D1 basketball conference
+VOLLEYBALL_D1_GROUP = "90"  # the same in women's volleyball
 SITE = f"{SITE_ROOT}/football"
 
 # ESPN conference group ids that make up the FBS.
@@ -54,7 +56,7 @@ sys.path.insert(0, str(COMPONENT))
 from leagues_table import leagues  # noqa: E402
 
 # Fewest teams a fresh list may have before the run is treated as a bad read.
-MIN_TEAMS = {"NFL": 32, "NCAA": 120, "MLB": 30, "NBA": 30, "NHL": 32, "WNBA": 13, "MLS": 29, "EPL": 20, "MCBB": 350, "WCBB": 350}
+MIN_TEAMS = {"NFL": 32, "NCAA": 120, "MLB": 30, "NBA": 30, "NHL": 32, "WNBA": 13, "MLS": 29, "EPL": 20, "MCBB": 350, "WCBB": 350, "WCVB": 340}
 
 
 # ESPN returns 403 to most unfamiliar agents but accepts ones that start with "curl/".
@@ -123,6 +125,25 @@ def college_basketball_teams(league, path):
     return list(found.values())
 
 
+def college_volleyball_teams(league, path):
+    """ESPN's volleyball team list is not Division I's: in November 2026 it
+    had eleven schools from elsewhere and placeholder rows ("TBD"), and
+    missed eight Division I teams. The D1 standings name the members, by
+    conference with group=90 and in one table without it; each read had
+    schools the other missed, so both count."""
+    found = {}
+    for query in (f"?group={VOLLEYBALL_D1_GROUP}", ""):
+        standings = get(f"{STANDINGS_ROOT}/{path}/standings{query}")
+        tables = standings.get("children", [])
+        if not query:
+            tables = [t for t in tables if str(t.get("id")) == VOLLEYBALL_D1_GROUP]
+        for table in tables:
+            for entry in table.get("standings", {}).get("entries", []):
+                t = entry["team"]
+                found[int(t["id"])] = (league, int(t["id"]), t["abbreviation"], t["displayName"], 0)
+    return list(found.values())
+
+
 def cstr(s):
     return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
@@ -166,6 +187,8 @@ def main():
             fresh = ncaa_teams()
         elif lg in ("MCBB", "WCBB"):
             fresh = college_basketball_teams(lg, paths[lg])
+        elif lg == "WCVB":
+            fresh = college_volleyball_teams(lg, paths[lg])
         else:
             fresh = pro_teams(lg, paths[lg])
         print(f"{lg}: {len(fresh)} teams")

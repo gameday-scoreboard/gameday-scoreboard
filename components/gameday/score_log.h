@@ -168,7 +168,8 @@ class ScoreLog {
   // nothing: the panel just picked it up and did not see the scores before.
   // now_ms is millis(), for how long a lower score has held.
   void update(const GameSnapshot &cur, uint32_t now_ms = 0) {
-    if (!cur.valid || cur.event_id.empty() || cur.sport == Sport::BASKETBALL || cur.sport == Sport::SOCCER)
+    if (!cur.valid || cur.event_id.empty() || cur.sport == Sport::BASKETBALL || cur.sport == Sport::SOCCER ||
+        cur.sport == Sport::VOLLEYBALL)
       return;
     if (cur.state != GameState::IN && cur.state != GameState::POST)
       return;

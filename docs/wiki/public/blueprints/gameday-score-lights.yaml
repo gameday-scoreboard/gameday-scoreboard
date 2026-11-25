@@ -54,6 +54,8 @@ blueprint:
               value: home_run
             - label: Goal (hockey, soccer)
               value: goal
+            - label: Set (volleyball)
+              value: set
             - label: Basket (basketball)
               value: score
     flashes:

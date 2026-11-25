@@ -1071,12 +1071,12 @@ test("the Remote card sets each button: a favorite, a sport, a playlist, all, Li
   const btns = page.locator("#remoteBtns .rbtn");
   await expect(btns).toHaveCount(4);
   const b1 = btns.nth(0).locator("select");
-  // Grouped by sport, all ten leagues: each league's live games, the sport
+  // Grouped by sport, every league: each league's live games, the sport
   // row with two favorites in it, the favorites, then another team of each
   // league; the pages under Showing last.
-  await expect(b1.locator("optgroup")).toHaveCount(7);
+  await expect(b1.locator("optgroup")).toHaveCount(8);
   expect(await b1.locator("optgroup").evaluateAll((gs) => gs.map((g) => g.label))).toEqual(
-    ["Your playlists", "Football", "Baseball", "Basketball", "Hockey", "Soccer", "Showing"]);
+    ["Your playlists", "Football", "Baseball", "Basketball", "Hockey", "Soccer", "Volleyball", "Showing"]);
   await expect(b1.locator("optgroup[label=Football] option")).toHaveText(["All NFL live games", "All college football live games",
     "My football teams", "Dallas Cowboys", "Texas Longhorns", "Another NFL team...", "Another college football team..."]);
   // One basketball favorite: no row of its own.
@@ -1085,6 +1085,8 @@ test("the Remote card sets each button: a favorite, a sport, a playlist, all, Li
     "Another NBA team...", "Another WNBA team...", "Another men's college basketball team...",
     "Another women's college basketball team..."]);
   await expect(b1.locator("optgroup[label=Hockey] option")).toHaveText(["All NHL live games", "Another NHL team..."]);
+  await expect(b1.locator("optgroup[label=Volleyball] option")).toHaveText(["All women's college volleyball live games",
+    "Another women's college volleyball team..."]);
   await expect(b1.locator("optgroup[label=Showing] option")).toHaveText(["Scoreboard", "Clock", "Smart board", "Effects"]);
   await expect(b1.locator(":scope > option")).toHaveText(["Its own favorite", "All favorites", "Live games", "Nothing"]);
   await expect(b1).toHaveValue("fav");
@@ -1417,7 +1419,7 @@ test("a playlist's sports post as @lg tokens beside its teams, and the bar says 
   const sports = box.getByRole("group", { name: "Sports in Sunday" }).getByRole("button");
   // Every league the panel knows, in kLeagues order.
   await expect(sports).toHaveText(["NFL", "College football", "MLB", "MLS", "Premier League", "NBA", "WNBA",
-    "Men's college basketball", "Women's college basketball", "NHL"]);
+    "Men's college basketball", "Women's college basketball", "NHL", "Women's college volleyball"]);
   await expect(box.locator(".psports small")).toHaveCount(0);
   await expect(box.getByRole("switch", { name: "Only this list's games Sunday" })).toBeVisible();
   await box.getByRole("button", { name: "NFL", exact: true }).click();
@@ -1602,7 +1604,7 @@ test("Live games chips post the leagues, and move an old live mode to mode 5", a
   await page.goto("/");
   await expect(page.locator("#livebar")).toBeVisible();
   await expect(page.locator("#modes button.on")).toHaveText(/^Live games/);
-  await expect(page.locator("#liveChips .chip")).toHaveText(["NFL", "NCAAF", "MLB", "MLS", "EPL", "NBA", "WNBA", "NCAAM", "NCAAW", "NHL"]);
+  await expect(page.locator("#liveChips .chip")).toHaveText(["NFL", "NCAAF", "MLB", "MLS", "EPL", "NBA", "WNBA", "NCAAM", "NCAAW", "NHL", "NCAAVB"]);
   await expect(page.locator("#liveChips .chip.on")).toHaveText(["MLB", "NHL"]);
   await page.locator("#liveChips .chip", { hasText: /^NBA$/ }).click();
   await expectSet(request, { live: "mlb,nhl,nba" });
@@ -2568,7 +2570,7 @@ test("the picker has a tab per league and adds a team from another sport", async
   await page.goto("/");
   await tab(page, "teams");
   await page.locator("#favAdd").click();
-  await expect(page.locator(".tabs button")).toHaveText(["On now", "NFL", "NCAAF", "MLB", "MLS", "EPL", "NBA", "WNBA", "NCAAM", "NCAAW", "NHL"]);
+  await expect(page.locator(".tabs button")).toHaveText(["On now", "NFL", "NCAAF", "MLB", "MLS", "EPL", "NBA", "WNBA", "NCAAM", "NCAAW", "NHL", "NCAAVB"]);
   await page.locator(".tabs button", { hasText: "NHL" }).click();
   await expect(page.locator(".tabs button.on")).toHaveText("NHL");
   await expect(page.locator("#tiles .tile")).toHaveCount(32);

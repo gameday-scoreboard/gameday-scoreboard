@@ -11,7 +11,7 @@ ifeq ($(OS),Windows_NT)
 LDFLAGS += -static
 endif
 
-all: build/test_parse build/test_networks build/test_api build/test_settings build/test_logo_cache build/test_logo_cache_asan build/test_picture build/test_celebrate build/test_celeb_football build/test_celeb_hockey build/test_celeb_baseball build/test_celeb_soccer build/test_smart_board build/test_flights build/test_weather_page build/test_clock
+all: build/test_parse build/test_networks build/test_api build/test_settings build/test_logo_cache build/test_logo_cache_asan build/test_picture build/test_celebrate build/test_celeb_football build/test_celeb_hockey build/test_celeb_baseball build/test_celeb_soccer build/test_volleyball build/test_smart_board build/test_flights build/test_weather_page build/test_clock
 	./build/test_parse
 	./build/test_networks
 	./build/test_api
@@ -24,13 +24,14 @@ all: build/test_parse build/test_networks build/test_api build/test_settings bui
 	./build/test_celeb_hockey
 	./build/test_celeb_baseball
 	./build/test_celeb_soccer
+	./build/test_volleyball
 	./build/test_smart_board
 	./build/test_flights
 	./build/test_weather_page
 	./build/test_clock
 
-SRCS = test_parse.cpp golden_football.cpp test_set.cpp test_fx_playlists.cpp ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp
-PARSER_ONLY = ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp
+SRCS = test_parse.cpp golden_football.cpp test_set.cpp test_fx_playlists.cpp ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp ../components/gameday/sport_volleyball.cpp
+PARSER_ONLY = ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp ../components/gameday/sport_volleyball.cpp
 
 build/test_parse: build/miniz.o $(SRCS) $(wildcard ../components/gameday/*.h) miniz.h
 	@mkdir -p build
@@ -69,6 +70,11 @@ build/test_celeb_baseball: test_celeb_baseball.cpp $(PARSER_ONLY) $(wildcard ../
 build/test_celeb_soccer: test_celeb_soccer.cpp $(PARSER_ONLY) $(wildcard ../components/gameday/*.h)
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) test_celeb_soccer.cpp $(PARSER_ONLY) -o $@ $(LDFLAGS)
+
+# Women's college volleyball (sport_volleyball.cpp) on recorded ESPN documents.
+build/test_volleyball: test_volleyball.cpp $(PARSER_ONLY) $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_volleyball.cpp $(PARSER_ONLY) -o $@ $(LDFLAGS)
 
 # Not part of `all`: renders every celebration to raw RGB565 frames for
 # render_celebrations.py, which turns them into GIFs. `make celebrate-gifs`.
