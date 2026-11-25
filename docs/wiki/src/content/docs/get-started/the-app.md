@@ -64,6 +64,12 @@ Under **Night mode until**, **Turn on for tonight** puts the panel back at its n
 
 - **Favorites**, in priority order. **Add a favorite** opens the team chooser. Each team can move up or down or come out of the list. See [Favorite teams](/using/favorites/).
 
+:::note[Coming in the next app update]
+On Android, the chooser has an **NCAAW** tab for women's college basketball and an **NCAAVB** tab for women's college volleyball, with every Division I team. Both leagues are also among the **Live games** leagues, a playlist's **Sports** and the **Remote buttons** pickers. They show once the panel runs firmware with them.
+
+During a volleyball match the Board shows the points in the set being played, with the set and the sets won under them, like **Set 3 1-1**. The final shows the sets, like 3-1.
+:::
+
 In the chooser's **On now** tab, a search that matches none of today's games lists the matching teams under a **Teams** heading instead, so a team that isn't playing today still turns up.
 
 :::note[Coming in the next app update]
