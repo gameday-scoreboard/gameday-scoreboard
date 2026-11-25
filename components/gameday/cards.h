@@ -18,8 +18,8 @@
 namespace espn {
 
 // The bit each card has in the saved cards_off mask (set means off, so a
-// saved 0 is every card on). Append only: a saved bit keeps its meaning
-// across updates. The countdown, the news card and the weather card keep the
+// saved 0 is every card on; the Game Day card's goes by its build, below).
+// Append only: a saved bit keeps its meaning across updates. The countdown, the news card and the weather card keep the
 // switches they had before the list, so a downgrade keeps those choices;
 // their bits are never set.
 enum class Card : uint8_t {
@@ -35,7 +35,8 @@ enum class Card : uint8_t {
   WEATHER = 9,
   SCHEDULE = 10,
   RECAP = 11,
-  GOLF = 12,
+  GAMEDAY = 12,
+  GOLF = 13,
 };
 
 constexpr uint16_t card_bit(Card c) { return (uint16_t) (1u << (uint8_t) c); }
@@ -44,7 +45,28 @@ constexpr uint16_t card_bit(Card c) { return (uint16_t) (1u << (uint8_t) c); }
 constexpr uint16_t kCardsOffBits = card_bit(Card::LEADERS) | card_bit(Card::NEXT) | card_bit(Card::CLOCK) |
                                    card_bit(Card::CUSTOM) | card_bit(Card::MESSAGE) | card_bit(Card::TOP25) |
                                    card_bit(Card::PICTURE) | card_bit(Card::SCHEDULE) | card_bit(Card::RECAP) |
-                                   card_bit(Card::GOLF);
+                                   card_bit(Card::GAMEDAY) | card_bit(Card::GOLF);
+
+// The Game Day card (gameday_card.h) is off on a home panel and on in a
+// build that defines GAMEDAY_CARD_ON. Its bit in cards_off
+// means the owner turned it the other way from that, so a saved 0 is the
+// build's own choice and a panel that never touched the switch gets it
+// through an update.
+#ifdef GAMEDAY_CARD_ON
+constexpr bool kGamedayCardOn = true;
+#else
+constexpr bool kGamedayCardOn = false;
+#endif
+
+// Whether a card in cards_off is on, and the bit that saves on or off.
+inline bool card_saved_on(Card c, uint16_t cards_off) {
+  const bool bit = (cards_off & card_bit(c)) != 0;
+  return c == Card::GAMEDAY ? bit != kGamedayCardOn : !bit;
+}
+inline uint16_t card_saved(Card c, uint16_t cards_off, bool on) {
+  const bool bit = c == Card::GAMEDAY ? on != kGamedayCardOn : !on;
+  return bit ? (uint16_t) (cards_off | card_bit(c)) : (uint16_t) (cards_off & ~card_bit(c));
+}
 
 struct CardRow {
   Card card;
@@ -68,6 +90,7 @@ constexpr CardRow kCards[] = {
     {Card::RECAP,     "seasonrecap", "Season recap",               true,  "Only for teams in Favorite teams, not baseball"},
     {Card::NEWS,      "news",        "News headlines",             false, ""},
     {Card::WEATHER,   "weather",     "Weather",                    false, "Set your town below first"},
+    {Card::GAMEDAY,   "gamedaycard", "Game Day card",              false, ""},
     {Card::GOLF,      "golf",        "Golf leaderboard",           true,  "Pick a tour below, or follow a golfer"},
 };
 // clang-format on

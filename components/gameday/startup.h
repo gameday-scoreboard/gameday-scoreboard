@@ -42,6 +42,8 @@ struct TeamCache {
   uint32_t group;
   int64_t saved_epoch;
 } __attribute__((packed));
+static_assert(sizeof(TeamCache) == 41,
+              "TeamCache is saved: a new size needs a new preference key or a migration, not a new number");
 
 // Older than this, the team endpoint is read again first.
 static const int64_t TEAM_CACHE_MAX_AGE = 24 * 3600;

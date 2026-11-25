@@ -37,7 +37,7 @@ through `update_important` in the panel's state.
 
 ## Unreleased
 
-A new Flights page shows the planes flying over your home, women's college basketball and golf leaderboards join the panel, it can play an effect whenever no game of yours is on, and Add network lists the Wi-Fi networks nearby.
+A new Flights page shows the planes over your home, women's college basketball and golf leaderboards join the panel, it can play an effect whenever no game of yours is on, and Add network lists nearby Wi-Fi.
 
 ### ⚠️ Heads up
 
@@ -49,13 +49,16 @@ A new Flights page shows the planes flying over your home, women's college baske
 ### ✨ New
 
 - 📶 **Add network** lists the 2.4 GHz networks the panel can see, strongest first: tap one to fill in its name, or type a hidden one
+- 🔳 **Game Day card** puts a QR code for gameday-scoreboard.com on the board every 20 minutes between games, off until you turn it on under **Between games**
 - ✈️ **Flights** under **Showing** and **After the game**: the planes near your home with their airline, route, type, altitude and distance, from adsb.lol's free community data or your own ADS-B receiver
+- 🌤️ **Weather** under **Showing** and **After the game**: your town's weather now and the next 6 hours with the chance of rain, and a bottom line with your live game's score, rain on the way, or the next sunrise or sunset
 - ✨ **Show effects** under **After the game**: the panel plays your effect whenever no game of yours is on, between seasons too, and goes back to the scoreboard before your next game
 - 🏀 Women's college basketball joins the panel: follow any Division I women's team from the new NCAAW tab in the team picker
 - ⛳ Golf leaderboards between games: pick the PGA Tour, LPGA or DP World Tour on the **Golf leaderboard** card, or search golfers by name and they're pinned on wherever they stand
 
 ### 🐛 Fixes
 
+- 🏀 Basketball's bottom rows say whose points they show ("USA Langsy 21 pts"), a timeout brings the team stats instead of the records again, players checking in stay off the ticker, and a missed shot no longer shows as the last basket
 - 🏙️ A town typed for Weather while the Clock, Effects or the Smart board is up is looked up right away, instead of waiting for the Scoreboard
 - ⏱️ The device page's Weather card counts up the time since the last forecast read, where it could stay on the same number for minutes
 - 🎆 Editing the effect playlist that's playing no longer starts it over: it carries on from the effect that's up, and a change to that effect shows at once
@@ -64,6 +67,9 @@ A new Flights page shows the planes flying over your home, women's college baske
 - 🎮 A **Remote** button set to **Live games** or a league's live games, like **All NFL live games**, shows that name on the board for a moment, as a playlist's button does
 - 🏷️ Home Assistant lists the panel as **Scoreboard by Game Day** instead of gameday-scoreboard by bharvey88
 - 🔎 Loading the scoreboard says **Looking for** and your team, or the live games it follows, instead of Looking up scores
+- 🖼️ Adding a picture while a message card on **Whenever no game is on** holds the board says so, and which setting to change, instead of "It's up next"
+- 🌇 The kickoff forecast shows a sun until sunset at the stadium, where a 5 PM kickoff in early November could show a moon with the sun still up
+- 🌙 Night mode turned off for a night that starts between 1 and 2 AM stays off when the clocks go back, instead of the panel dimming again at the second start
 
 ## v2026.11.5
 

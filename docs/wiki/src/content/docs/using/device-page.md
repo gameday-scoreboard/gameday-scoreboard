@@ -42,7 +42,7 @@ A strip along the bottom edge of the board has:
 - **Brightness**, shown as a percent
 - **Refresh scores**, which reads your teams from ESPN again right away. Use it when the board looks wrong, for example after a game moved.
 
-Under it, **Showing** picks the page the panel shows: **Scoreboard**, **Clock**, **Effects**, **Smart board** or **Flights**. The Game Day app and Home Assistant have the same controls. See [Brightness and the clock](/using/brightness-and-clock/).
+Under it, **Showing** picks the page the panel shows: **Scoreboard**, **Clock**, **Effects**, **Smart board**, **Flights** or **Weather**. The Game Day app and Home Assistant have the same controls. See [Brightness and the clock](/using/brightness-and-clock/).
 
 **Effects** is new: one of 52 moving patterns fills the panel in place of the scoreboard, and **Effect**, **Palette**, **Speed** and **Intensity** controls appear under **Showing** while it is the page showing. The board comes back when you pick the Scoreboard again, or when the panel has something to tell you. Once you have an effect playlist, an **Effect playlist** picker there starts or stops one; you make them on the Customize tab under **Effect playlists**. See [Effects](/using/effects/).
 
@@ -119,7 +119,7 @@ The chooser is for favorites only.
 | **Ticker speed** | How fast the ticker scrolls, 1 to 10. See [The ticker](/using/ticker/). |
 | **Night schedule** | Off to start. Dims the panel, or turns the screen off, between **Starts at** and **Ends at**. **Screen at night** On keeps it lit at **Night brightness**, Off turns it dark. A live game of your team or a favorite keeps it at normal brightness. The remote, a team pick or **Panel on** turns it off for the rest of the night. See [Night schedule](/using/brightness-and-clock/#night-schedule). |
 | **Game-day wake** | Off to start. Turns a panel you switched off back on before a game of your team or a favorite, **Turns on** 5 minutes to 2 hours before (15 to start). See [Game-day wake and after the game](/using/brightness-and-clock/#game-day-wake-and-after-the-game). |
-| **After the game** | What the panel does once the final has been up a while: **Stay on the scoreboard** (to start), **Turn off**, **Show the clock**, **Show the Smart board**, **Show effects** or **Show flights** until your next game is close. |
+| **After the game** | What the panel does once the final has been up a while: **Stay on the scoreboard** (to start), **Turn off**, **Show the clock**, **Show the Smart board**, **Show effects**, **Show flights** or **Show the weather** until your next game is close. |
 
 ### Ticker
 
@@ -179,9 +179,10 @@ What the panel shows when no game is on. **Countdown to the next game**, on unle
 | **Schedule** | A favorite's next three games, for teams in every league but MLB. See [Schedule and season recap](/using/schedule/). |
 | **Season recap** | A favorite's record and playoff result between seasons, for teams in every league but MLB. |
 | **Weather** | The forecast for your town. See [Weather](/using/weather/). |
+| **Game Day card** | A QR code for gameday-scoreboard.com every 20 minutes, for a panel other people see. See [Game Day card](/using/gameday-card/). |
 | **Golf leaderboard** | PGA Tour, LPGA and DP World Tour leaderboards, for the tours you tap inside the card and the tours of golfers you follow. The panel lists the tours it has, so the chips match its firmware. See [Golf](/using/golf/). |
 
-Every card is on to start except News headlines and Weather (on once you set a town), so a panel does what it did before the update. A card with nothing to show yet says what it needs under its name: a day for the date countdown, text or a list for the message card, a picture for Pictures, a college football or basketball team for College Top 25, a team outside MLB in Favorite teams for Schedule and Season recap, a town for Weather. You can still turn it off before then. The list is part of the [settings backup](/using/backup/).
+Every card is on to start except News headlines, the Game Day card and Weather (on once you set a town), so a panel does what it did before the update. A card with nothing to show yet says what it needs under its name: a day for the date countdown, text or a list for the message card, a picture for Pictures, a college football or basketball team for College Top 25, a team outside MLB in Favorite teams for Schedule and Season recap, a town for Weather. You can still turn it off before then. The list is part of the [settings backup](/using/backup/).
 
 The **Weather** card holds a **Town or ZIP code** box with **Look up**, the place the panel found, and when the forecast was last read and what it said. Setting a town turns the card on. **Degrees** picks °F, °C or Auto for the card and the kickoff forecast.
 

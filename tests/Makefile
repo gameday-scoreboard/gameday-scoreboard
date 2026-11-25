@@ -11,7 +11,7 @@ ifeq ($(OS),Windows_NT)
 LDFLAGS += -static
 endif
 
-all: build/test_parse build/test_networks build/test_api build/test_settings build/test_logo_cache build/test_logo_cache_asan build/test_picture build/test_celebrate build/test_celeb_football build/test_celeb_hockey build/test_celeb_baseball build/test_celeb_soccer build/test_smart_board build/test_flights
+all: build/test_parse build/test_networks build/test_api build/test_settings build/test_logo_cache build/test_logo_cache_asan build/test_picture build/test_celebrate build/test_celeb_football build/test_celeb_hockey build/test_celeb_baseball build/test_celeb_soccer build/test_smart_board build/test_flights build/test_weather_page build/test_clock
 	./build/test_parse
 	./build/test_networks
 	./build/test_api
@@ -26,6 +26,8 @@ all: build/test_parse build/test_networks build/test_api build/test_settings bui
 	./build/test_celeb_soccer
 	./build/test_smart_board
 	./build/test_flights
+	./build/test_weather_page
+	./build/test_clock
 
 SRCS = test_parse.cpp golden_football.cpp test_set.cpp test_fx_playlists.cpp ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp
 PARSER_ONLY = ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp
@@ -87,6 +89,18 @@ build/test_smart_board: test_smart_board.cpp ../components/gameday/smart_board.h
 build/test_flights: test_flights.cpp $(PARSER_ONLY) $(wildcard ../components/gameday/*.h)
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) test_flights.cpp $(PARSER_ONLY) -o $@ $(LDFLAGS)
+
+# The Weather page: the forecast's hours and suns (weather.h), what the page
+# says (weather_page.h) and its place under Showing and After the game.
+build/test_weather_page: test_weather_page.cpp $(PARSER_ONLY) $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_weather_page.cpp $(PARSER_ONLY) -o $@ $(LDFLAGS)
+
+# The clock sweep: the date and clock code over every quarter hour of 2026 to
+# 2028, in every time zone the panel offers.
+build/test_clock: test_clock.cpp $(PARSER_ONLY) $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_clock.cpp $(PARSER_ONLY) -o $@ $(LDFLAGS)
 
 build/test_networks: test_networks.cpp $(wildcard ../components/saved_networks/*.h)
 	@mkdir -p build

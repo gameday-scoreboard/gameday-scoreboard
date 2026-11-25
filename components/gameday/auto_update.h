@@ -111,6 +111,8 @@ struct UpdateMark {
   // later download would otherwise blame that release.
   uint8_t written;
 } __attribute__((packed));
+static_assert(sizeof(UpdateMark) == 49,
+              "UpdateMark is saved: a new size needs a new preference key or a migration, not a new number");
 
 inline void update_mark_set(char *dst, const std::string &version) {
   strncpy(dst, version.c_str(), kUpdateVersionLen - 1);

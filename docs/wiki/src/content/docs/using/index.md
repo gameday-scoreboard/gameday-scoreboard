@@ -18,6 +18,7 @@ You control the panel from three places. The **Game Day app** sets it up and cha
 - [Schedule and season recap](/using/schedule/): your team's next three games, and its season once it's over.
 - [Weather](/using/weather/): your town's forecast between games, and the forecast for kickoff on the next game's board.
 - [Pictures](/using/pictures/): your own picture or animated GIF between games.
+- [Game Day card](/using/gameday-card/): a QR code for gameday-scoreboard.com between games, for a panel other people see.
 - [Football: NFL and college](/using/football/)
 - [Baseball: MLB](/using/baseball/)
 - [Basketball: NBA, WNBA and college](/using/basketball/)

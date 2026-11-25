@@ -55,6 +55,7 @@
     "seasonrecap": true,
     "news": false,
     "weather": true,
+    "gamedaycard": false,
     "golf": true
   },
   "countdown": true,

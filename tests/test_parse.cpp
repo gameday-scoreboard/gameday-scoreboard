@@ -3093,7 +3093,7 @@ static void test_nba_live() {
   GameSnapshot e = hoops_event("fixtures/event_nba_end.json", kThunder);
   CHECK(e.nba.phase == Phase::END_PERIOD);
   CHECK_EQ(clock_text(e), std::string("End 1st"));
-  CHECK_EQ(status_text(e, o, ""), std::string("OKC 0-1 | MIL 0-1"));
+  CHECK_EQ(status_text(e, o, ""), std::string("FG 62% to 48% | 3PT 7/13 to 5/16 | Rebounds 12-14"));
 
   // Overtime, from the period number: OT is period 5 with four quarters.
   GameSnapshot ot = g;
@@ -7030,9 +7030,26 @@ static void test_night_skip_clock_change(NightPrefs p) {
   CHECK_EQ(skip("2026-11-01T07:10Z"), second_130);  // 1:10 AM CST
   // Between the two passes the clock reads 1:30 to 1:59, outside the hours,
   // and the skip holds through to the second 1:30.
-  CHECK(!night_skip_over(p, 60 + 45, parse_iso8601_z("2026-11-01T06:45Z"), second_130));
-  CHECK(!night_skip_over(p, 60 + 15, parse_iso8601_z("2026-11-01T07:15Z"), second_130));
-  CHECK(night_skip_over(p, 60 + 30, second_130, second_130));
+  CHECK(!night_skip_over(p, 60 + 45, parse_iso8601_z("2026-11-01T06:45Z"), second_130, tz_offset_at));
+  CHECK(!night_skip_over(p, 60 + 15, parse_iso8601_z("2026-11-01T07:15Z"), second_130, tz_offset_at));
+  CHECK(night_skip_over(p, 60 + 30, second_130, second_130, tz_offset_at));
+  // A start of 1:30 AM comes twice too. A skip in the first pass runs on
+  // while the clock reads 1:00 to 1:29 again, with more than an hour to go.
+  {
+    NightPrefs twice = p;
+    twice.start = 60 + 30;
+    twice.end = 7 * 60;
+    CHECK(!night_skip_over(twice, 60 + 30, parse_iso8601_z("2026-11-01T06:30Z"), seven_cst, tz_offset_at));
+    CHECK(!night_skip_over(twice, 60, parse_iso8601_z("2026-11-01T07:00Z"), seven_cst, tz_offset_at));
+    CHECK(!night_skip_over(twice, 60 + 29, parse_iso8601_z("2026-11-01T07:29Z"), seven_cst, tz_offset_at));
+    CHECK(!night_skip_over(twice, 60 + 30, parse_iso8601_z("2026-11-01T07:30Z"), seven_cst, tz_offset_at));
+    CHECK(night_skip_over(twice, 7 * 60, seven_cst, seven_cst, tz_offset_at));
+    // Outside the hours at any other time it is over: the first 1:15 AM of
+    // that night, and 1:15 AM on a night with no clock change.
+    CHECK(night_skip_over(twice, 60 + 15, parse_iso8601_z("2026-11-01T06:15Z"), seven_cst, tz_offset_at));
+    CHECK(night_skip_over(twice, 60 + 15, parse_iso8601_z("2026-11-02T07:15Z"),
+                          parse_iso8601_z("2026-11-02T13:00Z"), tz_offset_at));
+  }
   // An end of 1:00 AM is the first moment the clock goes back to.
   p.end = 60;
   CHECK_EQ(skip("2026-11-01T04:00Z"), parse_iso8601_z("2026-11-01T07:00Z"));
@@ -7117,12 +7134,13 @@ static void test_night() {
   // with more than an hour to go (new hours that leave the night).
   {
     const int64_t t = 1792000000;
-    CHECK(!night_skip_over(p, late, t, t + 3600 * 5));
-    CHECK(night_skip_over(p, late, t + 3600 * 5, t + 3600 * 5));
+    NightUtcOffset fixed = [](int64_t) -> int32_t { return -5 * 3600; };
+    CHECK(!night_skip_over(p, late, t, t + 3600 * 5, fixed));
+    CHECK(night_skip_over(p, late, t + 3600 * 5, t + 3600 * 5, fixed));
     NightPrefs off = p;
     off.on = 0;
-    CHECK(night_skip_over(off, late, t, t + 3600 * 5));
-    CHECK(night_skip_over(p, 12 * 60, t, t + 3600 * 5));
+    CHECK(night_skip_over(off, late, t, t + 3600 * 5, fixed));
+    CHECK(night_skip_over(p, 12 * 60, t, t + 3600 * 5, fixed));
   }
   CHECK(night_holding(Night::DIM));
   CHECK(night_holding(Night::DARK));
@@ -7850,7 +7868,9 @@ static void test_weather() {
   CHECK_EQ(forecast_url(32.95457f, -97.01501f, "America/Chicago"),
            std::string("https://api.open-meteo.com/v1/forecast?latitude=32.9546&longitude=-97.0150"
                        "&current=temperature_2m,weather_code,is_day&daily=weather_code,temperature_2m_max,"
-                       "temperature_2m_min&temperature_unit=fahrenheit&timezone=America%2FChicago&forecast_days=4"));
+                       "temperature_2m_min,sunrise,sunset&hourly=temperature_2m,weather_code,"
+                       "precipitation_probability,is_day&temperature_unit=fahrenheit&timezone=America%2FChicago"
+                       "&forecast_days=4&forecast_hours=15"));
   // The town as kept: one line, no emoji, at most kTownMax bytes.
   CHECK_EQ(town_clean("  Coppell\n\xF0\x9F\x8F\x88 "), std::string("Coppell"));
   CHECK_EQ(town_clean(std::string(60, 'x')).size(), kTownMax);
@@ -8113,38 +8133,16 @@ static void test_kickoff_weather() {
   CHECK(wx_icon_at((uint8_t) WxIcon::MOON, false) == (uint8_t) WxIcon::SUN);  // NU's 11 AM kickoff, read at night
   CHECK(wx_icon_at((uint8_t) WxIcon::SUN, true) == (uint8_t) WxIcon::MOON);
   CHECK(wx_icon_at((uint8_t) WxIcon::RAIN, true) == (uint8_t) WxIcon::RAIN);
-  CHECK(wx_dark_at(10, 18) && !wx_dark_at(10, 17));
-  CHECK(!wx_dark_at(7, 20) && wx_dark_at(7, 21));
-  CHECK(wx_dark_at(12, 17) && !wx_dark_at(12, 16));  // a December 5 PM kickoff is after sunset
-  CHECK(wx_dark_at(1, 5) && !wx_dark_at(1, 6));
-  CHECK(!wx_dark_at(0, 20) && !wx_dark_at(13, 20));
-  // US daylight time, given the local standard time: the second Sunday in
-  // March at 2 AM to the first Sunday in November at 2 AM daylight.
-  CHECK(!wx_us_dst(1804681800));  // 2027-03-10 12:30, before the 14th
-  CHECK(!wx_us_dst(1804987800));  // 2027-03-14 01:30
-  CHECK(wx_us_dst(1804991400));   // 2027-03-14 02:30
-  CHECK(!wx_us_dst(1772933400));  // 2026-03-08 01:30
-  CHECK(wx_us_dst(1772937000));   // 2026-03-08 02:30
-  CHECK(wx_us_dst(1825504200));   // 2027-11-06 12:30, before the 7th
-  CHECK(wx_us_dst(1825547400));   // 2027-11-07 00:30 standard, 01:30 daylight
-  CHECK(!wx_us_dst(1825551000));  // 2027-11-07 01:30 standard
-  CHECK(wx_us_dst(1793493000));   // 2026-11-01 00:30
-  CHECK(!wx_us_dst(1793496600));  // 2026-11-01 01:30
-  CHECK(!wx_us_dst(1772281800));  // February
-  CHECK(!wx_us_dst(1796128200));  // December
-
-  // The sun or the moon by the venue's own clock, not the panel's. NU's
-  // 11 AM kickoff (16:00 UTC, CDT) is daytime; Sunday night in Green Bay
-  // (01:20 UTC Monday, 7:20 PM CST after the change back) is dark, and so is
-  // a 7:30 PM Eastern November game a Pacific panel sees as 4:30 PM.
-  bool dst = false;
-  CHECK_EQ(wx_state_offset("Evanston, IL", dst), -6);
-  CHECK(dst);
-  CHECK_EQ(wx_state_offset("San Diego, California", dst), -8);
-  CHECK_EQ(wx_state_offset("Glendale, AZ", dst), -7);
-  CHECK(!dst);
-  CHECK_EQ(wx_state_offset("London, England", dst), 0);
-  CHECK_EQ(wx_state_offset("Foxborough", dst), 0);
+  // The sun or the moon by the sun at the venue. NU's 11 AM kickoff (16:00
+  // UTC, CDT) is daytime; Sunday night in Green Bay (01:20 UTC Monday, 7:20 PM
+  // CST after the change back) is dark, and so is a 7:30 PM Eastern November
+  // game a Pacific panel sees as 4:30 PM.
+  float lat = 0, lon = 0;
+  CHECK(wx_state_spot("Evanston, IL", lat, lon) && lat == 41 && lon == -88);
+  CHECK(wx_state_spot("San Diego, California", lat, lon) && lat == 35 && lon == -119);
+  CHECK(wx_state_spot("Honolulu, HI", lat, lon) && lat == 21 && lon == -158);
+  CHECK(!wx_state_spot("London, England", lat, lon));
+  CHECK(!wx_state_spot("Foxborough", lat, lon));
   CHECK_EQ(wx_venue_dark(1792857600, "Evanston, IL"), 0);         // 2026-10-24 16:00 UTC
   CHECK_EQ(wx_venue_dark(1793582400, "Green Bay, WI"), 1);        // 2026-11-02 01:20 UTC
   CHECK_EQ(wx_venue_dark(1794961800, "East Rutherford, NJ"), 1);  // 2026-11-18 00:30 UTC
@@ -8155,6 +8153,27 @@ static void test_kickoff_weather() {
   CHECK_EQ(wx_venue_dark(1793491200, "Evanston, IL"), 1);         // 7 PM CDT
   CHECK_EQ(wx_venue_dark(1812849300, "Chicago, IL"), 0);          // 2027-06-12 8:15 PM CDT, still light
   CHECK_EQ(wx_venue_dark(1794961800, "London, England"), -1);     // abroad: ESPN's icon as it is
+  CHECK_EQ(wx_venue_dark(1793570400, "Miami Gardens, FL"), 0);    // 2026-11-01 5 PM EST, sunset at 5:39
+  CHECK_EQ(wx_venue_dark(1793577600, "Miami Gardens, FL"), 1);    // 7 PM EST
+  CHECK_EQ(wx_venue_dark(1825110000, "Denver, CO"), 0);           // 2027-11-01 5 PM, still daylight time
+  CHECK_EQ(wx_venue_dark(1785566700, "Honolulu, HI"), 1);         // 2026-07-31 8:45 PM HST
+  CHECK_EQ(wx_venue_dark(0, "Miami Gardens, FL"), -1);
+  // Sunrise and sunset as Open-Meteo has them, to 3 minutes either way.
+  struct Sun {
+    int64_t t;
+    float lat, lon;
+    bool rise;
+  };
+  static const Sun kSun[] = {
+      {1793532540, 25.96f, -80.24f, true},    // Miami, 2026-11-01 6:29 AM EST
+      {1793572740, 25.96f, -80.24f, false},   // 5:39 PM
+      {1794961500, 33.53f, -112.26f, false},  // Glendale, AZ, 2026-11-17 5:25 PM MST
+      {1782095460, 39.74f, -105.02f, false},  // Denver, 2026-06-21 8:31 PM MDT
+  };
+  for (const auto &x : kSun) {
+    CHECK_EQ(wx_sun_down(x.t - 180, x.lat, x.lon), x.rise);
+    CHECK_EQ(wx_sun_down(x.t + 180, x.lat, x.lon), !x.rise);
+  }
   CHECK_EQ(wx_venue_dark(1783393200, "Chicago, IL"), 1);          // 2026-07-07 03:00 UTC, 10 PM CDT
   CHECK_EQ(wx_venue_dark(1783447200, "Chicago, IL"), 0);          // 1 PM CDT
   WxCivil c = wx_civil(1793582400);
@@ -9120,11 +9139,11 @@ static void test_row_text() {
   CHECK_EQ(hold.basket, std::string("McDaniels 2"));
   RowLines b = row_lines(g, hold, on, true);
   CHECK_EQ((int) b.n, 4);
-  CHECK_EQ(b.line[0].form(0), std::string("McDaniels 2"));
+  CHECK_EQ(b.line[0].form(0), std::string("Last: McDaniels 2"));
   CHECK_EQ(b.line[0].rgb, (uint32_t) 0xFFFFFF);
-  CHECK_EQ(b.line[1].form(0), std::string("Nesmith 19"));
+  CHECK_EQ(b.line[1].form(0), std::string("IND Nesmith 19 pts"));
   CHECK_EQ(b.line[1].rgb, (uint32_t) 0xFFFFFF);
-  CHECK_EQ(b.line[2].form(0), std::string("Edwards 19"));
+  CHECK_EQ(b.line[2].form(0), std::string("MIN Edwards 19 pts"));
   CHECK_EQ(b.line[3].form(0), std::string("MIN 56% to win"));  // home 0.444
   // The basket stays through the plays after it, until the next one.
   GameSnapshot reb = g;
@@ -9144,7 +9163,35 @@ static void test_row_text() {
   // The last play switch off drops the basket only.
   RowOptions quiet;
   quiet.last_play = false;
-  CHECK_EQ(row_lines(ft, hold, quiet, true).line[0].form(0), std::string("Nesmith 19"));
+  CHECK_EQ(row_lines(ft, hold, quiet, true).line[0].form(0), std::string("IND Nesmith 19 pts"));
+  // A basket another play hid: the held one isn't the last any more.
+  GameSnapshot hid = reb;
+  hid.team_score += 2;
+  hold.read(hid);
+  CHECK_EQ(hold.basket, std::string(""));
+  hold.read(reb);
+  // A college miss comes with the points it was worth: still no basket.
+  {
+    std::string json = slurp("fixtures/event_nba_live.json");
+    const size_t at = json.find("makes ");
+    CHECK(at != std::string::npos);
+    json.replace(at, 6, "misses ");
+    GameSnapshot miss;
+    CHECK(parse_event_str(json, Sport::BASKETBALL, kPacers, miss, root_id(json)));
+    CHECK(miss.last_play.find("misses ") != std::string::npos);
+    CHECK_EQ((int) miss.play_value, 0);
+    RowHold m;
+    m.read(miss);
+    CHECK_EQ(m.basket, std::string(""));
+  }
+  // College's free throws have no space in their type.
+  GameSnapshot cft = reb;
+  cft.play_value = 1;
+  cft.play_athlete = "S. Williams";
+  cft.play_type = "MadeFreeThrow";
+  RowHold cf;
+  cf.read(cft);
+  CHECK_EQ(cf.basket, std::string("Williams FT"));
   // Another game starts the hold over.
   GameSnapshot other = g;
   other.event_id = "999";
@@ -9167,9 +9214,87 @@ static void test_row_text() {
   CHECK(status_text(to, tick, "").find("Official TV Timeout") != std::string::npos);
   tick.row_timeout = true;
   CHECK(status_text(to, tick, "").find("Timeout") == std::string::npos);
-  // Nor the clock, which has its own row: the records, as in a break.
-  CHECK_EQ(status_text(to, tick, ""), espn::detail::records_line(to));
+  // Nor the clock, which has its own row, nor the records, which are under
+  // the logos: the team stats, ours first.
+  CHECK_EQ(status_text(to, tick, ""), std::string("FG 55% to 53% | 3PT 9/21 to 14/23 | Rebounds 17-24"));
+  GameSnapshot bare = to;
+  bare.nba.team_box.has = false;
+  CHECK(status_text(bare, tick, "").find(espn::detail::records_line(bare)) == std::string::npos);
   CHECK(!espn::detail::records_line(to).empty());
+  // A player checking in isn't news: the last play worth reading stays.
+  GameSnapshot sub = reb;
+  sub.play_type = "Substitution";
+  sub.last_play = "Daisean Williford subbing in for Florida A&M";
+  CHECK(basketball_junk_play(sub));
+  CHECK(status_text(sub, tick, "").find("subbing") == std::string::npos);
+  tick.held_play = "Diego Roman makes layup";
+  CHECK_EQ(status_text(sub, tick, ""), std::string("Diego Roman makes layup"));
+  tick.held_play = nullptr;
+  RowHold plays;
+  plays.read(g);
+  std::string kept = plays.play;
+  CHECK(!kept.empty());
+  plays.read(sub);
+  plays.read(to);
+  CHECK_EQ(plays.play, kept);
+  CHECK(plays.timeout);
+  // Substitutions in the timeout leave the break's stats up; a play ends it.
+  tick.held_play = plays.play.c_str();
+  tick.held_break = true;
+  CHECK_EQ(status_text(sub, tick, ""), std::string("FG 55% to 53% | 3PT 9/21 to 14/23 | Rebounds 17-24"));
+  plays.read(sub);
+  CHECK(plays.timeout);
+  plays.read(g);
+  CHECK(!plays.timeout);
+  tick.held_break = false;
+  // ESPN's dead ball rebound is no news either.
+  GameSnapshot dead = reb;
+  dead.play_type = "Dead Ball Rebound";
+  dead.last_play = "IND dead ball team rebound";
+  CHECK(basketball_junk_play(dead));
+  // A held play keeps its own team: a turnover by MIN, then Indiana checks a
+  // player in, then a substitution with no team.
+  GameSnapshot held_tov = reb;
+  held_tov.last_play = "team  shot clock turnover";
+  held_tov.play_type = "Turnover";
+  held_tov.play_team = kWolves;
+  RowHold whose;
+  whose.read(held_tov);
+  GameSnapshot sub2 = sub;
+  sub2.play_team = kPacers;
+  whose.read(sub2);
+  tick.held_play = whose.play.c_str();
+  CHECK_EQ(status_text(sub2, tick, ""), std::string("MIN shot clock turnover"));
+  sub2.play_team = 0;
+  whose.read(sub2);
+  CHECK_EQ(status_text(sub2, tick, ""), std::string("MIN shot clock turnover"));
+  tick.held_play = nullptr;
+  // With Last play off the ticker is ESPN's short status, except in a
+  // timeout, which it would otherwise repeat.
+  TickerOptions quiet_tick;
+  quiet_tick.clock = quiet_tick.last_play = false;
+  quiet_tick.row_timeout = true;
+  CHECK_EQ(status_text(reb, quiet_tick, ""), reb.short_detail);
+  CHECK_EQ(status_text(to, quiet_tick, ""), std::string("FG 55% to 53% | 3PT 9/21 to 14/23 | Rebounds 17-24"));
+  // ESPN sent no stats: the network and the arena, then just the records.
+  GameSnapshot nost = to;
+  nost.nba.team_box.has = nost.nba.opp_box.has = false;
+  nost.tv = "ESPN";
+  nost.venue = "Gainbridge Fieldhouse";
+  CHECK_EQ(status_text(nost, quiet_tick, ""), std::string("ESPN | Gainbridge Fieldhouse"));
+  nost.tv.clear();
+  nost.venue.clear();
+  CHECK_EQ(status_text(nost, quiet_tick, ""), espn::detail::records_line(nost));
+  // "team  turnover" says whose.
+  GameSnapshot tov = reb;
+  tov.last_play = "team  turnover";
+  tov.play_type = "Turnover";
+  tov.play_team = kWolves;
+  CHECK_EQ(status_text(tov, tick, ""), std::string("MIN turnover"));
+  tov.last_play = "Foul on Antonio Baker Jr..";
+  CHECK_EQ(status_text(tov, tick, ""), std::string("Foul on Antonio Baker Jr."));
+  tov.last_play = "Mihailo Stijovic bad pass\nturnover";
+  CHECK_EQ(status_text(tov, tick, ""), std::string("Mihailo Stijovic bad pass turnover"));
   // A basket is still the ticker's.
   CHECK(status_text(g, tick, "").find("McDaniels") != std::string::npos);
   // Football's win chance: in the ticker on a single panel, on the row only

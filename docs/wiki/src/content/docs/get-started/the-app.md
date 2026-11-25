@@ -162,6 +162,10 @@ On iPhone and Android, **After the game** also has **Show effects**: the effect 
 
 On iPhone and Android, **Customize** has **Pictures** after the message card, like the device page: the pictures on your panel, each with **Delete**, and **Add a picture**, which picks from your phone's photos. A photo is shrunk to fit the panel and a GIF up to 128 by 64 pixels goes as it is (see [Pictures](/using/pictures/)). It shows once the panel runs firmware with pictures.
 
+:::note[Coming in the next app update]
+On Android, **Customize** has a **Flights** card after **Date countdown**, like the device page's: **Within**, **Facing**, **ADS-B receiver** and **adsb.lol key**, and the status line, like **8 planes nearby, from adsb.lol, read 20 s ago** (see [Setting it up](/using/flights/#setting-it-up)). Once a key is saved, the card shows **Key saved** with **Clear**, never the key. With **Showing** on the Board set to **Flights**, the same status line shows under it, with **Flights settings under Customize**. The card shows once the panel runs firmware with the Flights page.
+:::
+
 On Android, **Device** has a **Remote buttons** card after **Remote**. On iPhone, **Device > Advanced** has **Buttons 1 to 4** under **Remote**. Both have the device page's picker for each of buttons 1 to 4: **Its own favorite**, a favorite team, a sport, a playlist, **All favorites** or **Nothing**. A button on its own favorite says which favorite that is, and one whose team, playlist or sport is gone says which favorite it plays for now. While a WizMote is paired, your favorites and playlists show the buttons set to them. See [The numbered buttons](/using/remote/#the-numbered-buttons). They show once the panel runs firmware with the pickers.
 
 :::note[Coming in the next app update]
