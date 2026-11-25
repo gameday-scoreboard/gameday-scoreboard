@@ -92,9 +92,14 @@ struct Basketball {
   // Each side's team stats in this game; `has` only when ESPN sent them all.
   struct Box {
     bool has{false};
-    uint8_t fg_made{0}, fg_tried{0}, three_made{0}, three_tried{0}, rebounds{0};
+    bool has_ft{false};  // the free throws too
+    uint8_t fg_made{0}, fg_tried{0}, three_made{0}, three_tried{0}, rebounds{0}, ft_made{0}, ft_tried{0};
   };
   Box team_box, opp_box;
+  // Each side's rebounds or assists leader, whichever is more of a night,
+  // "Roman 9 reb"; "" under 3 of each. Arrays, not strings, as hockey's goal
+  // is.
+  char team_extra[24]{}, opp_extra[24]{};
 };
 
 // Hockey's extras. ESPN's period 5 is the shootout in a regular-season or
@@ -476,8 +481,11 @@ bool timeout_play(const std::string &text);
 // Basketball: a last play that is no news: a player checking in or out, or
 // ESPN's dead ball rebound.
 bool basketball_junk_play(const GameSnapshot &s);
-// Basketball's team stats while a game is on, our side's number first, "FG
-// 47% to 29% | 3PT 3/14 to 5/25 | Rebounds 38-22". "" when ESPN has none.
+// ESPN's play text, tidied: single spaces, one full stop, and "team turnover"
+// with the team's abbreviation in place of "team".
+std::string basketball_tidy_play(const GameSnapshot &s, const std::string &play);
+// Basketball's team stats while a game is on, "FG USA 47%, FAMU 29% | 3PT
+// USA 3/14, FAMU 5/25 | Rebounds USA 38, FAMU 22". "" when ESPN has none.
 std::string basketball_box_line(const GameSnapshot &s);
 // ESPN's play text, tidied: single spaces, one full stop, and "team turnover"
 // with the team's abbreviation in place of "team".
