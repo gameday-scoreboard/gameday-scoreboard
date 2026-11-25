@@ -3087,7 +3087,7 @@ void GamedayComponent::night_tick_() {
   // A skip lasts to the end of the night it was made in; outside the hours,
   // or with the schedule off, it is over (night_skip_over).
   if (this->night_skip_until_ != 0 && valid &&
-      ::espn::night_skip_over(this->night_, minute, (int64_t) now.timestamp, this->night_skip_until_)) {
+      ::espn::night_skip_over(this->night_, minute, (int64_t) now.timestamp, this->night_skip_until_, utc_offset_at)) {
     this->night_skip_until_ = 0;
     this->save_night_skip_();
   }
@@ -6259,8 +6259,8 @@ void GamedayComponent::kick_fields_(UpdateFields &f, ::espn::TickerOptions &o) c
   if (g.weather_f != ::espn::kNoWeatherF) {
     t10 = g.weather_f * 10;
     // ESPN's icon number can be for the hour it read the forecast, not the
-    // kickoff's: the sun or the moon by the kickoff's hour at the venue, when
-    // its time zone is known (a US state), else ESPN's as it is.
+    // kickoff's: the sun or the moon by whether the sun is up at the venue, when
+    // its state is known (a US venue), else ESPN's as it is.
     const std::string words = ::espn::espn_wx_words(g.weather);
     icon = ::espn::espn_wx_icon(g.weather_accu, words);
     int dark = g.time_tbd ? -1 : ::espn::wx_venue_dark(g.kickoff_epoch, g.venue_place);

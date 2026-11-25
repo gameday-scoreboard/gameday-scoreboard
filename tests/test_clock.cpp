@@ -207,7 +207,7 @@ static void check_skip(const Zone &z, const NightPrefs &p, int64_t press, int mi
           "ends " + strf("%a %H:%M", z.tm[Zone::slot(until)]) + ", " + hours());
   int64_t held = until;
   auto state = [&](int k) {
-    if (held != 0 && night_skip_over(p, z.minute[k], Zone::at(k), held))
+    if (held != 0 && night_skip_over(p, z.minute[k], Zone::at(k), held, night_offset))
       held = 0;
     return night_state(p, true, z.minute[k], false, held != 0);
   };
@@ -258,14 +258,6 @@ static void sweep_night(const Zone &z) {
       const Night want = inside(i) ? Night::DIM : Night::DAY;
       SWEEP(night_state(p, true, z.minute[i], false) == want, "night_state", Zone::at(i), night_word(want));
       if (!inside(i))
-        continue;
-      // Known bug: a night that starts inside the hour the clocks go back
-      // over. The clock reads before the start again, which ends the skip, so
-      // the panel dims at the second start.
-      bool before_start_again = false;
-      for (int k = i + 1; k < i + 5 && k < end[i] - 4; k++)
-        before_start_again |= !inside(k);
-      if (before_start_again)
         continue;
       // Every quarter hour of the nights around a clock change, and of one
       // night in four weeks.
@@ -489,14 +481,6 @@ static void sweep_dates() {
 
 // ---- The weather ----------------------------------------------------------------
 
-// The daylight time rule the venue's clock uses, in the zones that keep it.
-// Standard time is the smaller of the winter and summer offsets.
-static void sweep_us_dst(const Zone &z) {
-  const int32_t std_off = std::min(z.off[Zone::first()], z.off[Zone::first() + 182 * kPerDay]);
-  for (int i = Zone::first(); i < Zone::last(); i++)
-    SWEEP(wx_us_dst(Zone::at(i) + std_off) == (z.off[i] != std_off), "wx_us_dst", Zone::at(i), "");
-}
-
 // The sun's height in degrees, to a tenth or so (the Astronomical Almanac's
 // low precision formula).
 static double sun_height(int64_t t, double lat, double lon) {
@@ -509,18 +493,30 @@ static double sun_height(int64_t t, double lat, double lon) {
   return asin(sin(lat * rad) * sin(dec) + cos(lat * rad) * cos(dec) * cos(hour)) / rad;
 }
 
-// The kickoff forecast's sun or moon, afternoon to midnight, about 40 degrees
-// north, the latitude its rule is made for. The rule goes by the month, so it
-// gets a wide twilight on either side of sunset.
-static void sweep_venue_dark(const Zone &z, const char *place, double lat, double lon) {
+// The kickoff forecast's sun or moon, around the clock. The rule knows a
+// venue by its state, so it gets this much on either side of the horizon.
+static const double kVenueSlack = 4;
+static void sweep_venue_dark(const char *place, double lat, double lon) {
   for (int i = Zone::first(); i < Zone::last(); i++) {
-    if (z.minute[i] < 12 * 60)
-      continue;
     const double up = sun_height(Zone::at(i), lat, lon);
     const int dark = wx_venue_dark(Zone::at(i), place);
-    SWEEP(dark >= 0 && !(up > 10 && dark == 1) && !(up < -15 && dark == 0), "wx_venue_dark", Zone::at(i),
+    SWEEP(dark >= 0 && !(up > kVenueSlack && dark == 1) && !(up < -kVenueSlack && dark == 0), "wx_venue_dark",
+          Zone::at(i),
           std::string(place) + (dark == 1 ? ": dark" : ": light") + ", sun at " + std::to_string(up) + " degrees");
   }
+}
+
+// The firmware's sun, in single precision, against the test's at the same
+// spot: sunset at 0.833 degrees under the horizon, to a fifth of a degree.
+static void sweep_sun_down() {
+  zone_name = "UTC";
+  static const double kSpots[][2] = {{28, -82}, {35, -119}, {47, -122}, {21, -158}, {61, -150}, {-34, 151}, {0, 0}};
+  for (const auto &s : kSpots)
+    for (int64_t t = kFrom; t < kTo; t += 600) {
+      const double up = sun_height(t, s[0], s[1]);
+      const bool down = wx_sun_down(t, (float) s[0], (float) s[1]);
+      SWEEP(!(up > -0.633 && down) && !(up < -1.033 && !down), "wx_sun_down", t, std::to_string(up) + " degrees");
+    }
 }
 
 // A forecast, with midnight passing before the next read: whatever the card
@@ -646,9 +642,6 @@ int main() {
     // Noon Eastern is already the next day there.
     if (strcmp(t.name, "Australia Eastern") != 0)
       sweep_tbd_day(z, eastern);
-    for (const char *us : {"US Eastern", "US Central", "US Mountain", "US Pacific", "US Alaska"})
-      if (strcmp(t.name, us) == 0)
-        sweep_us_dst(z);
   }
 
   struct Venue {
@@ -660,12 +653,19 @@ int main() {
       {"US Central", "Green Bay, WI", 44.50, -88.06},
       {"US Mountain", "Denver, CO", 39.74, -105.02},
       {"US Pacific", "Seattle, WA", 47.60, -122.33},
+      {"US Eastern", "Miami, FL", 25.96, -80.24},
+      {"US Pacific", "San Diego, CA", 32.71, -117.16},
+      {"US Arizona", "Glendale, AZ", 33.53, -112.26},
+      {"US Hawaii", "Honolulu, HI", 21.29, -157.82},
   };
   for (const Venue &v : kVenues) {
     zone_name = v.zone;
-    const Zone z(posix(v.zone));
-    sweep_venue_dark(z, v.place, v.lat, v.lon);
+    setenv("TZ", posix(v.zone), 1);
+    tzset();
+    sweep_venue_dark(v.place, v.lat, v.lon);
   }
+
+  sweep_sun_down();
 
   zone_name = "";
   sweep_night_text();
