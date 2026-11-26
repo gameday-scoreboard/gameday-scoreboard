@@ -131,7 +131,7 @@ What scrolls along the bottom of the panel during a game. All of them start on. 
 | **Count and at-bat** | Baseball: the count, outs, pitcher and batter. |
 | **Match stats** | Soccer: goals, cards, possession and shots. |
 | **Last play** | ESPN's latest play in every sport. In soccer, the latest goal or card. |
-| **Odds, TV and win chance** | The line, over/under and TV channel before the start, when ESPN has them, and in football who is favored to win during the game. |
+| **Odds, TV and win chance** | The line, over/under and TV channel before the start, when ESPN has them, in football who is favored to win during the game, and in volleyball the TV channel during the match. |
 | **Pre-game season leaders** | Before the game, each team's season leader: the passing leader with yards and touchdowns in football, home runs in baseball, points per game in basketball and points in hockey. |
 
 Only the switches for sports your panel follows are shown. Hockey and basketball have no game situation line, so they have no switch of their own.

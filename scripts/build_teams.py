@@ -140,8 +140,23 @@ def college_volleyball_teams(league, path):
         for table in tables:
             for entry in table.get("standings", {}).get("entries", []):
                 t = entry["team"]
-                found[int(t["id"])] = (league, int(t["id"]), t["abbreviation"], t["displayName"], 0)
+                tid = int(t["id"])
+                found[tid] = (league, tid, t["abbreviation"], volleyball_name(t), 0)
     return list(found.values())
+
+
+def volleyball_name(t):
+    """Volleyball's standings can leave a school without a mascot, filling
+    the name with the school again ("Valparaiso VALPARAISO" in November
+    2026). ESPN uses one team id across college sports, so take the men's
+    basketball name for that id, or the school alone if there is none."""
+    location, name = t.get("location", ""), t.get("name", "")
+    if name and name.casefold() != location.casefold():
+        return t["displayName"]
+    basketball = {tid: n for lg, tid, _a, n, _g in current_rows() if lg == "MCBB"}
+    fixed = basketball.get(int(t["id"])) or location or t["displayName"]
+    print(f"WCVB: {t['displayName']} ({t['id']}) has no mascot, using {fixed}")
+    return fixed
 
 
 def cstr(s):
