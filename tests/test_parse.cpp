@@ -22,7 +22,7 @@
 #include "gzip_stream.h"
 #include "game_leaders.h"
 #include "game_viz.h"
-#include "row_text.h"
+#include "story_rows.h"
 #include "guard.h"
 #include "ha_events.h"
 #include "health.h"
@@ -3092,7 +3092,7 @@ static void test_nba_live() {
   GameSnapshot e = hoops_event("fixtures/event_nba_end.json", kThunder);
   CHECK(e.nba.phase == Phase::END_PERIOD);
   CHECK_EQ(clock_text(e), std::string("End 1st"));
-  CHECK_EQ(status_text(e, o, ""), std::string("FG 62% to 48% | 3PT 7/13 to 5/16 | Rebounds 12-14"));
+  CHECK_EQ(status_text(e, o, ""), std::string("FG OKC 62%, MIL 48% | 3PT OKC 7/13, MIL 5/16 | Rebounds OKC 12, MIL 14"));
 
   // Overtime, from the period number: OT is period 5 with four quarters.
   GameSnapshot ot = g;
@@ -8687,10 +8687,7 @@ static void test_row_text() {
   // Football, FIU @ JXST: 3rd & 4, then JXST's win chance in its color.
   GameSnapshot fb;
   CHECK(parse_event_str(slurp("fixtures/event_ncaa_live.json"), Sport::FOOTBALL, 2229, fb));
-  RowHold none;
-  none.read(fb);
-  CHECK_EQ(none.basket, std::string(""));
-  RowLines r = row_lines(fb, none, on, true);
+  RowLines r = row_lines(fb, on, true);
   CHECK_EQ((int) r.n, 2);
   CHECK_EQ(r.line[0].form(0), std::string("3rd & 4"));
   CHECK_EQ((int) r.line[0].secs, 8);
@@ -8701,74 +8698,44 @@ static void test_row_text() {
   {
     GameSnapshot goal = fb;
     goal.short_down_distance = "2nd & Goal";
-    RowLines rg = row_lines(goal, none, on, true);
+    RowLines rg = row_lines(goal, on, true);
     CHECK_EQ(rg.line[0].form(1), std::string("2nd&Goal"));
     CHECK_EQ(rg.line[0].form(2), std::string("2&Goal"));
     GameSnapshot odd = fb;
     odd.short_down_distance = "Kickoff";
-    CHECK_EQ(row_lines(odd, none, on, true).line[0].form(1), std::string(""));
+    CHECK_EQ(row_lines(odd, on, true).line[0].form(1), std::string(""));
   }
   CHECK_EQ(r.line[0].rgb, (uint32_t) 0xFFFFFF);
   CHECK_EQ(r.line[1].form(0), std::string("JXST 96% to win"));
   CHECK_EQ(r.line[1].form(1), std::string("JXST 96% win"));
   CHECK_EQ(r.line[1].form(2), std::string("JXST 96%"));
   CHECK_EQ(r.line[1].rgb, (uint32_t) 0xFFFFFF);  // white, like the down
-  CHECK_EQ(row_news(fb, none), std::string("3rd & 4"));
+  CHECK_EQ(row_news(fb), std::string("3rd & 4"));
   // The switch off leaves the down alone; halftime leaves nothing.
   RowOptions off;
   off.win_chance = false;
-  CHECK_EQ((int) row_lines(fb, none, off, true).n, 1);
-  CHECK_EQ((int) row_lines(fb, none, on, false).n, 0);
+  CHECK_EQ((int) row_lines(fb, off, true).n, 1);
+  CHECK_EQ((int) row_lines(fb, on, false).n, 0);
   // The red zone turns the down red.
   GameSnapshot rz = fb;
   rz.is_red_zone = true;
-  CHECK_EQ(row_lines(rz, none, on, true).line[0].rgb, (uint32_t) 0xFF3030);
+  CHECK_EQ(row_lines(rz, on, true).line[0].rgb, (uint32_t) 0xFF3030);
   // Not live, nothing.
   GameSnapshot post = fb;
   post.state = GameState::POST;
-  CHECK_EQ((int) row_lines(post, none, on, true).n, 0);
+  CHECK_EQ((int) row_lines(post, on, true).n, 0);
 
-  // Basketball, IND 74 MIN 73 in the 3rd, as IND: McDaniels' two held, each
-  // side's points leader, IND's win chance.
+  // Basketball, IND 74 MIN 73 in the 3rd, as IND. Its two rows are
+  // test_story_rows; the ticker here is a single panel's, and what the app
+  // and Home Assistant read.
   GameSnapshot g = hoops_event("fixtures/event_nba_live.json", kPacers);
   CHECK_EQ(g.nba.team_scorer, std::string("Nesmith 19"));
   CHECK_EQ(g.nba.opp_scorer, std::string("Edwards 19"));
-  RowHold hold;
-  hold.read(g);
-  CHECK_EQ(hold.basket, std::string("McDaniels 2"));
-  RowLines b = row_lines(g, hold, on, true);
-  CHECK_EQ((int) b.n, 4);
-  CHECK_EQ(b.line[0].form(0), std::string("Last: McDaniels 2"));
-  CHECK_EQ(b.line[0].rgb, (uint32_t) 0xFFFFFF);
-  CHECK_EQ(b.line[1].form(0), std::string("IND Nesmith 19 pts"));
-  CHECK_EQ(b.line[1].rgb, (uint32_t) 0xFFFFFF);
-  CHECK_EQ(b.line[2].form(0), std::string("MIN Edwards 19 pts"));
-  CHECK_EQ(b.line[3].form(0), std::string("MIN 56% to win"));  // home 0.444
-  // The basket stays through the plays after it, until the next one.
+  CHECK_EQ((int) row_lines(g, on, true).n, 0);
   GameSnapshot reb = g;
   reb.play_value = 0;
   reb.play_athlete = "R. Gobert";
   reb.play_type = "Defensive Rebound";
-  hold.read(reb);
-  CHECK_EQ(hold.basket, std::string("McDaniels 2"));
-  GameSnapshot ft = reb;
-  ft.play_value = 1;
-  ft.play_athlete = "A. Nesmith";
-  ft.play_type = "Free Throw - 1 of 2";
-  ft.play_team = kPacers;
-  hold.read(ft);
-  CHECK_EQ(hold.basket, std::string("Nesmith FT"));
-  CHECK_EQ(row_news(ft, hold), std::string("Nesmith FT"));
-  // The last play switch off drops the basket only.
-  RowOptions quiet;
-  quiet.last_play = false;
-  CHECK_EQ(row_lines(ft, hold, quiet, true).line[0].form(0), std::string("IND Nesmith 19 pts"));
-  // A basket another play hid: the held one isn't the last any more.
-  GameSnapshot hid = reb;
-  hid.team_score += 2;
-  hold.read(hid);
-  CHECK_EQ(hold.basket, std::string(""));
-  hold.read(reb);
   // A college miss comes with the points it was worth: still no basket.
   {
     std::string json = slurp("fixtures/event_nba_live.json");
@@ -8779,43 +8746,18 @@ static void test_row_text() {
     CHECK(parse_event_str(json, Sport::BASKETBALL, kPacers, miss, root_id(json)));
     CHECK(miss.last_play.find("misses ") != std::string::npos);
     CHECK_EQ((int) miss.play_value, 0);
-    RowHold m;
-    m.read(miss);
-    CHECK_EQ(m.basket, std::string(""));
   }
-  // College's free throws have no space in their type.
-  GameSnapshot cft = reb;
-  cft.play_value = 1;
-  cft.play_athlete = "S. Williams";
-  cft.play_type = "MadeFreeThrow";
-  RowHold cf;
-  cf.read(cft);
-  CHECK_EQ(cf.basket, std::string("Williams FT"));
-  // Another game starts the hold over.
-  GameSnapshot other = g;
-  other.event_id = "999";
-  other.play_value = 0;
-  hold.read(other);
-  CHECK_EQ(hold.basket, std::string(""));
-  // A TV timeout as the last play: no timeout line, the row keeps its
-  // usual turns (the stopped clock shows the break).
   GameSnapshot to = reb;
   to.last_play = "Official TV Timeout";
   to.play_team = 0;
-  RowLines t = row_lines(to, hold, on, true);
-  CHECK_EQ((int) t.n, 3);  // the two leaders and the win chance; the held basket went with the other game
-  for (int i = 0; i < t.n; i++)
-    for (int k = 0; k < 3; k++)
-      CHECK(t.line[i].form(k).find("imeout") == std::string::npos);
-  // The ticker doesn't say it again on a wide board: the row already does.
   TickerOptions tick;
   tick.clock = false;
   CHECK(status_text(to, tick, "").find("Official TV Timeout") != std::string::npos);
+  // Not on a wide board, where the stopped clock says it; nor the clock,
+  // which has its own row, nor the records, which are under the logos: the
+  // team stats, ours first.
   tick.row_timeout = true;
-  CHECK(status_text(to, tick, "").find("Timeout") == std::string::npos);
-  // Nor the clock, which has its own row, nor the records, which are under
-  // the logos: the team stats, ours first.
-  CHECK_EQ(status_text(to, tick, ""), std::string("FG 55% to 53% | 3PT 9/21 to 14/23 | Rebounds 17-24"));
+  CHECK_EQ(status_text(to, tick, ""), std::string("FG IND 55%, MIN 53% | 3PT IND 9/21, MIN 14/23 | Rebounds IND 17, MIN 24"));
   GameSnapshot bare = to;
   bare.nba.team_box.has = false;
   CHECK(status_text(bare, tick, "").find(espn::detail::records_line(bare)) == std::string::npos);
@@ -8840,7 +8782,7 @@ static void test_row_text() {
   // Substitutions in the timeout leave the break's stats up; a play ends it.
   tick.held_play = plays.play.c_str();
   tick.held_break = true;
-  CHECK_EQ(status_text(sub, tick, ""), std::string("FG 55% to 53% | 3PT 9/21 to 14/23 | Rebounds 17-24"));
+  CHECK_EQ(status_text(sub, tick, ""), std::string("FG IND 55%, MIN 53% | 3PT IND 9/21, MIN 14/23 | Rebounds IND 17, MIN 24"));
   plays.read(sub);
   CHECK(plays.timeout);
   plays.read(g);
@@ -8874,7 +8816,7 @@ static void test_row_text() {
   quiet_tick.clock = quiet_tick.last_play = false;
   quiet_tick.row_timeout = true;
   CHECK_EQ(status_text(reb, quiet_tick, ""), reb.short_detail);
-  CHECK_EQ(status_text(to, quiet_tick, ""), std::string("FG 55% to 53% | 3PT 9/21 to 14/23 | Rebounds 17-24"));
+  CHECK_EQ(status_text(to, quiet_tick, ""), std::string("FG IND 55%, MIN 53% | 3PT IND 9/21, MIN 14/23 | Rebounds IND 17, MIN 24"));
   // ESPN sent no stats: the network and the arena, then just the records.
   GameSnapshot nost = to;
   nost.nba.team_box.has = nost.nba.opp_box.has = false;
@@ -8884,6 +8826,11 @@ static void test_row_text() {
   nost.tv.clear();
   nost.venue.clear();
   CHECK_EQ(status_text(nost, quiet_tick, ""), espn::detail::records_line(nost));
+  // Another game starts the hold over.
+  GameSnapshot other = sub;
+  other.event_id = "999";
+  plays.read(other);
+  CHECK_EQ(plays.play, std::string(""));
   // "team  turnover" says whose.
   GameSnapshot tov = reb;
   tov.last_play = "team  turnover";
@@ -8911,19 +8858,12 @@ static void test_row_text() {
   CHECK(status_text(fb, ft_tick, "").find(fb.down_distance) == std::string::npos);
   if (!fb.last_play.empty())
     CHECK(status_text(fb, ft_tick, "").find(fb.last_play.substr(0, 10)) != std::string::npos);
-  GameSnapshot team_to = reb;
-  team_to.last_play = "Timberwolves Full Timeout";
-  team_to.play_team = kWolves;
-  RowLines tt = row_lines(team_to, hold, on, true);
-  CHECK_EQ((int) tt.n, 3);  // a team timeout adds no line either
-  for (int i = 0; i < tt.n; i++)
-    CHECK(tt.line[i].form(0).find("imeout") == std::string::npos);
   // At halftime only the series is left, and only in the playoffs.
-  CHECK_EQ((int) row_lines(g, hold, on, false).n, 0);
+  CHECK_EQ((int) row_lines(g, on, false).n, 0);
   GameSnapshot po = g;
   po.nba.team_wins = 2;
   po.nba.opp_wins = 1;
-  RowLines half = row_lines(po, hold, on, false);
+  RowLines half = row_lines(po, on, false);
   CHECK_EQ((int) half.n, 1);
   CHECK_EQ(half.line[0].form(0), std::string("IND lead 2-1"));
   // A pregame document's leaders are the season's: no scorers from it.
@@ -8932,10 +8872,794 @@ static void test_row_text() {
 
   // Soccer keeps its latest goal as its one line.
   GameSnapshot sc = soccer_event("fixtures/event_soccer_halftime.json", kVasco);
-  RowLines so = row_lines(sc, hold, on, false);
+  RowLines so = row_lines(sc, on, false);
   CHECK_EQ((int) so.n, 1);
   CHECK_EQ(so.line[0].form(0), std::string("28' Lescano"));
 
+}
+
+// The game's story (story.h): what the reads prove and nothing else.
+static GameSnapshot story_read(int period, const char *clock, int us, int them, int reg = 2) {
+  GameSnapshot g;
+  g.valid = true;
+  g.sport = Sport::BASKETBALL;
+  g.state = GameState::IN;
+  g.event_id = "401929421";
+  g.team_abbr = "USA";
+  g.opp_abbr = "FAMU";
+  g.team_id = 6;
+  g.opp_id = 50;
+  g.period = period;
+  g.display_clock = clock;
+  g.team_score = us;
+  g.opp_score = them;
+  g.nba.regulation = reg;
+  return g;
+}
+
+static bool story_says(const Story &st, const GameSnapshot &g, const char *text) {
+  for (int i = 0; i < st.count(g); i++)
+    if ((st.line(i).side == 1 ? "USA " : st.line(i).side == 2 ? "FAMU " : "") + std::string(st.line(i).text) == text)
+      return true;
+  return false;
+}
+
+static void test_story() {
+  auto read = [](Story &st, int p, const char *clock, int us, int them, uint32_t ms) {
+    GameSnapshot g = story_read(p, clock, us, them);
+    st.read(g, ms);
+    return g;
+  };
+  // Watched from the tip: a run, the drought behind it, the biggest lead.
+  {
+    Story st;
+    read(st, 1, "20:00", 0, 0, 1000);
+    CHECK(st.whole_game());
+    read(st, 1, "19:30", 2, 0, 11000);
+    read(st, 1, "19:00", 2, 2, 21000);
+    read(st, 1, "18:30", 5, 2, 31000);
+    read(st, 1, "18:00", 7, 2, 41000);
+    GameSnapshot g = read(st, 1, "17:30", 8, 2, 51000);
+    CHECK(story_says(st, g, "USA on a 6-0 run"));
+    g = read(st, 1, "17:00", 12, 2, 61000);
+    CHECK(story_says(st, g, "USA on a 10-0 run"));
+    // 2:00 since FAMU's basket at 19:00.
+    CHECK(story_says(st, g, "FAMU scoreless 2:00"));
+    uint32_t news = st.news();
+    // The run ends, by name.
+    GameSnapshot end = story_read(1, "16:50", 12, 4);
+    end.play_value = 2;
+    end.play_team = 50;
+    end.play_athlete = "D. Williford";
+    end.last_play = "Daisean Williford makes 2-foot driving layup";
+    st.read(end, 71000);
+    CHECK(story_says(st, end, "FAMU Williford ends run"));
+    CHECK_EQ(std::string(st.line(0).detail), std::string("Driving layup"));
+    CHECK(st.news() != news);
+    // Two baskets between reads: whose was first isn't known, so no name.
+    {
+      Story two;
+      read(two, 1, "20:00", 0, 0, 1000);
+      read(two, 1, "19:00", 7, 0, 11000);
+      GameSnapshot g2 = story_read(1, "18:40", 7, 3);
+      g2.play_value = 2;
+      g2.play_team = 50;
+      g2.play_athlete = "A. Parker";
+      g2.last_play = "Arquevius Parker makes layup";
+      two.read(g2, 21000);
+      CHECK(story_says(two, g2, "FAMU ends a 7-0 run"));
+    }
+    CHECK(!story_says(st, end, "USA on a 10-0 run"));
+    // A redraw of the same read changes nothing.
+    news = st.news();
+    st.read(end, 72000);
+    CHECK_EQ(st.news(), news);
+    // Another game has no lines here.
+    GameSnapshot other = end;
+    other.event_id = "1";
+    CHECK_EQ(st.count(other), 0);
+  }
+  // Joined late: the run is fine, nothing is said of the whole game.
+  {
+    Story st;
+    read(st, 1, "8:00", 54, 34, 1000);
+    CHECK(!st.whole_game());
+    read(st, 1, "7:30", 56, 34, 11000);
+    read(st, 1, "7:00", 58, 34, 21000);
+    GameSnapshot g = read(st, 1, "5:30", 60, 34, 31000);
+    CHECK(story_says(st, g, "USA on a 6-0 run"));
+    for (int i = 0; i < st.count(g); i++) {
+      CHECK(st.line(i).kind != StoryKind::NEVER_LED);
+      CHECK(st.line(i).kind != StoryKind::BIG_LEAD);
+      CHECK(st.line(i).kind != StoryKind::COMEBACK);
+      // FAMU's drought began before the panel looked, so it isn't counted.
+      CHECK(st.line(i).kind != StoryKind::DROUGHT);
+    }
+  }
+  // "Never led" allows for the worst order between two reads: down 2, both
+  // sides scored, so FAMU may have led for a moment.
+  {
+    Story st;
+    read(st, 1, "20:00", 0, 0, 1000);
+    read(st, 1, "19:00", 4, 0, 11000);
+    read(st, 1, "18:00", 4, 2, 21000);
+    GameSnapshot g = read(st, 2, "19:50", 7, 5, 31000);
+    for (int i = 0; i < st.count(g); i++)
+      CHECK(st.line(i).kind != StoryKind::NEVER_LED);
+  }
+  {
+    Story st;
+    read(st, 1, "20:00", 0, 0, 1000);
+    read(st, 1, "19:20", 4, 0, 11000);
+    read(st, 1, "18:40", 4, 2, 21000);
+    for (int left = 18, i = 0; left > 0; left--, i++) {
+      char c[8];
+      snprintf(c, sizeof(c), "%d:00", left);
+      read(st, 1, c, 4 + i, 2 + i, 31000 + i * 1000);
+      snprintf(c, sizeof(c), "%d:30", left - 1);
+      read(st, 1, c, 5 + i, 2 + i, 31500 + i * 1000);
+    }
+    GameSnapshot g = read(st, 2, "19:50", 22, 19, 90000);
+    CHECK(story_says(st, g, "FAMU has never led"));
+  }
+  // Ten-minute quarters: the break isn't time without a basket.
+  {
+    Story st;
+    GameSnapshot a = story_read(1, "0:20", 20, 18, 4);
+    st.read(a, 1000);
+    a = story_read(1, "0:10", 22, 18, 4);
+    st.read(a, 11000);
+    a = story_read(2, "9:50", 22, 18, 4);
+    st.read(a, 21000);
+    for (int i = 0; i < st.count(a); i++)
+      CHECK(st.line(i).kind != StoryKind::DROUGHT);
+  }
+  // An old copy of the document passes; a correction that stays starts over.
+  {
+    Story st;
+    read(st, 1, "20:00", 0, 0, 1000);
+    read(st, 1, "19:00", 3, 0, 11000);
+    read(st, 1, "19:20", 0, 0, 21000);
+    read(st, 1, "18:50", 3, 0, 31000);
+    CHECK(st.whole_game());
+    read(st, 1, "18:40", 3, 2, 41000);
+    read(st, 1, "18:40", 2, 2, 51000);
+    read(st, 1, "18:40", 2, 2, 145000);
+    CHECK(!st.whole_game());
+  }
+  // Away too long (another game on the board): start over.
+  {
+    Story st;
+    read(st, 1, "20:00", 0, 0, 1000);
+    read(st, 1, "12:00", 18, 10, 500000);
+    CHECK(!st.whole_game());
+  }
+  // The lead changes, and the end of a close one.
+  {
+    Story st;
+    read(st, 2, "2:00", 60, 61, 1000);
+    GameSnapshot g = read(st, 2, "1:40", 62, 61, 11000);
+    CHECK(story_says(st, g, "USA takes the lead"));
+    // Not the score again: since when, and how far behind they were.
+    g = read(st, 2, "0:50", 62, 61, 61000);
+    CHECK(!story_says(st, g, "USA up 1"));
+    CHECK(story_says(st, g, "USA ahead since 1:40"));
+    for (int i = 0; i < st.count(g); i++)
+      if (st.line(i).kind == StoryKind::CLOSE)
+        CHECK_EQ(std::string(st.line(i).detail), std::string("Were down 1"));
+    // Tied in between: ahead since the new lead.
+    g = read(st, 2, "0:40", 62, 62, 71000);
+    for (int i = 0; i < st.count(g); i++)
+      CHECK(st.line(i).kind != StoryKind::CLOSE);
+    g = read(st, 2, "0:30", 64, 62, 81000);
+    CHECK(story_says(st, g, "USA ahead since 0:30"));
+    // Both scored between two reads: they could have been tied. Nothing.
+    g = read(st, 2, "0:20", 66, 65, 91000);
+    for (int i = 0; i < st.count(g); i++)
+      CHECK(st.line(i).kind != StoryKind::CLOSE);
+    // Nor at the buzzer.
+    Story late;
+    read(late, 2, "0:30", 60, 61, 1000);
+    g = read(late, 2, "0:00", 62, 61, 11000);
+    for (int i = 0; i < late.count(g); i++)
+      CHECK(late.line(i).kind != StoryKind::CLOSE);
+    // Joined with a lead on: since when isn't known.
+    Story joined;
+    read(joined, 2, "2:30", 62, 61, 1000);
+    g = read(joined, 2, "2:00", 62, 61, 11000);
+    for (int i = 0; i < joined.count(g); i++)
+      CHECK(joined.line(i).kind != StoryKind::CLOSE);
+  }
+  // The book keeps games apart, and every line fits the row.
+  {
+    StoryBook book;
+    GameSnapshot g = story_read(1, "20:00", 0, 0);
+    CHECK(book.find(g) == nullptr);
+    book.read(g, 1000);
+    for (int i = 1; i <= 5; i++) {
+      GameSnapshot x = story_read(1, "20:00", 0, 0);
+      x.event_id = std::to_string(i);
+      book.read(x, 1000 + i);
+    }
+    CHECK(book.find(g) == nullptr);  // the oldest gave its place up
+    GameSnapshot last = g;
+    last.event_id = "5";
+    CHECK(book.find(last) != nullptr);
+  }
+}
+
+// A play as two rows (play_pair.h), from ESPN's own words.
+static void test_play_pair() {
+  auto says = [](const char *text, int value, int team, const char *what, const char *detail,
+                 const char *type = "") {
+    GameSnapshot g = story_read(1, "10:00", 10, 8);
+    g.last_play = text;
+    g.play_value = (int8_t) value;
+    g.play_team = (uint32_t) team;
+    g.play_type = type;
+    PlayPair p;
+    const bool ok = play_pair(g, p);
+    CHECK_EQ(std::string(ok ? p.what : ""), std::string(what));
+    CHECK_EQ(std::string(ok ? p.detail : ""), std::string(detail));
+    if (ok)
+      CHECK_EQ((int) p.side, team == 6 ? 1 : 2);
+    CHECK(strlen(p.detail) <= kRowChars);
+  };
+  says("Antonio Baker Jr. makes 25-foot three point jumper (Micah Octave assists)", 3, 50, "three",
+       "Baker Jr. from 25 feet");
+  says("Jayden Cooper makes driving layup (Diego Roman assists)", 2, 6, "driving layup", "Cooper, Roman assist");
+  says("Jayden Cooper makes 2-foot layup", 2, 6, "layup", "Cooper");
+  says("Jayden Cooper makes 17-foot pullup jump shot", 2, 6, "jumper", "Cooper from 17 feet");
+  says("Jayden Cooper makes free throw 1 of 2", 1, 6, "free throw", "Cooper", "MadeFreeThrow");
+  says("Anthony Edwards makes alley oop dunk shot (Rudy Gobert assists)", 2, 6, "alley-oop dunk",
+       "Edwards, Gobert assist");
+  says("Diego Roman Steal.", 0, 6, "steal", "Roman");
+  says("Diego Roman Block.", 0, 6, "block", "Roman");
+  says("Peyton Law bad pass\nturnover", 0, 50, "turnover", "Law bad pass", "Turnover");
+  says("team  shot clock turnover ", 0, 50, "turnover", "Shot clock", "Turnover");
+  says("Cooper Flagg bad pass (Christian Braun steals)", 0, 6, "turnover", "Flagg bad pass", "Bad Pass\nTurnover");
+  // Before ESPN has the player.
+  says("team  makes 24-foot three point jumper", 3, 6, "three", "From 24 feet");
+  says("makes tip shot", 2, 6, "tip-in", "");
+  // A name too long for "from 25 feet" beside it.
+  says("Bartholomew Montgomery-Washington makes 25-foot three point jumper", 3, 6, "three", "Montgomery-Washington");
+  // Nothing worth a row, or nothing that can be read for certain.
+  says("Antonio Baker Jr. misses 25-foot three point jumper", 0, 50, "", "");
+  says("Florida A&M Defensive Rebound.", 0, 50, "", "");
+  says("Foul on Antonio Baker Jr..", 0, 50, "", "");
+  says("Official TV Timeout", 0, 0, "", "");
+  says("Diego Roman Steal.", 0, 99, "", "");  // neither team's id
+  says("Daisean Williford subbing in for Florida A&M", 0, 50, "", "", "Substitution");
+}
+
+// Both rows of a line, as "USA on a 7-0 run / 3 of 3 shooting".
+static std::string two_rows(const RowLines &r, const GameSnapshot &g, int i) {
+  const RowLine &l = r.line[i];
+  if (l.side == 3)
+    return g.team_abbr + " " + l.form(0) + "  " + g.opp_abbr + " " + l.form(1) + " / " + l.form(2);
+  return (l.side == 1 ? g.team_abbr : g.opp_abbr) + " " + l.form(0) + " / " + l.form(1);
+}
+
+static bool rows_say(const RowLines &r, const GameSnapshot &g, const char *text) {
+  for (int i = 0; i < r.n; i++)
+    if (two_rows(r, g, i) == text)
+      return true;
+  return false;
+}
+
+static RowLines story_rows(const GameSnapshot &g, const Story *st, const RowOptions &o) {
+  RowLines r;
+  fill_story_rows(r, g, st, o);
+  for (int i = 0; i < r.n; i++) {
+    const RowLine &l = r.line[i];
+    CHECK(l.side >= 1 && l.side <= 3);
+    // Row 3 is 25 letters at most, row 4 too, and row 4 names no team.
+    const std::string both = two_rows(r, g, i), more = l.form(l.side == 3 ? 2 : 1);
+    CHECK(both.find(" / ") <= 25);
+    CHECK(more.size() <= 25);
+    CHECK(more.find(g.team_abbr) == std::string::npos);
+    CHECK(more.find(g.opp_abbr) == std::string::npos);
+    CHECK(both.find("imeout") == std::string::npos);
+  }
+  return r;
+}
+
+static void test_story_rows() {
+  // The name's letters: a dark color brought up, a bright one as it is.
+  CHECK_EQ(row_name_rgb(0x00205B), (uint32_t) 0x2864FF);
+  CHECK_EQ(row_name_rgb(0xF89728), (uint32_t) 0xF89728);
+  CHECK_EQ(row_name_rgb(0), (uint32_t) 0xFFFFFF);
+  RowOptions on, off;
+  off.last_play = off.win_chance = false;
+  GameSnapshot g = hoops_event("fixtures/event_nba_live.json", kPacers);
+  Story st;
+  st.read(g, 1000);
+  RowLines r = story_rows(g, &st, on);
+  // The last play leads, McDaniels' two for MIN.
+  CHECK_EQ((int) r.line[0].side, 2);
+  CHECK_EQ((int) r.play_at, 0);
+  CHECK_EQ(r.line[0].form(1).substr(0, 9), std::string("McDaniels"));
+  CHECK(rows_say(r, g, "MIN 56% to win / Edwards 19 pts"));
+  // A low leader, never the whole game's shooting; nobody leaves it empty.
+  GameSnapshot low = g;
+  low.nba.opp_scorer = "Edwards 3";
+  low.nba.opp_extra[0] = '\0';
+  CHECK(rows_say(story_rows(low, &st, on), low, "MIN 56% to win / Edwards 3 pts"));
+  low.nba.opp_scorer.clear();
+  CHECK(rows_say(story_rows(low, &st, on), low, "MIN 56% to win / "));
+  // The switches.
+  RowLines q = story_rows(g, &st, off);
+  CHECK_EQ((int) q.play_at, 0xFF);
+  for (int i = 0; i < q.n; i++)
+    CHECK(two_rows(q, g, i).find("to win") == std::string::npos);
+  // With no story the row is the leaders and the team stats.
+  q = story_rows(g, nullptr, off);
+  CHECK(q.line[0].form(0) == "Nesmith 19 pts");
+  CHECK(q.line[1].form(0) == "Edwards 19 pts");
+  CHECK(rows_say(q, g, "IND 55%  MIN 53% / Shooting"));
+  CHECK(rows_say(q, g, "IND 9/21  MIN 14/23 / Threes"));
+  CHECK(rows_say(q, g, "IND 17  MIN 24 / Rebounds"));
+  // A timeout: the team stats first, each number by its name, and no play.
+  GameSnapshot to = g;
+  to.last_play = "Official TV Timeout";
+  to.play_team = 0;
+  to.play_value = 0;
+  st.read(to, 11000);
+  q = story_rows(to, &st, on);
+  CHECK_EQ(two_rows(q, to, 0), std::string("IND 55%  MIN 53% / Shooting"));
+  CHECK_EQ(two_rows(q, to, 1), std::string("IND 9/21  MIN 14/23 / Threes"));
+  CHECK_EQ(two_rows(q, to, 2), std::string("IND 17  MIN 24 / Rebounds"));
+  CHECK_EQ((int) q.play_at, 0xFF);
+  CHECK(row_news(to) != row_news(g));  // the row turns to it
+  // The playoff series, the score above has the rest.
+  GameSnapshot po = g;
+  po.nba.team_wins = 2;
+  po.nba.opp_wins = 1;
+  CHECK(rows_say(story_rows(po, nullptr, off), po, "IND 2  MIN 1 / Playoff series"));
+  // Odd clocks and periods from ESPN are no read.
+  {
+    Story odd;
+    GameSnapshot x = story_read(2147483647, "99999999:00", 10, 8);
+    odd.read(x, 1000);
+    CHECK_EQ(odd.count(x), 0);
+    CHECK_EQ(clock_left("99999999:00"), -1);
+    CHECK_EQ(clock_left("20:00"), 1200);
+    CHECK_EQ(clock_left("20:01"), -1);
+  }
+  // A leader's rebounds, and his own when he leads both.
+  GameSnapshot lead = g;
+  snprintf(lead.nba.team_extra, sizeof(lead.nba.team_extra), "Siakam 9 reb");
+  snprintf(lead.nba.opp_extra, sizeof(lead.nba.opp_extra), "Edwards 8 reb");
+  q = story_rows(lead, nullptr, off);
+  CHECK(rows_say(q, lead, "IND Nesmith 19 pts / Siakam 9 reb"));
+  CHECK(rows_say(q, lead, "MIN Edwards 19 pts / and 8 reb"));
+  // The first minutes: where it is, then the first play.
+  GameSnapshot tip = story_read(1, "20:00", 0, 0);
+  tip.venue = "Mitchell Center";
+  Story ts;
+  ts.read(tip, 1000);
+  q = story_rows(tip, &ts, on);
+  CHECK_EQ((int) q.n, 1);
+  CHECK_EQ(q.line[0].form(0), std::string("vs"));
+  CHECK_EQ(q.line[0].form(2), std::string("Mitchell Center"));
+  tip.display_clock = "19:40";
+  tip.team_score = 3;
+  tip.play_id = 11;
+  tip.play_team = 6;
+  tip.play_value = 3;
+  tip.last_play = "Jayden Cooper makes 24-foot three point jumper (Diego Roman assists)";
+  ts.read(tip, 11000);
+  q = story_rows(tip, &ts, on);
+  CHECK_EQ(two_rows(q, tip, 0), std::string("USA three / Cooper from 24 feet"));
+  const uint32_t news = ts.play_news();
+  // It stays through a rebound, a redraw is no news, and a basket ESPN put
+  // another play after takes it off.
+  GameSnapshot reb = tip;
+  reb.play_id = 12;
+  reb.play_value = 0;
+  reb.last_play = "Diego Roman Defensive Rebound.";
+  ts.read(reb, 21000);
+  ts.read(reb, 22000);
+  CHECK(ts.play(reb) != nullptr);
+  CHECK_EQ(ts.play_news(), news);
+  reb.play_id = 13;
+  reb.team_score = 5;
+  ts.read(reb, 31000);
+  CHECK(ts.play(reb) == nullptr);
+  // 45 seconds is old.
+  tip.play_id = 14;
+  tip.team_score = 8;
+  ts.read(tip, 41000);
+  CHECK(ts.play(tip) != nullptr);
+  ts.read(tip, 81000);
+  CHECK(ts.play(tip) != nullptr);
+  ts.read(tip, 87000);
+  CHECK(ts.play(tip) == nullptr);
+  // ESPN's play a read before its points: still the last basket.
+  Story ahead;
+  GameSnapshot soon = tip;
+  soon.play_id = 20;
+  soon.play_value = 0;
+  soon.last_play = "Official TV Timeout";
+  soon.play_team = 0;
+  ahead.read(soon, 1000);
+  soon.play_id = 21;
+  soon.play_team = 6;
+  soon.play_value = 2;
+  soon.last_play = "Jayden Cooper makes layup";
+  ahead.read(soon, 11000);
+  CHECK(ahead.play(soon) != nullptr);
+  soon.play_id = 22;
+  soon.play_value = 0;
+  soon.last_play = "Foul on Antonio Baker Jr..";
+  soon.team_score += 2;
+  ahead.read(soon, 21000);
+  CHECK(ahead.play(soon) != nullptr);
+  soon.team_score += 2;
+  ahead.read(soon, 31000);
+  CHECK(ahead.play(soon) == nullptr);
+  // Another game's row shows none of it.
+  GameSnapshot other = tip;
+  other.event_id = "1";
+  CHECK(ts.play(other) == nullptr);
+  CHECK(!ts.in_step(other, 1));
+}
+
+// The details from the box score: only what the reads prove.
+static void test_story_box() {
+  struct Box {
+    int fm, fa, tm, ta, lm, la;
+  };
+  int64_t id = 100;
+  auto at = [&](const char *clock, int us, int them, Box a, Box b, int team, int value, const char *play) {
+    GameSnapshot g = story_read(1, clock, us, them);
+    auto set = [](Basketball::Box &x, const Box &v) {
+      x.has = x.has_ft = v.fa > 0;
+      x.fg_made = (uint8_t) v.fm, x.fg_tried = (uint8_t) v.fa, x.three_made = (uint8_t) v.tm;
+      x.three_tried = (uint8_t) v.ta, x.ft_made = (uint8_t) v.lm, x.ft_tried = (uint8_t) v.la;
+    };
+    set(g.nba.team_box, a);
+    set(g.nba.opp_box, b);
+    g.play_id = id++;
+    g.play_team = (uint32_t) team;
+    g.play_value = (int8_t) value;
+    g.last_play = play;
+    g.nba.team_scorer = "Langsy 8";
+    return g;
+  };
+  auto detail_of = [](const Story &st, const GameSnapshot &g, StoryKind kind, int side) {
+    for (int i = 0; i < st.count(g); i++)
+      if (st.line(i).kind == kind && st.line(i).side == side)
+        return std::string(st.line(i).detail);
+    return std::string("no line");
+  };
+  // 2-2, then USA makes four of six for nine while FAMU misses five, four of
+  // them threes.
+  auto play = [&](Story &st, int lag) {
+    const Box u0{1, 1, 0, 0, 0, 0}, f0{1, 1, 0, 0, 0, 0};
+    GameSnapshot g = at("20:00", 0, 0, {}, {}, 0, 0, "");
+    st.read(g, 1000);
+    g = at("19:40", 2, 0, u0, {}, 6, 2, "A Cooper makes layup");
+    st.read(g, 11000);
+    g = at("19:10", 2, 2, u0, f0, 50, 2, "B Parker makes layup");
+    st.read(g, 21000);
+    g = at("18:30", 5, 2, {2, 3, 1, 1, 0, 0}, {1, 2, 0, 1, 0, 0}, 6, 3, "A Cooper makes 24-foot three point jumper");
+    st.read(g, 31000);
+    g = at("17:50", 7, 2, {3, 5, 1, 2, 0, 0}, {1, 4, 0, 3, 0, 0}, 6, 2, "A Cooper makes layup");
+    st.read(g, 41000);
+    // The box score of the last basket comes a read late in one of the runs.
+    const Box late{4, 6, 1, 2, 0, 0}, done{5, 7, 1, 2, 0, 0};
+    g = at("16:50", 11, 2, done, {1, 6, 0, 4, 0, 0}, 6, 2, "A Cooper makes layup");
+    if (lag) {
+      g.nba.team_box.fg_made = (uint8_t) late.fm;
+      g.nba.team_box.fg_tried = (uint8_t) late.fa;
+    }
+    st.read(g, 51000);
+    return g;
+  };
+  {
+    Story st;
+    GameSnapshot g = play(st, 0);
+    CHECK(st.in_step(g, 1));
+    CHECK_EQ(detail_of(st, g, StoryKind::RUN, 1), std::string("4 of 6 shooting"));
+    CHECK_EQ(detail_of(st, g, StoryKind::DROUGHT, 2), std::string("0 of 5, 0 of 4 on 3s"));
+    RowOptions o;
+    CHECK(rows_say(story_rows(g, &st, o), g, "USA on a 9-0 run / 4 of 6 shooting"));
+    CHECK(rows_say(story_rows(g, &st, o), g, "FAMU scoreless 2:20 / 0 of 5, 0 of 4 on 3s"));
+  }
+  {
+    // The box score is behind the score: no shooting, the leader instead.
+    Story st;
+    GameSnapshot g = play(st, 1);
+    CHECK(!st.in_step(g, 1));
+    // Two baskets came in one read, so who scored the 9 isn't known either:
+    // what it did to the score, which is.
+    CHECK_EQ(detail_of(st, g, StoryKind::RUN, 1), std::string("Was tied, now up 9"));
+    RowOptions o;
+    CHECK(rows_say(story_rows(g, &st, o), g, "USA on a 9-0 run / Was tied, now up 9"));
+    // A drought is never over a leader.
+    CHECK_EQ(detail_of(st, g, StoryKind::DROUGHT, 2), std::string("Outscored 9-0"));
+    for (int i = 0; i < story_rows(g, &st, o).n; i++)
+      CHECK(story_rows(g, &st, o).line[i].form(0).find("scoreless") == std::string::npos ||
+            story_rows(g, &st, o).line[i].form(1).find(" pts") == std::string::npos);
+  }
+  {
+    // A miss ESPN's last play tells of that the box doesn't have yet.
+    Story st;
+    play(st, 0);
+    GameSnapshot g = at("16:30", 11, 2, {5, 7, 1, 2, 0, 0}, {1, 6, 0, 4, 0, 0}, 50, 0,
+                        "B Parker misses 22-foot three point jumper");
+    st.read(g, 61000);
+    CHECK(!st.in_step(g, 2));
+    CHECK_EQ(detail_of(st, g, StoryKind::DROUGHT, 2), std::string("Outscored 9-0"));
+    g.nba.opp_box.fg_tried = 7;
+    g.nba.opp_box.three_tried = 5;
+    st.read(g, 71000);
+    CHECK(st.in_step(g, 2));
+    CHECK_EQ(detail_of(st, g, StoryKind::DROUGHT, 2), std::string("0 of 6, 0 of 5 on 3s"));
+  }
+  {
+    // Joined in the middle of a run: the shots before the first read aren't
+    // known, so the run's own start is.
+    Story st;
+    GameSnapshot g = at("9:00", 20, 10, {8, 20, 2, 5, 2, 2}, {4, 15, 1, 5, 1, 2}, 6, 0, "A Cooper Offensive Rebound.");
+    st.read(g, 1000);
+    g = at("8:30", 23, 10, {9, 22, 3, 6, 2, 2}, {4, 16, 1, 5, 1, 2}, 6, 3, "A Cooper makes 24-foot three point jumper");
+    st.read(g, 11000);
+    g = at("8:00", 26, 10, {10, 23, 4, 7, 2, 2}, {4, 17, 1, 5, 1, 2}, 6, 3, "A Cooper makes 24-foot three point jumper");
+    st.read(g, 21000);
+    const std::string d = detail_of(st, g, StoryKind::RUN, 1);
+    CHECK_EQ(d, std::string("All 6 by Cooper"));
+  }
+  {
+    // Who scored a run: named when every basket in it was one and named. The
+    // last came with no name, and takes it a read later.
+    Story st;
+    GameSnapshot g = at("20:00", 0, 0, {}, {}, 0, 0, "");
+    st.read(g, 1000);
+    g = at("19:40", 2, 0, {}, {}, 6, 2, "A Cooper makes layup");
+    st.read(g, 11000);
+    g = at("19:10", 4, 0, {}, {}, 6, 2, "A Cooper makes jumper");
+    st.read(g, 21000);
+    g = at("18:40", 6, 0, {}, {}, 6, 2, "team makes layup");
+    st.read(g, 31000);
+    CHECK_EQ(detail_of(st, g, StoryKind::RUN, 1), std::string("Was tied, now up 6"));
+    g.last_play = "B Parker makes layup";
+    st.read(g, 33000);
+    CHECK_EQ(detail_of(st, g, StoryKind::RUN, 1), std::string("Cooper 4 of the 6"));
+    // Another player's share of a longer run isn't enough: three scorers.
+    g = at("18:20", 8, 0, {}, {}, 6, 2, "C Adams makes layup");
+    st.read(g, 41000);
+    CHECK_EQ(detail_of(st, g, StoryKind::RUN, 1), std::string("Cooper 4 of the 8"));
+    g = at("18:00", 10, 0, {}, {}, 6, 2, "D Evans makes layup");
+    st.read(g, 51000);
+    CHECK_EQ(detail_of(st, g, StoryKind::RUN, 1), std::string("4 different scorers"));
+    // A play that went with another basket isn't counted for a second.
+    g = at("17:40", 12, 0, {}, {}, 6, 2, "D Evans makes layup");
+    g.play_id = g.play_id - 1;  // the same play as before
+    st.read(g, 61000);
+    CHECK_EQ(detail_of(st, g, StoryKind::RUN, 1), std::string("Was tied, now up 12"));
+  }
+  {
+    // A newer basket with no name yet takes the old play off the row.
+    Story st;
+    GameSnapshot g = at("20:00", 0, 0, {}, {}, 0, 0, "");
+    st.read(g, 1000);
+    g = at("19:40", 0, 0, {}, {}, 50, 0, "Arquevius Parker Steal.");
+    st.read(g, 11000);
+    CHECK(st.play(g) != nullptr);
+    g = at("19:30", 0, 0, {}, {}, 6, 2, "team makes 3-foot shot");
+    st.read(g, 21000);
+    CHECK(st.play(g) == nullptr);
+  }
+  {
+    // ESPN sends a basket's name a read late: the line that waited for it
+    // takes it then.
+    Story st;
+    GameSnapshot g = at("20:00", 0, 0, {}, {}, 0, 0, "");
+    st.read(g, 1000);
+    for (int i = 1; i <= 4; i++) {
+      g = at(i == 1 ? "19:40" : i == 2 ? "19:10" : i == 3 ? "18:40" : "18:20", 2 * i, 0, {}, {}, 6, 2, "A Cooper makes layup");
+      st.read(g, 1000 + 10000 * (uint32_t) i);
+    }
+    g = at("18:00", 8, 2, {}, {}, 50, 2, "team makes layup");
+    st.read(g, 51000);
+    CHECK(rows_say(story_rows(g, &st, RowOptions()), g, "FAMU ends an 8-0 run / First in over 1 minute"));
+    g.last_play = "Daisean Williford makes layup";
+    st.read(g, 53000);
+    CHECK(rows_say(story_rows(g, &st, RowOptions()), g, "FAMU Williford ends run / Layup"));
+  }
+  {
+    // Two players with one last name are two players.
+    Story st;
+    GameSnapshot g = at("20:00", 0, 0, {}, {}, 0, 0, "");
+    st.read(g, 1000);
+    g = at("19:40", 2, 0, {}, {}, 6, 2, "Stephen Williams makes layup");
+    st.read(g, 11000);
+    g = at("19:10", 4, 0, {}, {}, 6, 2, "Roderick Williams makes jumper");
+    st.read(g, 21000);
+    g = at("18:40", 6, 0, {}, {}, 6, 2, "Stephen Williams makes layup");
+    st.read(g, 31000);
+    CHECK_EQ(detail_of(st, g, StoryKind::RUN, 1), std::string("Williams 4 of the 6"));
+  }
+  {
+    // A drought with the other side scoreless too: the last basket, else that.
+    Story st;
+    GameSnapshot g = at("20:00", 0, 0, {}, {}, 0, 0, "");
+    st.read(g, 1000);
+    g = at("19:40", 0, 2, {}, {}, 50, 2, "B Parker makes layup");
+    st.read(g, 11000);
+    g = at("19:20", 2, 2, {}, {}, 6, 2, "A Cooper makes layup");
+    st.read(g, 21000);
+    g = at("18:20", 2, 2, {}, {}, 6, 0, "A Cooper misses jumper");
+    st.read(g, 31000);
+    g = at("17:20", 2, 2, {}, {}, 6, 0, "A Cooper misses jumper");
+    st.read(g, 41000);
+    g = at("17:10", 2, 2, {}, {}, 6, 0, "A Cooper misses jumper");
+    st.read(g, 51000);
+    CHECK_EQ(detail_of(st, g, StoryKind::DROUGHT, 2), std::string("Outscored 2-0"));
+    CHECK_EQ(detail_of(st, g, StoryKind::DROUGHT, 1), std::string("Last: Cooper layup"));
+  }
+  {
+    // The second half's score, over the shooting since it began.
+    Story st;
+    GameSnapshot g = at("20:00", 0, 0, {}, {}, 0, 0, "");
+    st.read(g, 1000);
+    g = at("0:50", 10, 13, {4, 11, 1, 3, 1, 1}, {5, 13, 1, 4, 2, 2}, 6, 0, "A Cooper Offensive Rebound.");
+    st.read(g, 11000);
+    g = at("0:00", 12, 14, {5, 12, 1, 3, 1, 1}, {6, 14, 1, 4, 1, 2}, 6, 0, "End of the 1st half");
+    st.read(g, 21000);
+    g = at("20:00", 12, 14, {5, 12, 1, 3, 1, 1}, {6, 14, 1, 4, 1, 2}, 6, 0, "A Cooper Offensive Rebound.");
+    g.period = 2;
+    st.read(g, 1200000);
+    g = at("18:40", 16, 15, {7, 14, 1, 3, 1, 1}, {6, 14, 1, 4, 2, 3}, 6, 0, "A Cooper Offensive Rebound.");
+    g.period = 2;
+    st.read(g, 1210000);
+    g = at("17:20", 20, 17, {9, 17, 1, 3, 1, 1}, {7, 15, 1, 4, 2, 3}, 6, 0, "A Cooper Offensive Rebound.");
+    g.period = 2;
+    st.read(g, 1220000);
+    g = at("17:10", 23, 17, {10, 18, 2, 4, 1, 1}, {7, 16, 1, 4, 2, 3}, 6, 0, "A Cooper Offensive Rebound.");
+    g.period = 2;
+    st.read(g, 1230000);
+    CHECK_EQ(detail_of(st, g, StoryKind::PERIOD, 1), std::string("5 of 6 shooting"));
+    // The box behind the score: what halftime was.
+    g = at("16:40", 25, 17, {10, 18, 2, 4, 1, 1}, {7, 16, 1, 4, 2, 3}, 6, 0, "A Cooper Offensive Rebound.");
+    g.period = 2;
+    st.read(g, 1230000);
+    CHECK_EQ(detail_of(st, g, StoryKind::PERIOD, 1), std::string("Down 2 at halftime"));
+    // Never in the first period, whose score is the game's.
+    Story first;
+    g = at("20:00", 0, 0, {}, {}, 0, 0, "");
+    first.read(g, 1000);
+    g = at("15:00", 14, 2, {}, {}, 0, 0, "");
+    first.read(g, 2000);
+    CHECK_EQ(detail_of(first, g, StoryKind::PERIOD, 1), std::string("no line"));
+  }
+  {
+    // A hot hand: 8 of the side's last 10, each named.
+    Story st;
+    GameSnapshot g = at("20:00", 0, 0, {}, {}, 0, 0, "");
+    st.read(g, 1000);
+    const char *who[] = {"A Cooper makes jumper", "A Cooper makes layup", "B Parker makes layup", "A Cooper makes layup",
+                         "A Cooper makes layup"};
+    const char *clock[] = {"19:20", "18:50", "18:20", "17:50", "17:20"};
+    for (int i = 0; i < 5; i++) {
+      g = at(clock[i], 2 + 2 * i, i, {}, {}, 6, 2, who[i]);
+      st.read(g, 11000 + 10000 * (uint32_t) i);
+      g = at(clock[i], 2 + 2 * i, 1 + i, {}, {}, 50, 1, "X Young makes free throw 1 of 1");
+      st.read(g, 15000 + 10000 * (uint32_t) i);
+    }
+    CHECK(st.count(g) > 0);
+    CHECK(rows_say(story_rows(g, &st, RowOptions()), g, "USA Cooper has 8 / of their last 10 points"));
+  }
+}
+
+static void test_story_sides() {
+  // The same game read from the other team's side (two favorites playing each
+  // other, or a game Live games had away team first): each has its own story,
+  // and a side's line is never the other team's.
+  StoryBook book;
+  GameSnapshot g = story_read(1, "20:00", 0, 0);
+  g.team_id = 6, g.opp_id = 50;
+  g.team_abbr = "USA", g.opp_abbr = "FAMU";
+  auto flip = [](const GameSnapshot &x) {
+    GameSnapshot f = x;
+    std::swap(f.team_abbr, f.opp_abbr);
+    std::swap(f.team_score, f.opp_score);
+    std::swap(f.team_id, f.opp_id);
+    std::swap(f.nba.team_box, f.nba.opp_box);
+    std::swap(f.nba.team_scorer, f.nba.opp_scorer);
+    return f;
+  };
+  auto at = [&](const char *clock, int us, int them) {
+    g.display_clock = clock;
+    g.team_score = us;
+    g.opp_score = them;
+    return g;
+  };
+  book.read(at("20:00", 0, 0), 1000);
+  book.read(at("19:20", 2, 0), 11000);
+  book.read(at("18:50", 4, 0), 21000);
+  book.read(at("18:20", 6, 0), 31000);
+  GameSnapshot now = at("18:00", 8, 0);
+  book.read(now, 41000);
+  CHECK(book.find(now) != nullptr);
+  CHECK(story_says(*book.find(now), now, "USA on an 8-0 run"));
+  // Flipped: FAMU is ours now. Nothing of USA's is drawn as FAMU's.
+  GameSnapshot other = flip(now);
+  CHECK(book.find(other) == nullptr);
+  book.read(other, 42000);
+  CHECK(book.find(other) != nullptr);
+  for (int i = 0; i < book.find(other)->count(other); i++)
+    CHECK(book.find(other)->line(i).kind != StoryKind::RUN);
+  CHECK(!story_says(*book.find(other), other, "FAMU on an 8-0 run"));
+  // And back: USA's own story is where it was.
+  CHECK(story_says(*book.find(now), now, "USA on an 8-0 run"));
+  // A read of the same game for a side, over and over, from a redraw.
+  const uint32_t news = book.find(now)->news();
+  for (int i = 0; i < 20; i++)
+    book.read(now, 42000 + 100 * (uint32_t) i);
+  CHECK_EQ(book.find(now)->news(), news);
+}
+
+static void test_row_forms() {
+  RowLines r;
+  RowLine *l = r.put("on an 8-0 run", "3 of 4 shooting", nullptr, 6);
+  CHECK(l != nullptr);
+  char a[40], b[8];
+  l->form_to(0, a);
+  CHECK_EQ(std::string(a), std::string("on an 8-0 run"));
+  l->form_to(1, a);
+  CHECK_EQ(std::string(a), std::string("3 of 4 shooting"));
+  l->form_to(2, a);
+  CHECK_EQ(std::string(a), std::string(""));
+  l->form_to(0, b);  // cut to fit
+  CHECK_EQ(std::string(b), std::string("on an 8"));
+  CHECK_EQ(l->form(0), std::string("on an 8-0 run"));
+  CHECK(r.put("", "x", nullptr, 5) == nullptr);
+  CHECK_EQ((int) r.put("x", "", "what", 5)->secs, 5);
+  CHECK_EQ(row_glyphs("Doncic"), (size_t) 6);
+  CHECK_EQ(row_glyphs("Dončić"), (size_t) 6);
+}
+
+static void test_play_blocks() {
+  // The NBA's block is the shooter's play in ESPN's data, the blocker's here.
+  GameSnapshot g = story_read(2, "10:00", 40, 38);
+  g.nba.regulation = 4;
+  g.team_id = 6;
+  g.opp_id = 50;
+  g.play_team = 50;
+  g.play_value = 0;
+  g.last_play = "Peyton Watson blocks Josh Giddey's driving dunk";
+  g.play_type = "Driving Dunk Shot";
+  PlayPair p;
+  CHECK(play_pair(g, p));
+  CHECK_EQ((int) p.side, 1);
+  CHECK_EQ(std::string(p.what), std::string("block"));
+  CHECK_EQ(std::string(p.detail), std::string("Watson"));
+  CHECK(!p.basket);
+  bool shot = false;
+  CHECK_EQ(play_shooter(g, shot), 2);
+  CHECK(shot);
+  // No "blocks" in college's: "Koby Brea Block." with his own team.
+  g.play_team = 6;
+  g.last_play = "Koby Brea Block.";
+  CHECK(play_pair(g, p));
+  CHECK_EQ((int) p.side, 1);
+}
+
+static void test_row_shape() {
+  CHECK(row_shape("Langsy 21 pts") == row_shape("Langsy 23 pts"));
+  CHECK(row_shape("Langsy 21 pts") != row_shape("Roman 21 pts"));
+  CHECK(row_shape("on a 9-0 run\n4 of 6 shooting") == row_shape("on a 9-0 run\nOutscored 9-0"));
+  CHECK(row_shape("") != 0);
+  // A substitution in a timeout keeps the stats; a play ends them.
+  GameSnapshot g = story_read(2, "10:00", 40, 38);
+  g.last_play = "Daisean Williford subbing in for Florida A&M";
+  CHECK(!basketball_break(g));
+  CHECK(basketball_break(g, true));
+  CHECK_EQ(row_news(g), std::string(""));
+  CHECK_EQ(row_news(g, true), std::string("break"));
 }
 
 static void test_line_score() {
@@ -9846,6 +10570,14 @@ int main() {
   test_game_viz();
   test_win_swing();
   test_row_text();
+  test_story();
+  test_play_pair();
+  test_story_rows();
+  test_story_box();
+  test_row_shape();
+  test_story_sides();
+  test_row_forms();
+  test_play_blocks();
   test_live_scan_clock();
   test_team_cache();
   test_boot_hold();

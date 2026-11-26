@@ -64,10 +64,20 @@ Under **Night mode until**, **Turn on for tonight** puts the panel back at its n
 
 - **Favorites**, in priority order. **Add a favorite** opens the team chooser. Each team can move up or down or come out of the list. See [Favorite teams](/using/favorites/).
 
+:::note[Coming in the next app update]
+On Android, the chooser has an **NCAAW** tab for women's college basketball and an **NCAAVB** tab for women's college volleyball, with every Division I team. Both leagues are also among the **Live games** leagues, a playlist's **Sports** and the **Remote buttons** pickers. They show once the panel runs firmware with them.
+
+On Android, during a volleyball match the Board shows the points in the set being played, with the set and the sets won under them, like **Set 3 1-1**. The final shows the sets, like 3-1.
+:::
+
 In the chooser's **On now** tab, a search that matches none of today's games lists the matching teams under a **Teams** heading instead, so a team that isn't playing today still turns up.
 
 :::note[Coming in the next app update]
 Each league tab in the chooser starts with that league's games today, under the same headings as **On now**, with all of the league's teams after them under a **Teams** heading. Tap a side to add that team. **Final** and **Postponed or canceled** start folded, with a count, like **Final (3)**; tap the heading to open one. A league with no games today shows just its teams. A search still lists teams from every league, with no games.
+:::
+
+:::note[Coming in the next app update]
+On iPhone, the chooser has an **NCAAW** tab for women's college basketball and an **NCAAVB** tab for women's college volleyball, with every Division I team in each, once the panel runs firmware with them. Both leagues are in **Live games**, a playlist's **Sports** and the remote buttons' lists too. During a volleyball match the Board shows the points in the set being played, with the set and the sets won under them, like "Set 3 1-1". At the final it shows the sets, like 3-1.
 :::
 
 - **Playing** and **Playlists**, for groups of your favorites. See [Playlists](/using/favorites/#playlists).

@@ -19,7 +19,7 @@ The Game Day Scoreboard ships with one 128x64 panel, and its firmware starts on 
 
 ### Wide: 128x64
 
-The logos sit at the far edges with the abbreviations and big scores between them. Under the scores is the game clock, and under that the situation row: down and distance in football, red in the red zone; the count, a diamond of the runners and the outs in baseball; the latest goal in soccer; the playoff series in basketball; the finished sets in volleyball. The records sit under the logos, with football's timeout pips or soccer's red card marks under them. The ticker runs along the bottom.
+The logos sit at the far edges with the abbreviations and big scores between them. Under the scores is the game clock, and under that the situation row: down and distance in football, red in the red zone; the count, a diamond of the runners and the outs in baseball; the latest goal in soccer; a team and what is happening to it in basketball, with the detail on the row below ([Basketball](/using/basketball/#during-the-game)); the finished sets in volleyball. The records sit under the logos, with football's timeout pips or soccer's red card marks under them. The ticker runs along the bottom.
 
 During setup, the QR code for the Game Day app sits on the left half with the words beside it.
 

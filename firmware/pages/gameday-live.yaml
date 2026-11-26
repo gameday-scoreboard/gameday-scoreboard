@@ -76,23 +76,128 @@ script:
   # The situation row's text on a wide board (components/gameday/row_text.h):
   # one line at a time, each for its own seconds, in the longest form that
   # fits the room the field strip left (gd_row_room). gd_update runs it on
-  # every read and the 1 s interval below on every turn. News (a new basket,
-  # a new down) jumps straight to the lead line.
+  # every read and the 1 s interval below on every turn. News (a new down, a
+  # run, a play) jumps straight to its line.
+  #
+  # Basketball's lines (story_rows.h) take the bottom row too: the team's
+  # name in its color and the story here, the detail under it in the
+  # ticker's place. A notice in the ticker keeps that row.
   - id: gd_row_show
     then:
       - lambda: |-
           lv_obj_t *lbl = id(tt_down_lbl);
+          lv_obj_t *const pair[4] = {id(gd_row_name), id(gd_row_name2), id(gd_row_val2), id(gd_row_more)};
+          lv_obj_t *ticker = id(tt_game_status_lbl);
           const int W = lv_disp_get_hor_res(lv_disp_get_default());
-          const ::espn::RowLines &r = id(gameday_ctl).last_update().row;
+          const gameday::UpdateFields &u = id(gameday_ctl).last_update();
+          const ::espn::RowLines &r = u.row;
+          auto hide = [](lv_obj_t *o, bool hidden) {
+            if (lv_obj_is_hidden(o) != hidden)
+              lv_obj_set_hidden(o, hidden);
+          };
+          auto put = [](lv_obj_t *o, const char *text) {
+            const char *cur = lv_label_get_text(o);
+            if (cur == nullptr || strcmp(text, cur) != 0)
+              lv_label_set_text(o, text);
+          };
+          if (W < 128 || r.n == 0 || r.line[0].side == 0) {
+            for (lv_obj_t *o : pair)
+              hide(o, true);
+            hide(ticker, false);
+            lv_obj_remove_local_style_prop(lbl, LV_STYLE_TEXT_OPA, 0);
+          }
           if (W < 128 || r.n == 0) {
             lv_obj_set_hidden(lbl, true);
             id(gd_row_turn) = 0;
+            id(gd_row_shape) = 0;
             return;
           }
-          if (r.news != id(gd_row_news) || id(gd_row_turn) >= r.n) {
+          // A basketball line stays up its first 2.5 s: a read that brings
+          // another one waits (the 1 s interval below tries again). Not for
+          // another game's.
+          const uint32_t teams = ::espn::row_shape(u.team_abbr) * 31 + ::espn::row_shape(u.opponent_abbr);
+          // Nor a line from before the score changed: what it says may be over.
+          const int score = u.team_score * 1000 + u.opponent_score;
+          const bool new_line = r.news != id(gd_row_news) || id(gd_row_turn) >= r.n;
+          const int want = !new_line ? id(gd_row_turn) : (r.news != id(gd_row_news) && r.jump < r.n) ? r.jump : 0;
+          if (r.line[want].side != 0) {
+            const uint32_t shape = ::espn::row_shape(r.line[want].forms) + r.line[want].side;
+            if (shape != id(gd_row_shape) && id(gd_row_shape) != 0 && teams == id(gd_row_teams) &&
+                score == id(gd_row_score) && millis() - id(gd_row_since) < 2500) {
+              id(gd_row_wait) = true;
+              // The read moved the label for football; it is still this line's.
+              lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_LEFT, 0);
+              lv_obj_set_pos(lbl, id(gd_row_x), 47);
+              lv_obj_set_width(lbl, W);
+              return;
+            }
+            if (shape != id(gd_row_shape)) {
+              id(gd_row_shape) = shape;
+              id(gd_row_since) = millis();
+            }
+            id(gd_row_score) = score;
+          } else {
+            id(gd_row_shape) = 0;
+          }
+          id(gd_row_teams) = teams;
+          if (new_line) {
+            id(gd_row_turn) = r.news != id(gd_row_news) && r.jump < r.n ? r.jump : 0;
             id(gd_row_news) = r.news;
-            id(gd_row_turn) = 0;
-            id(gd_row_left) = r.line[0].secs;
+            id(gd_row_left) = r.line[id(gd_row_turn)].secs;
+          }
+          const ::espn::RowLine &two = r.line[id(gd_row_turn)];
+          if (two.side != 0) {
+            // Everything on the row is one run of 5 px letters, centered.
+            const lv_font_t *pf = lv_obj_get_style_text_font(lbl, LV_PART_MAIN);
+            // The forms go into buffers here: this runs on every read and turn.
+            auto width = [&](const char *s) {
+              lv_point_t sz;
+              lv_text_get_size(&sz, s, pf, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+              return (int) sz.x;
+            };
+            const bool both = two.side == 3, ours = two.side != 2;
+            const char *name = (ours ? u.team_abbr : u.opponent_abbr).c_str();
+            char text[64], val2[32], more[64];
+            two.form_to(0, text);
+            val2[0] = '\0';
+            if (both)
+              two.form_to(1, val2);
+            two.form_to(both ? 2 : 1, more);
+            const int sp = width("0");  // LVGL measures a lone space as nothing
+            int wide_px = width(name) + sp + width(text);
+            if (both)
+              wide_px += (val2[0] == '\0' ? 1 : 2) * sp + width(u.opponent_abbr.c_str()) + (val2[0] == '\0' ? 0 : sp + width(val2));
+            int x = (W - wide_px) / 2;
+            if (x < 0)
+              x = 0;
+            auto place = [&](lv_obj_t *o, const char *s, uint32_t rgb) {
+              put(o, s);
+              lv_obj_set_style_text_color(o, lv_color_hex(rgb), 0);
+              lv_obj_set_style_text_opa(o, LV_OPA_COVER, 0);
+              lv_obj_set_pos(o, x, 47);
+              hide(o, s[0] == '\0');
+              x += width(s);
+            };
+            place(pair[0], name, ::espn::row_name_rgb((uint32_t) (ours ? u.team_color : u.opponent_color)));
+            x += sp;
+            lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_LEFT, 0);
+            lv_obj_set_width(lbl, W);
+            id(gd_row_x) = x;
+            place(lbl, text, two.rgb);
+            if (both) {
+              x += (val2[0] == '\0' ? 1 : 2) * sp;
+              place(pair[1], u.opponent_abbr.c_str(), ::espn::row_name_rgb((uint32_t) u.opponent_color));
+              x += sp;
+              place(pair[2], val2, two.rgb);
+            } else {
+              hide(pair[1], true);
+              hide(pair[2], true);
+            }
+            put(pair[3], more);
+            lv_obj_set_width(pair[3], W);
+            hide(pair[3], r.notice);
+            hide(ticker, !r.notice);
+            return;
           }
           const lv_font_t *f = lv_obj_get_style_text_font(lbl, LV_PART_MAIN);
           // The forms are '\n'-separated, longest first: the first that
@@ -1329,6 +1434,10 @@ interval:
       # The situation row's next line when this one's time is up.
       - lambda: |-
           const ::espn::RowLines &r = id(gameday_ctl).last_update().row;
+          if (id(gd_row_wait)) {
+            id(gd_row_wait) = false;
+            id(gd_row_show).execute();
+          }
           if (r.n < 2 || --id(gd_row_left) > 0)
             return;
           id(gd_row_turn) = (id(gd_row_turn) + 1) % r.n;
@@ -1394,6 +1503,33 @@ globals:
     type: uint32_t
     restore_value: no
     initial_value: '0'
+  # Basketball's line up now: what it says but for its digits, whose game it
+  # is, the score it came up at, when, and whether a read waits for it
+  # (gd_row_show).
+  - id: gd_row_shape
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: gd_row_teams
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: gd_row_score
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: gd_row_since
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: gd_row_x
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: gd_row_wait
+    type: bool
+    restore_value: no
+    initial_value: 'false'
   - id: gd_row_room
     type: int
     restore_value: no
@@ -1654,6 +1790,46 @@ lvgl:
                   width: 64
                   text_align: CENTER
                   long_mode: CLIP
+                  hidden: true
+                  text: ""
+                  styles: ["tt_st_status_text"]
+
+              # Basketball's two rows (gd_row_show places them): the names in
+              # their colors and the second number, around tt_down_lbl, and the
+              # detail on the bottom row.
+              - label:
+                  id: gd_row_name
+                  x: 0
+                  y: 47
+                  text_font: spleen_8
+                  hidden: true
+                  text: ""
+
+              - label:
+                  id: gd_row_name2
+                  x: 0
+                  y: 47
+                  text_font: spleen_8
+                  hidden: true
+                  text: ""
+
+              - label:
+                  id: gd_row_val2
+                  x: 0
+                  y: 47
+                  text_font: spleen_8
+                  hidden: true
+                  text: ""
+
+              - label:
+                  id: gd_row_more
+                  x: 0
+                  y: 56
+                  width: 128
+                  text_align: CENTER
+                  long_mode: CLIP
+                  text_font: spleen_8
+                  text_color: 0xFFFFFF
                   hidden: true
                   text: ""
                   styles: ["tt_st_status_text"]
