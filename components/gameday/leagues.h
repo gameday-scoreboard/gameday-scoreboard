@@ -14,14 +14,28 @@
 namespace espn {
 
 // Saved in prefs and the boot cache: append, never renumber.
-enum class League : uint8_t { NFL = 0, NCAA = 1, NBA = 2, NHL = 3, MLB = 4, WNBA = 5, MLS = 6, EPL = 7, MCBB = 8, WCBB = 9 };
+enum class League : uint8_t {
+  NFL = 0,
+  NCAA = 1,
+  NBA = 2,
+  NHL = 3,
+  MLB = 4,
+  WNBA = 5,
+  MLS = 6,
+  EPL = 7,
+  MCBB = 8,
+  WCBB = 9,
+  PGA = 10,
+  LPGA = 11,
+  EUR = 12
+};
 
-enum class Sport : uint8_t { FOOTBALL = 0, BASEBALL = 1, BASKETBALL = 2, HOCKEY = 3, SOCCER = 4 };
+enum class Sport : uint8_t { FOOTBALL = 0, BASEBALL = 1, BASKETBALL = 2, HOCKEY = 3, SOCCER = 4, GOLF = 5 };
 
 // The state document's and /gameday/set's word for each, in Sport order.
-constexpr int kSportCount = 5;
-constexpr const char *kSportKeys[kSportCount] = {"football", "baseball", "basketball", "hockey", "soccer"};
-static_assert((int) Sport::SOCCER + 1 == kSportCount, "a key per Sport");
+constexpr int kSportCount = 6;
+constexpr const char *kSportKeys[kSportCount] = {"football", "baseball", "basketball", "hockey", "soccer", "golf"};
+static_assert((int) Sport::GOLF + 1 == kSportCount, "a key per Sport");
 
 // A sport row in Playing (playlists.h) is numbered 1 + its Sport; 0 is none.
 // "football" -> 1, and 0 for a word that names no sport.
@@ -66,6 +80,12 @@ constexpr LeagueInfo kLeagues[] = {
     {League::WCBB, "wcbb", "basketball/womens-college-basketball", "NCAAW", "ncaa", Sport::BASKETBALL, false, true, 30},
     // A team's season schedule is ~1.1 MB, so no Up next list
     {League::NHL, "nhl", "hockey/nhl", "NHL", "nhl", Sport::HOCKEY, false, false, 30},
+    // Golf has no teams: a favorite in one of these leagues is a golfer, by
+    // ESPN athlete id, and the board is the tour's leaderboard (golf.h). The
+    // logo dir names no team logo; a golfer has none on the panel.
+    {League::PGA, "pga", "golf/pga", "PGA", "golf", Sport::GOLF, false, true, 30},
+    {League::LPGA, "lpga", "golf/lpga", "LPGA", "golf", Sport::GOLF, false, true, 30},
+    {League::EUR, "eur", "golf/eur", "DPWT", "golf", Sport::GOLF, false, true, 30},
 };
 
 constexpr size_t kLeagueCount = sizeof(kLeagues) / sizeof(kLeagues[0]);
@@ -88,6 +108,40 @@ inline const LeagueInfo *league_info(League league) {
     if (l.league == league)
       return &l;
   return nullptr;
+}
+
+// A leaderboard sport ranks a field (golf) instead of pairing two teams in a
+// game. Its leagues have no Live games, no scan and no finals rotation; the
+// Golf leaderboard card shows them instead (the leaderboards setting).
+constexpr bool leaderboard_sport(Sport s) { return s == Sport::GOLF; }
+
+inline bool leaderboard_league(League league) {
+  const LeagueInfo *l = league_info(league);
+  return l != nullptr && leaderboard_sport(l->sport);
+}
+
+// The leagues with games between two teams, for arrays only those use.
+constexpr size_t game_league_count() {
+  size_t n = 0;
+  for (const auto &l : kLeagues)
+    n += leaderboard_sport(l.sport) ? 0 : 1;
+  return n;
+}
+constexpr size_t kGameLeagueCount = game_league_count();
+
+// A game league's place in those arrays: its rank among the game leagues by
+// League value. kGameLeagueCount for a leaderboard league or a value this
+// firmware doesn't have.
+constexpr size_t game_league_slot(uint8_t league) {
+  size_t below = 0;
+  bool game = false;
+  for (const auto &l : kLeagues) {
+    if ((uint8_t) l.league == league)
+      game = !leaderboard_sport(l.sport);
+    else if ((uint8_t) l.league < league && !leaderboard_sport(l.sport))
+      below++;
+  }
+  return game ? below : kGameLeagueCount;
 }
 
 // The league's name in "All NFL live games", as the device page says it: its

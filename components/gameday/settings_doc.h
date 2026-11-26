@@ -72,7 +72,8 @@ inline SettingType setting_type(const char *k) {
                                      "wakelead", "celebrate", "wxunit", "flrad", "flface"};
   static const char *const kText[] = {"fav1", "fav2", "fav3",       "fav4",     "tz",   "msg",
                                       "msgurl", "nightstart", "nightend", "nick", "cdname", "cddate", "hook",
-                                      "sport", "town", "after", "remote1", "remote2", "remote3", "remote4", "flrx"};
+                                      "sport", "town", "after", "remote1", "remote2", "remote3", "remote4", "flrx",
+                                      "leaderboards"};
   static const char *const kList[] = {"favs", "live"};
   for (const char *b : kBool)
     if (strcmp(k, b) == 0)
@@ -104,6 +105,19 @@ inline std::string team_ref_text(JsonObjectConst t) {
   return std::string(l) + ":" + std::to_string(id);
 }
 
+// A favorite as the backup's favs list writes it: the ref, and an athlete's
+// kept name after it, "pga:9478:Scottie Scheffler" (fav_names.h). Strings
+// as the whole export builds (team_ref_text), only when a backup is taken or
+// checked.
+inline std::string fav_ref_text(JsonObjectConst t) {
+  std::string ref = team_ref_text(t);
+  const LeagueInfo *info = league_by_key(t["l"] | "");
+  std::string name = athlete_name_clean(t["name"] | "");
+  if (ref.empty() || info == nullptr || !athlete_league((uint8_t) info->league) || name.empty())
+    return ref;
+  return ref + ":" + name;
+}
+
 // The settings document from the state document (GET /gameday/state), which
 // the panel keeps built on its main loop, so the web server never reads a
 // setting while the loop changes it. live_mask is Live games' own list (0 for
@@ -126,7 +140,7 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
                                       "odds",     "leaders",  "field",    "winbar",      "spark",      "opp",      "celebrate",   "bigplays",    "best",        "bootaddr",   "night",
                                       "nightstart", "nightend", "nightscreen", "nightlevel", "wake", "wakelead",
                                       "after",    "cards",    "countdown",
-                                      "top25",    "news",     "cdname",   "cddate",   "town",        "wxon",     "wxunit",   "flrad",    "flface",   "flrx",     "gameleaders",
+                                      "top25",    "leaderboards", "news",     "cdname",   "cddate",   "town",        "wxon",     "wxunit",   "flrad",    "flface",   "flrx",     "gameleaders",
                                       "msg",      "msgurl",   "msgevery", "autoupd",     "beta",
                                       "lists",    "list",     "sport",    "hook",       "pregame",  "remote1",  "remote2",  "remote3",  "remote4",
                                       "fxlists"};
@@ -139,7 +153,7 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
         continue;
       std::vector<std::string> favs;
       for (JsonVariantConst f : s["favs"].as<JsonArrayConst>())
-        favs.push_back(f.is<JsonObjectConst>() && !(f["btn"] | false) ? team_ref_text(f) : std::string());
+        favs.push_back(f.is<JsonObjectConst>() && !(f["btn"] | false) ? fav_ref_text(f) : std::string());
       while (!favs.empty() && favs.back().empty())
         favs.pop_back();
       JsonArray list = out["favs"].to<JsonArray>();
@@ -228,7 +242,7 @@ inline void settings_from_state(JsonObjectConst s, uint16_t live_mask, int brigh
     } else if (strcmp(k, "live") == 0) {
       JsonArray live = out["live"].to<JsonArray>();
       for (const auto &l : kLeagues)
-        if (live_mask & (1u << (uint8_t) l.league))
+        if (live_mask_games(live_mask) & (1u << (uint8_t) l.league))
           live.add(l.key);
     } else if (strcmp(k, "tz") == 0) {
       if (s["tz_name"].is<const char *>())
@@ -419,6 +433,17 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
             out.kept.push_back(k);
           continue;
         }
+        if (k == "leaderboards") {
+          // A sport or league from newer firmware is left out and listed;
+          // the sports this one has still restore.
+          parse_set(k, text, op, target.fav_max);
+          for (const auto &s : op.refused)
+            out.skipped.push_back(k + "=" + s);
+          op.refused.clear();
+          if (op.named == 0)
+            continue;
+          break;
+        }
         if (strncmp(k.c_str(), "remote", 6) == 0 && !parse_set(k, text, op, target.fav_max)) {
           // A team or sport this firmware doesn't know: left out and listed.
           out.skipped.push_back(k + "=" + text);
@@ -439,7 +464,8 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
           std::string keys;
           for (JsonVariantConst e : list) {
             const char *lk = e.as<const char *>();
-            if (league_by_key(lk) == nullptr) {
+            const LeagueInfo *info = league_by_key(lk);
+            if (info == nullptr || leaderboard_sport(info->sport)) {
               out.skipped.push_back("live=" + std::string(lk));
               continue;
             }
@@ -475,6 +501,7 @@ inline bool parse_settings(JsonVariantConst root, const SettingsTarget &target, 
               if (f == t)
                 t = TeamRef{};
           op.teams.push_back(t);
+          op.names.push_back(t.id != 0 && athlete_league(t.league) ? fav_ref_name(text) : std::string());
         }
         break;
       }

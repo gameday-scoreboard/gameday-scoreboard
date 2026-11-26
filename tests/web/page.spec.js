@@ -864,7 +864,7 @@ test("a screen reader gets each control's name, role and state", async ({ page, 
   await expect(tabs.getByRole("tab", { name: "NCAAF" })).toBeFocused();
   await expect(page.getByRole("tabpanel").locator(".tile .a").first()).toContainText("NCAAF");
   await page.keyboard.press("End");
-  await expect(tabs.getByRole("tab", { selected: true })).toHaveText("NHL");
+  await expect(tabs.getByRole("tab", { selected: true })).toHaveText("DPWT");
   await page.keyboard.press("ArrowRight");
   await expect(tabs.getByRole("tab", { selected: true })).toHaveText("On now");
   await expect(tabs.locator('[tabindex="0"]')).toHaveText("On now");
@@ -2568,13 +2568,125 @@ test("the picker has a tab per league and adds a team from another sport", async
   await page.goto("/");
   await tab(page, "teams");
   await page.locator("#favAdd").click();
-  await expect(page.locator(".tabs button")).toHaveText(["On now", "NFL", "NCAAF", "MLB", "MLS", "EPL", "NBA", "WNBA", "NCAAM", "NCAAW", "NHL"]);
+  await expect(page.locator(".tabs button")).toHaveText(["On now", "NFL", "NCAAF", "MLB", "MLS", "EPL", "NBA", "WNBA", "NCAAM", "NCAAW", "NHL", "PGA", "LPGA", "DPWT"]);
   await page.locator(".tabs button", { hasText: "NHL" }).click();
   await expect(page.locator(".tabs button.on")).toHaveText("NHL");
   await expect(page.locator("#tiles .tile")).toHaveCount(32);
   await page.locator("#tiles .tile", { hasText: "Anaheim Ducks" }).click();
   await expectSet(request, { favs: "nfl:6,nfl:34,ncaa:145,nhl:25" });
   await expect(page.locator("#tiles .tile", { hasText: "Anaheim Ducks" })).toHaveAttribute("aria-pressed", "true");
+});
+
+test("a golf tab finds golfers by name with ESPN's search and follows one", async ({ page, request }) => {
+  await reset(request);
+  const asked = [];
+  await page.route("https://site.web.api.espn.com/apis/common/v3/search*", (route) => {
+    asked.push(new URL(route.request().url()).searchParams.get("query"));
+    return route.fulfill({ json: { items: [
+      { id: "9478", displayName: "Scottie Scheffler", sport: "golf", league: "pga" },
+      { id: "3116147", displayName: "Ian Werner Scheffler", sport: "soccer", league: "club.friendly" },
+    ] } });
+  });
+  // The page never looks a followed golfer up: the panel has the name.
+  const lookups = [];
+  await page.route("https://site.web.api.espn.com/apis/common/v3/sports/**", (route) => {
+    lookups.push(route.request().url());
+    return route.abort();
+  });
+  await page.goto("/");
+  await tab(page, "teams");
+  await page.locator("#favAdd").click();
+  await page.locator(".tabs button", { hasText: "PGA" }).first().click();
+  await expect(page.locator("#q")).toHaveAttribute("placeholder", "Search golfers");
+  await expect(page.locator("#tiles .hint")).toContainText("Search above for a golfer by name");
+  await page.locator("#q").fill("schef");
+  // Only golfers, with their tour; the soccer player of the same name is left out.
+  await expect(page.locator("#tiles .tile")).toHaveCount(1);
+  await expect(page.locator("#tiles .tile")).toContainText("Scottie Scheffler");
+  await expect(page.locator("#tiles .tile")).toContainText("PGA Tour");
+  expect(asked).toEqual(["schef"]);
+  await page.locator("#tiles .tile").click();
+  // The name goes with the follow, and the panel reports it back.
+  await expectSet(request, { favs: "nfl:6,nfl:34,ncaa:145,pga:9478:Scottie Scheffler" });
+  await expect(page.locator("#tiles .tile")).toHaveAttribute("aria-pressed", "true");
+  const golfer = (await deviceState(request)).favs[3];
+  expect(golfer).toEqual({ l: "pga", id: 9478, name: "Scottie Scheffler", abbr: "Scheffler" });
+  // Back on the Teams tab the golfer is listed by name.
+  await page.locator("#close").click();
+  await expect(page.locator("#favCtls .ctl.fav").last()).toContainText("Scottie Scheffler");
+  await expect(page.locator("#favCtls .ctl.fav").last()).toContainText("PGA Tour golfer");
+  // A move sends the refs alone; the panel keeps the name.
+  await page.locator("#favCtls .ctl.fav").last().getByRole("button", { name: "Move up" }).click();
+  await expectSet(request, { favs: "nfl:6,nfl:34,pga:9478,ncaa:145" });
+  await expect(page.locator("#favCtls .ctl.fav").nth(2)).toContainText("Scottie Scheffler");
+  // Reloaded, with nothing kept in this browser, the name still comes from the panel.
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await tab(page, "teams");
+  await expect(page.locator("#favCtls .ctl.fav").nth(2)).toContainText("Scottie Scheffler");
+  expect(lookups).toEqual([]);
+  // A team tab's box searches teams again.
+  await page.locator("#favAdd").click();
+  await page.locator(".tabs button", { hasText: "NHL" }).click();
+  await expect(page.locator("#q")).toHaveAttribute("placeholder", "Search teams");
+});
+
+test("a golfer followed beside a team: no playlist chip, no sport row, no remote button", async ({ page, request }) => {
+  await reset(request, {
+    favs: [{ l: "nfl", id: 6, abbr: "DAL", name: "Dallas Cowboys" }, { l: "pga", id: 9478, name: "Scottie Scheffler", abbr: "Scheffler" }],
+    lists: [{ n: "Sunday", f: [] }], mode: 4,
+  });
+  await page.goto("/");
+  await tab(page, "teams");
+  await expect(page.locator("#favCtls .ctl.fav").last()).toContainText("Scottie Scheffler");
+  await expect(page.locator("#favCtls .ctl.fav").last()).not.toContainText("remote button");
+  await expect(page.locator("#listCtls .plist").nth(0).locator(".pteams .chip")).toHaveText(["DAL"]);
+  expect((await deviceState(request)).sports).toEqual([]);
+});
+
+test("the Golf leaderboard card picks its tours with chips", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await tab(page, "display");
+  const row = page.locator('#cardList .xrow[data-card="golf"]');
+  // On, with nothing to show until a tour is picked.
+  await expect(row).toHaveClass(/\bwaiting\b/);
+  await expect(row.locator(".card-hint")).toHaveText("Pick a tour below, or follow a golfer");
+  await row.locator(".xbtn").click();
+  const chips = row.locator("#golfChips .chip");
+  await expect(chips).toHaveText(["PGA Tour", "LPGA", "DP World Tour"]);
+  await chips.nth(2).click();
+  await expectSet(request, { leaderboards: "golf:eur" });
+  await expect(chips.nth(2)).toHaveAttribute("aria-pressed", "true");
+  await expect(row).not.toHaveClass(/\bwaiting\b/);
+  // A second tour comes back in tour order; a tap takes one off.
+  await chips.nth(0).click();
+  await expectSet(request, { leaderboards: "golf:pga,eur" });
+  await chips.nth(2).click();
+  await expectSet(request, { leaderboards: "golf:pga" });
+  await chips.nth(0).click();
+  await expectSet(request, { leaderboards: "golf:" });
+  await expect((await deviceState(request)).leaderboards).toBe("golf:");
+  // Taken off and put back with no tour on, the card starts with the PGA Tour.
+  await page.getByRole("button", { name: "Remove Golf leaderboard" }).click();
+  await expectSet(request, { cards: "golf:0" });
+  expect((await deviceState(request)).leaderboards).toBe("golf:");
+  await page.locator("#cardAdd").click();
+  await page.getByRole("button", { name: "Add Golf leaderboard" }).click();
+  await expectSet(request, { cards: "golf:1", leaderboards: "golf:pga" });
+  expect((await deviceState(request)).leaderboards).toBe("golf:pga");
+  // The chips are the tours the panel names, whatever the page's own table has.
+  await reset(request, { lbleagues: [{ key: "pga", name: "PGA TOUR", sport: "golf" }, { key: "f1", name: "Formula 1", sport: "racing" }] });
+  await page.goto("/");
+  await tab(page, "display");
+  await page.locator('#cardList .xrow[data-card="golf"] .xbtn').click();
+  await expect(page.locator("#golfChips .chip")).toHaveText(["PGA TOUR"]);
+  // Firmware from before the setting has no chips.
+  await reset(request, { lbleagues: null });
+  await page.goto("/");
+  await tab(page, "display");
+  await page.locator('#cardList .xrow[data-card="golf"] .xbtn').click();
+  await expect(page.locator("#golfBox")).toBeHidden();
 });
 
 test("other sports show their situation line and no timeout pips", async ({ page, request }) => {

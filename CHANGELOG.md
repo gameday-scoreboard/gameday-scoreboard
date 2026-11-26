@@ -37,7 +37,7 @@ through `update_important` in the panel's state.
 
 ## Unreleased
 
-A new Flights page shows the planes over your home, women's college basketball joins the panel, it can play an effect whenever no game of yours is on, a Game Day card shows a QR code between games, and Add network lists nearby Wi-Fi.
+A new Flights page shows planes over your home, women's college basketball and golf leaderboards join the panel, it can play an effect whenever no game of yours is on, a Game Day card shows a QR code, and Add network lists nearby Wi-Fi.
 
 ### ⚠️ Heads up
 
@@ -54,6 +54,7 @@ A new Flights page shows the planes over your home, women's college basketball j
 - 🌤️ **Weather** under **Showing** and **After the game**: your town's weather now and the next 6 hours with the chance of rain, and a bottom line with your live game's score, rain on the way, or the next sunrise or sunset
 - ✨ **Show effects** under **After the game**: the panel plays your effect whenever no game of yours is on, between seasons too, and goes back to the scoreboard before your next game
 - 🏀 Women's college basketball joins the panel: follow any Division I women's team from the new NCAAW tab in the team picker
+- ⛳ Golf leaderboards between games: pick the PGA Tour, LPGA or DP World Tour on the **Golf leaderboard** card, or search golfers by name and they're pinned on wherever they stand
 
 ### 🐛 Fixes
 

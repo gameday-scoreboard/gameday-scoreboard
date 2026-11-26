@@ -1,12 +1,15 @@
 // Fuzz target: one input goes through every ESPN parser the panel runs (the
-// scoreboards, team, schedule, season, event, summary, Top 25 and news
-// reads), the text built from what they read, and the finals rotation
+// scoreboards, team, schedule, season, event, summary, Top 25, news and
+// golf reads), the text built from what they read, and the finals rotation
 // (recap.h). ESPN's documents share one shape (events, competitions,
 // competitors), so a mutated scoreboard also reaches the event and team
 // parsers. See fuzz_main.cpp and the fuzz targets in the Makefile.
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -212,6 +215,206 @@ size_t recap(FinalList finals, PendingList pending, int64_t next_kickoff, int64_
 
 const Sport kSports[] = {Sport::FOOTBALL, Sport::BASEBALL, Sport::BASKETBALL, Sport::HOCKEY, Sport::SOCCER};
 
+// parse_golf as it read the whole document through one filter before it
+// streamed, kept here to check the streaming read against. It has the
+// rules the streaming read added: a followed golfer with no row takes no
+// room, and a golfer keeps lines for kGolfLines rounds. top_full is set
+// when more than kGolfTopRows golfers are in the top, where the streaming
+// read stops at kGolfTopRows rows and this one doesn't.
+bool golf_whole_document(const uint8_t *data, size_t size, const uint32_t *fav_ids, size_t fav_count, GolfBoard &out,
+                         bool &top_full) {
+  top_full = false;
+  JsonDocument filter;
+  // The read's own filter: a bad value fails a read only where it is kept.
+  espn::detail::fill_golf_filter(filter);
+  JsonDocument doc;
+  if (deserializeJson(doc, (const char *) data, size, DeserializationOption::Filter(filter),
+                      DeserializationOption::NestingLimit(20)))
+    return false;
+  if (!doc["events"].is<JsonArrayConst>())
+    return false;
+  // In progress, then over, then listed with a field, then any.
+  JsonObjectConst pick;
+  int best = -1;
+  for (JsonObjectConst e : doc["events"].as<JsonArrayConst>()) {
+    if (e.isNull())
+      continue;
+    const std::string st = espn::detail::str_or_empty(e["status"]["type"]["state"]);
+    const bool listed = e["competitions"][0]["competitors"].as<JsonArrayConst>().size() != 0;
+    const int rank = !listed ? 0 : st == "in" ? 3 : st == "post" ? 2 : 1;
+    if (rank > best && best < 3) {
+      pick = e;
+      best = rank;
+    }
+  }
+  JsonObjectConst comp0 = pick["competitions"][0];
+  GolfBoard b;
+  b.league = League::PGA;
+  const std::string estate = espn::detail::str_or_empty(pick["status"]["type"]["state"]);
+  b.state = estate == "in" ? GolfState::IN : estate == "post" ? GolfState::POST : GolfState::PRE;
+  b.round_live = b.state == GolfState::IN && espn::detail::str_or_empty(comp0["status"]["type"]["state"]) == "in";
+  snprintf(b.event, sizeof(b.event), "%s", espn::detail::str_or_empty(pick["name"]).c_str());
+  std::string detail = espn::detail::str_or_empty(comp0["status"]["type"]["shortDetail"]);
+  if (detail.empty())
+    detail = espn::detail::str_or_empty(comp0["status"]["type"]["detail"]);
+  snprintf(b.detail, sizeof(b.detail), "%s", detail.c_str());
+  b.round = (uint8_t) (comp0["status"]["period"] | 0);
+  b.round_done = comp0["status"]["type"]["completed"] | false;
+  b.playoff = strncmp(b.detail, "Playoff", 7) == 0;
+  b.start_epoch = parse_iso8601_z(espn::detail::str_or_empty(pick["date"]));
+  b.end_epoch = parse_iso8601_z(espn::detail::str_or_empty(pick["endDate"]));
+  size_t fav_kept = 0, top = 0;
+  std::vector<espn::detail::GolfPending> kept;
+  // Every golfer's total and whether they have a round 3 line, for the places.
+  struct Total {
+    bool scored;
+    int total;
+    bool weekend;
+    std::set<int> has, played;  // rounds with a line, and with a score
+  };
+  std::vector<Total> totals;
+  for (JsonObjectConst gc : comp0["competitors"].as<JsonArrayConst>()) {
+    b.field++;
+    espn::detail::GolfPending p;
+    GolfRow &r = p.row;
+    Total t{false, 0, false, {}, {}};
+    const std::string score = espn::detail::str_or_empty(gc["score"]);
+    t.scored = golf_score(score.c_str(), t.total);
+    if (t.scored)
+      snprintf(r.score, sizeof(r.score), "%s", score.c_str());
+    for (JsonObjectConst gl : gc["linescores"].as<JsonArrayConst>()) {
+      const int k = gl["period"] | 0;
+      if (k < 1 || k > 8)
+        continue;
+      int n = 0;
+      t.has.insert(k);
+      if (golf_score(espn::detail::str_or_empty(gl["displayValue"]).c_str(), n))
+        t.played.insert(k);
+    }
+    t.weekend = t.has.count(3) != 0;
+    totals.push_back(t);
+    r.place = (uint16_t) totals.size();  // for now, which golfer of the field this is
+    r.pos = (uint16_t) (gc["order"] | 0);
+    r.id = (uint32_t) atol(espn::detail::str_or_empty(gc["id"]).c_str());
+    bool is_fav = false;
+    for (size_t i = 0; i < fav_count; i++)
+      is_fav = is_fav || fav_ids[i] == r.id;
+    if (r.pos <= kGolfTopRows && ++top > kGolfTopRows)
+      top_full = true;
+    if (r.pos > kGolfTopRows && (!is_fav || fav_kept >= kGolfFavRows))
+      continue;
+    r.favorite = is_fav;
+    snprintf(r.name, sizeof(r.name), "%s", ascii_fold(espn::detail::str_or_empty(gc["athlete"]["shortName"])).c_str());
+    std::string full = ascii_fold(espn::detail::str_or_empty(gc["athlete"]["displayName"]));
+    size_t sp = full.rfind(' ');
+    std::string last = sp == std::string::npos ? full : full.substr(sp + 1);
+    const std::string brief = ascii_fold(espn::detail::str_or_empty(gc["athlete"]["shortName"]));
+    if (brief.find(' ') != std::string::npos)
+      last = brief.substr(brief.find(' ') + 1);
+    snprintf(r.last, sizeof(r.last), "%s", last.c_str());
+    if (r.name[0] == '\0' && r.last[0] == '\0') {
+      const std::string pair = ascii_fold(espn::detail::str_or_empty(gc["team"]["displayName"]));
+      const size_t slash = pair.find('/');
+      if (slash != std::string::npos) {
+        snprintf(r.name, sizeof(r.name), "%s", pair.c_str());
+        snprintf(r.last, sizeof(r.last), "%s", pair.substr(0, slash + 2).c_str());
+      }
+    }
+    if (r.name[0] == '\0' && r.last[0] == '\0')
+      continue;
+    if (r.pos > kGolfTopRows)
+      fav_kept++;
+    for (JsonObjectConst gl : gc["linescores"].as<JsonArrayConst>()) {
+      const int period = gl["period"] | 0;
+      size_t i = 0;
+      while (i < p.lines && p.line[i].period != period)
+        i++;
+      if (i == p.lines) {
+        if (p.lines >= espn::detail::kGolfLines)
+          continue;
+        p.line[p.lines++].period = period;
+      }
+      const std::string dv = espn::detail::str_or_empty(gl["displayValue"]);
+      int round_score = 0;
+      if (golf_score(dv.c_str(), round_score))
+        snprintf(p.line[i].today, sizeof(p.line[i].today), "%s", dv.c_str());
+      size_t holes = gl["linescores"].as<JsonArrayConst>().size();
+      p.line[i].thru = (uint8_t) (holes > 18 ? 18 : holes);
+    }
+    kept.push_back(p);
+  }
+  auto same = [&totals](size_t i, size_t j) {
+    return totals[i].scored && totals[j].scored && totals[i].total == totals[j].total &&
+           totals[i].weekend == totals[j].weekend;
+  };
+  for (const auto &p : kept) {
+    GolfRow r = p.row;
+    size_t first = r.place - 1, last = first;
+    r.place = 0;
+    if (totals[first].scored) {
+      while (first > 0 && same(first - 1, first))
+        first--;
+      while (last + 1 < totals.size() && same(last, last + 1))
+        last++;
+      r.place = (uint16_t) (first + 1);
+      r.tied = last > first;
+      if (b.state == GolfState::POST && first == 0 && last > 0) {
+        r.place = b.rows.empty() ? 1 : 2;
+        r.tied = !b.rows.empty() && last > 1;
+      }
+    }
+    auto line = [](const espn::detail::GolfPending &g, int period) {
+      for (uint8_t i = 0; i < g.lines; i++)
+        if (g.line[i].period == period)
+          return &g.line[i];
+      return (const espn::detail::GolfLine *) nullptr;
+    };
+    const Total &lead = totals[kept[0].row.place - 1], &mine = totals[p.row.place - 1];
+    size_t empty3 = 0;
+    for (const Total &t : totals)
+      empty3 += t.played.count(1) && t.played.count(2) && !t.played.count(3) && t.has.count(3);
+    for (int k = 1; k <= 8 && k <= (int) b.round && r.gone == GolfGone::NO; k++) {
+      size_t n = 0;
+      for (const Total &t : totals)
+        n += t.has.count(k);
+      if (n < 10 || !lead.has.count(k) || mine.played.count(k))
+        continue;
+      if (k >= 3 && !mine.has.count(k))
+        r.gone = GolfGone::CUT;
+      else if (lead.played.count(k) && (k < (int) b.round || b.state == GolfState::POST))
+        r.gone = k == 3 && empty3 >= 10 ? GolfGone::CUT : GolfGone::LEFT;
+    }
+    if (const auto *now = line(p, b.round)) {
+      memcpy(r.today, now->today, sizeof(r.today));
+      r.thru = now->thru;
+    }
+    b.rows.push_back(r);
+  }
+  b.valid = true;
+  out = std::move(b);
+  return true;
+}
+
+// Every field of two boards, or what differs first.
+const char *golf_differs(const GolfBoard &a, const GolfBoard &b) {
+  if (a.valid != b.valid || a.state != b.state || a.round_live != b.round_live || a.round != b.round ||
+      a.round_done != b.round_done || a.playoff != b.playoff)
+    return "state or round";
+  if (strcmp(a.event, b.event) != 0 || strcmp(a.detail, b.detail) != 0)
+    return "event or detail";
+  if (a.start_epoch != b.start_epoch || a.end_epoch != b.end_epoch || a.field != b.field)
+    return "dates or field";
+  if (a.rows.size() != b.rows.size())
+    return "row count";
+  for (size_t i = 0; i < a.rows.size(); i++) {
+    const GolfRow &x = a.rows[i], &y = b.rows[i];
+    if (x.pos != y.pos || x.place != y.place || x.tied != y.tied || x.gone != y.gone || x.id != y.id || x.thru != y.thru || x.favorite != y.favorite || strcmp(x.name, y.name) != 0 ||
+        strcmp(x.last, y.last) != 0 || strcmp(x.score, y.score) != 0 || strcmp(x.today, y.today) != 0)
+      return "a row";
+  }
+  return nullptr;
+}
+
 // The schedule and season recap cards from one season read (season.h).
 size_t season(const SeasonRead &r, int64_t now) {
   size_t n = season_post_line(r).size() + recap_header("DAL", r.year).size();
@@ -279,6 +482,50 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     std::string list;
     ChunkReader r(data, size, chunk);
     sink = sink + (size_t) (parse_news(r, list) + 1) + list.size();
+  }
+
+  {
+    // A golf tour's leaderboard (golf.h), with the input's ids followed.
+    // The stream, the string and the whole-document read must give the
+    // same board.
+    uint32_t favs[8];
+    size_t fav_count = 0;
+    for (const Pick &p : picks)
+      if (fav_count < 8)
+        favs[fav_count++] = p.team_id;
+    GolfBoard a, b, w;
+    ChunkReader r(data, size, chunk);
+    const bool ok_a = parse_golf(r, League::PGA, favs, fav_count, a);
+    const bool ok_b = parse_golf(json, League::PGA, favs, fav_count, b);
+    bool top_full = false;
+    const bool ok_w = golf_whole_document(data, size, favs, fav_count, w, top_full);
+    const char *diff = ok_a != ok_b ? "the result" : golf_differs(a, b);
+    if (diff != nullptr) {
+      fprintf(stderr, "parse_golf read a stream and a string differently: %s\n", diff);
+      abort();
+    }
+    diff = ok_a != ok_w ? "the result" : top_full ? nullptr : golf_differs(a, w);
+    if (diff != nullptr) {
+      fprintf(stderr, "parse_golf (%d) and the whole-document read (%d) differ: %s\n", ok_a, ok_w, diff);
+      abort();
+    }
+    if (ok_a) {
+      if (a.rows.size() > kGolfRowsMax) {
+        fprintf(stderr, "parse_golf kept %zu rows\n", a.rows.size());
+        abort();
+      }
+      char head[kGolfHead], text[kGolfText];
+      for (uint32_t pg = 0; pg < golf_pages(a); pg++)
+        for (bool wide : {false, true}) {
+          golf_page(a, pg, wide, text);
+          sink = sink + strlen(text);
+        }
+      golf_header(a, head);
+      GolfBoard kept;
+      golf_take(kept, std::move(b), now);
+      golf_take(kept, std::move(w), now + 60);
+      sink = sink + strlen(head) + golf_read_ms(kept) + (golf_fresh(kept, now + 60) ? 1 : 0);
+    }
   }
 
   GameSnapshot prev;

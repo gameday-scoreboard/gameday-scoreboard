@@ -15,8 +15,11 @@
 
 #include "cards.h"
 #include "countdown.h"
+#include "fav_names.h"
+#include "golf.h"
 #include "flights.h"
 #include "hook.h"
+#include "leaderboards.h"
 #include "leagues.h"
 #include "message.h"
 #include "night.h"
@@ -39,7 +42,7 @@ constexpr const char *kSetKeys[] = {"mode",   "rotate",   "fav1",   "fav2",    "
                                     "nightstart", "nightend", "nightscreen", "nightlevel", "favtake",
                                     "nick",   "lists",    "list",   "sport",   "hook",    "pregame",
                                     "news",   "town",     "wxon",     "wxunit",   "flrad",   "flface",  "flrx",
-                                    "flkey",  "cards",    "wake",     "wakelead",
+                                    "flkey",  "cards",    "leaderboards", "wake",     "wakelead",
                                     "after",   "remote1", "remote2", "remote3", "remote4", "celebrate",
                                     "field",   "winbar",  "spark",   "bigplays", "keepfav", "fxlists", "fxlist"};
 
@@ -114,14 +117,20 @@ inline bool parse_team_ref(const std::string &v, uint8_t &league, uint32_t &id) 
 }
 
 inline bool known_team(uint8_t league, uint32_t id) {
+  // A golf favorite is a golfer, by ESPN athlete id. A tour's field changes
+  // every week, so golfers are not a table the firmware can check against:
+  // any athlete id counts, and the leaderboard read simply never pins one
+  // who is not in this week's field.
+  if (league < kLeagueCount && golf_league((League) league))
+    return id != 0;
   for (size_t t = 0; t < kTeamCount; t++)
     if ((uint8_t) kTeams[t].league == league && kTeams[t].espn_id == id)
       return true;
   return false;
 }
 
-// "mlb,nhl" -> a bit per league. Unknown keys are skipped, so a list of only
-// unknown keys, like "", is 0: back to auto.
+// "mlb,nhl" -> a bit per league. Unknown keys and leaderboard leagues are
+// skipped, so a list of only those, like "" or "pga", is 0: back to auto.
 inline uint16_t live_mask_from_keys(const std::string &keys) {
   uint16_t mask = 0;
   size_t start = 0;
@@ -130,14 +139,24 @@ inline uint16_t live_mask_from_keys(const std::string &keys) {
     std::string key = keys.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
     start = comma == std::string::npos ? keys.size() : comma + 1;
     const LeagueInfo *info = league_by_key(key.c_str());
-    if (info != nullptr)
+    if (info != nullptr && !leaderboard_sport(info->sport))
       mask |= (uint16_t) (1u << (uint8_t) info->league);
   }
   return mask;
 }
 
+// A Live games mask without its leaderboard leagues, for one saved before
+// they were left out.
+inline uint16_t live_mask_games(uint16_t mask) {
+  for (const auto &l : kLeagues)
+    if (leaderboard_sport(l.sport))
+      mask &= (uint16_t) ~(1u << (uint8_t) l.league);
+  return mask;
+}
+
 // The leagues Live mode scans, in kLeagues order. A mask of 0 is auto: each
-// favorite's league, NFL when there are none.
+// favorite's league, NFL when that leaves none. Leaderboard leagues are left
+// out before the NFL check, so a panel that follows only a golfer reads NFL.
 inline std::vector<League> live_leagues(uint16_t mask, const std::vector<uint8_t> &fav_leagues) {
   if (mask == 0) {
     for (uint8_t l : fav_leagues)
@@ -146,7 +165,7 @@ inline std::vector<League> live_leagues(uint16_t mask, const std::vector<uint8_t
   }
   std::vector<League> out;
   for (const auto &l : kLeagues)
-    if (mask & (1u << (uint8_t) l.league))
+    if ((mask & (1u << (uint8_t) l.league)) && !leaderboard_sport(l.sport))
       out.push_back(l.league);
   if (out.empty())
     out.push_back(League::NFL);
@@ -160,20 +179,23 @@ inline bool no_team_default(uint8_t mode, bool have_favorite) {
   return mode == (uint8_t) Mode::FAVORITES && !have_favorite;
 }
 
-// The leagues a panel with no team picked scans: every league, in kLeagues
-// order. Men's college basketball is read as ESPN's Top 25 slate there
-// (scan_url's top25), not all of Division I.
+// The leagues a panel with no team picked scans: every game league, in
+// kLeagues order. Men's college basketball is read as ESPN's Top 25 slate
+// there (scan_url's top25), not all of Division I.
 inline std::vector<League> no_team_leagues() {
   std::vector<League> out;
   for (const auto &l : kLeagues)
-    out.push_back(l.league);
+    if (!leaderboard_sport(l.sport))
+      out.push_back(l.league);
   return out;
 }
 
 // The leagues a mode's scan reads, in the order it reads them, and so the
 // leagues its finals rotation covers. live is Live games' own list
 // (live_leagues above, or no_team_leagues for the no-team default). A mode
-// that follows teams (Favorites) scans none.
+// that follows teams (Favorites) scans none. Leaderboard leagues are never
+// scanned: a tour's scoreboard is a leaderboard, and the scan would read
+// its first golfers as a game's two teams.
 inline std::vector<League> scan_leagues(uint8_t mode, const std::vector<League> &live) {
   switch ((Mode) mode) {
     case Mode::LIVE_NFL:
@@ -182,8 +204,13 @@ inline std::vector<League> scan_leagues(uint8_t mode, const std::vector<League> 
       return {League::NCAA};
     case Mode::LIVE_ANY:
       return {League::NFL, League::NCAA};
-    case Mode::LIVE:
-      return live;
+    case Mode::LIVE: {
+      std::vector<League> out;
+      for (League l : live)
+        if (!leaderboard_league(l))
+          out.push_back(l);
+      return out;
+    }
     default:
       return {};
   }
@@ -280,8 +307,7 @@ inline FxNames &fx_names() {
 }
 
 inline const char *remote_sport_key(uint8_t sport) {
-  static const char *const kWords[] = {"football", "baseball", "basketball", "hockey", "soccer"};
-  return sport < 5 ? kWords[sport] : "";
+  return sport < kSportCount ? kSportKeys[sport] : "";
 }
 
 inline std::string remote_name(const RemoteTarget &t) {
@@ -376,8 +402,9 @@ inline bool remote_parse(const std::string &v, RemoteTarget &t) {
     return true;
   }
   if (v.compare(0, 7, "league:") == 0) {
+    // Live games in that league: a leaderboard league has none.
     const LeagueInfo *l = league_by_key(v.substr(7).c_str());
-    if (l == nullptr)
+    if (l == nullptr || leaderboard_sport(l->sport))
       return false;
     t.kind = (uint8_t) RemoteKind::LEAGUE;
     t.league = (uint8_t) l->league;
@@ -505,6 +532,7 @@ enum class SetKind : uint8_t {
   TOWN,         // text, the weather card's town (weather.h); "" clears it and turns the card off
   WXON,         // on, the weather card between games
   WXUNIT,       // value, the weather's degrees: kWxUnitAuto, kWxUnitF or kWxUnitC (weather.h)
+  LEADERBOARDS, // value, the leaderboard leagues picked, a bit per League; named, the leagues the request sets (leaderboards.h)
   FL_RADIUS,    // value, the Flights page's distance step, 0 to kFlRadiusSteps - 1 (flights.h)
   FL_FACE,      // value, the way the owner's window faces: 0 any, 1 to 8 for N to NW (flights.h facing_ok)
   FL_RX,        // text, the owner's own ADS-B receiver (flights.h receiver_url); "" for none
@@ -532,8 +560,12 @@ struct SetOp {
   bool on{false};
   uint8_t slot{0};
   uint16_t mask{0};
+  uint32_t named{0};  // LEADERBOARDS
   TeamRef team;
   std::vector<TeamRef> teams;
+  // FAVS: each team's athlete name (fav_names.h), "" for none. Parallel to
+  // teams and kept as it is, a plain vector made and freed with the request.
+  std::vector<std::string> names;
   std::vector<std::string> refused;  // favs entries left out, for the log
   std::string text;
   uint32_t ymd{0};
@@ -612,7 +644,8 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
   }
   if (k == "favs") {
     // "mlb:15,nfl:6,..." in priority order; "" clears the list. Unknown teams
-    // and repeats drop out; the rest keep their order up to fav_max.
+    // and repeats drop out; the rest keep their order up to fav_max. An
+    // athlete may carry a name after the id, "pga:9478:Scottie Scheffler".
     op.kind = SetKind::FAVS;
     size_t start = 0;
     while (start < v.size() && op.teams.size() < fav_max) {
@@ -627,8 +660,10 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
       bool dup = false;
       for (const auto &f : op.teams)
         dup = dup || f == t;
-      if (!dup)
+      if (!dup) {
         op.teams.push_back(t);
+        op.names.push_back(athlete_league(t.league) ? fav_ref_name(ref) : std::string());
+      }
     }
     return true;
   }
@@ -766,6 +801,18 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
   }
   if (k == "wxon")
     return on(SetKind::WXON);
+  if (k == "leaderboards") {
+    // "golf:pga,lpga" sets golf's tours and leaves any other sport as it is;
+    // a sport or league this firmware doesn't have is skipped (refused, for
+    // the log). Refused when it names no sport the panel has.
+    op.kind = SetKind::LEADERBOARDS;
+    LeaderboardsText t;
+    bool ok = parse_leaderboards(v, t);
+    op.value = (int) t.on;
+    op.named = t.named;
+    op.refused = std::move(t.skipped);
+    return ok;
+  }
   if (k == "wxunit") {
     // 0 auto (the town's country, else the time zone), 1 F, 2 C
     op.kind = SetKind::WXUNIT;

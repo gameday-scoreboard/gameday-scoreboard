@@ -172,16 +172,17 @@ inline bool list_league_token(const std::string &tok, uint16_t &leagues, bool *k
   if (tok.compare(0, 4, "@lg:") != 0)
     return false;
   const LeagueInfo *l = league_by_key(tok.c_str() + 4);
-  if (l != nullptr)
+  if (l != nullptr && !leaderboard_sport(l->sport))
     leagues |= (uint16_t) (1u << (uint8_t) l->league);
   return true;
 }
 
-// Only the leagues this firmware has.
+// Only the leagues this firmware has, and has games for.
 inline uint16_t list_leagues_known(uint16_t leagues) {
   uint16_t known = 0;
   for (const auto &l : kLeagues)
-    known |= (uint16_t) (1u << (uint8_t) l.league);
+    if (!leaderboard_sport(l.sport))
+      known |= (uint16_t) (1u << (uint8_t) l.league);
   return leagues & known;
 }
 
@@ -500,14 +501,15 @@ inline bool list_has(uint16_t mask, bool chosen, size_t i) {
 // Playing's and Home Assistant's names for them, in Sport order (the keys
 // are leagues.h's kSportKeys). "All ..." beside All favorites, so an owner's
 // own playlist named Football never shares a name with one.
-constexpr const char *kSportRowNames[kSportCount] = {"All football", "All baseball", "All basketball", "All hockey",
-                                                     "All soccer"};
+constexpr const char *kSportRowNames[kSportCount] = {"All football", "All baseball", "All basketball",
+                                                     "All hockey",   "All soccer",   "All golf"};
 
 // The bit of a favorite's sport (bit s = Sport s), 0 for a league byte this
-// firmware doesn't know.
+// firmware doesn't know and for a leaderboard sport, which has no games to
+// play in a row.
 inline uint8_t sport_bit(uint8_t league) {
   const LeagueInfo *l = league_info((League) league);
-  return l != nullptr ? (uint8_t) (1u << (uint8_t) l->sport) : 0;
+  return l != nullptr && !leaderboard_sport(l->sport) ? (uint8_t) (1u << (uint8_t) l->sport) : 0;
 }
 
 // The sports with a row in Playing, from the bits of every favorite's sport:

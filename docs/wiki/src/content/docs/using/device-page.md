@@ -100,7 +100,7 @@ Groups your favorites into named playlists you can switch between. **New playlis
 
 ### Choosing teams
 
-**Add a favorite** opens the team chooser. It has a search box and a tab per league: **NFL**, **NCAAF** (college football), **MLB**, **MLS**, **EPL** (Premier League), **NBA**, **WNBA**, **NCAAM** (men's college basketball), **NCAAW** (women's college basketball) and **NHL**. Search looks through every league at once. The chooser stays open so you can add several: a tap adds a team to the end of your list, a tap on a checked team takes it out, and **Done** closes it.
+**Add a favorite** opens the team chooser. It has a search box and a tab per league: **NFL**, **NCAAF** (college football), **MLB**, **MLS**, **EPL** (Premier League), **NBA**, **WNBA**, **NCAAM** (men's college basketball), **NCAAW** (women's college basketball), **NHL**, and **PGA**, **LPGA** and **DPWT** for golfers. Search looks through every league at once; on a golf tab it looks golfers up by name instead (see [Golf](/using/golf/#follow-a-golfer)). A golfer you add is listed by the name the panel keeps for them, so every phone or computer shows the same name. The chooser stays open so you can add several: a tap adds a team to the end of your list, a tap on a checked team takes it out, and **Done** closes it.
 
 The first tab, **On now**, lists today's games in every league, under **Live now**, **Later today**, **Final** and **Postponed or canceled**. Tap a side to add that team. The chooser opens on **On now** when a game is live, and on your first favorite's league otherwise.
 
@@ -180,6 +180,7 @@ What the panel shows when no game is on. **Countdown to the next game**, on unle
 | **Season recap** | A favorite's record and playoff result between seasons, for teams in every league but MLB. |
 | **Weather** | The forecast for your town. See [Weather](/using/weather/). |
 | **Game Day card** | A QR code for gameday-scoreboard.com every 20 minutes, for a panel other people see. See [Game Day card](/using/gameday-card/). |
+| **Golf leaderboard** | PGA Tour, LPGA and DP World Tour leaderboards, for the tours you tap inside the card and the tours of golfers you follow. The panel lists the tours it has, so the chips match its firmware. See [Golf](/using/golf/). |
 
 Every card is on to start except News headlines, the Game Day card and Weather (on once you set a town), so a panel does what it did before the update. A card with nothing to show yet says what it needs under its name: a day for the date countdown, text or a list for the message card, a picture for Pictures, a college football or basketball team for College Top 25, a team outside MLB in Favorite teams for Schedule and Season recap, a town for Weather. You can still turn it off before then. The list is part of the [settings backup](/using/backup/).
 

@@ -85,6 +85,13 @@ from leagues_table import leagues  # noqa: E402
 
 LEAGUES = [row["key"] for row in leagues()]
 LEAGUE_SPORT = {row["key"]: row["sport"].lower() for row in leagues()}
+# leagues.h leaderboard_sport(): golf ranks a field, so its tours have no Live games.
+LEADERBOARD_SPORTS = ("golf",)
+GAME_LEAGUES = [lg for lg in LEAGUES if LEAGUE_SPORT[lg] not in LEADERBOARD_SPORTS]
+# The state's lbleagues: each leaderboard league with its name (leaderboards.h leaderboard_name).
+LB_NAMES = {"pga": "PGA Tour", "lpga": "LPGA", "eur": "DP World Tour"}
+LB_LEAGUES = [{"key": lg, "name": LB_NAMES.get(lg, lg.upper()), "sport": LEAGUE_SPORT[lg]}
+              for lg in LEAGUES if LEAGUE_SPORT[lg] in LEADERBOARD_SPORTS]
 # leagues.h kSportKeys: the sport rows' words, in Sport order.
 SPORT_KEYS = tuple(re.findall(r'"(\w+)"', re.search(r"kSportKeys\[kSportCount\] = \{(.*?)\};",
                                                     (REPO / "components/gameday/leagues.h").read_text(encoding="utf-8"),
@@ -156,8 +163,34 @@ URI_MAX = 512
 FORM_MAX = 1024
 
 
+# Followed athletes' names, kept by league and id (fav_names.h).
+FAV_NAMES = {}
+
+
+def athlete_league(lg):
+    """fav_names.h athlete_league(): a favorite in a leaderboard league is an athlete."""
+    return LEAGUE_SPORT.get(lg) in LEADERBOARD_SPORTS
+
+
+def athlete_abbr(name):
+    """fav_names.h athlete_abbr(): the surname past a suffix, when it is 10 bytes or fewer."""
+    words = name.split()
+    while len(words) > 1 and words[-1] in ("Jr.", "Jr", "Sr.", "Sr", "II", "III", "IV"):
+        words.pop()
+    return words[-1] if len(words) >= 2 and len(words[-1].encode("utf-8")) <= 10 else ""
+
+
 def team(lg, tid):
-    """put_team(): league, id, abbr and name, or an empty object."""
+    """put_team(): league, id, abbr and name, or an empty object. An athlete
+    has the name the panel keeps, and its surname as abbr when short enough."""
+    if athlete_league(lg) and tid:
+        out = {"l": lg, "id": tid}
+        name = FAV_NAMES.get((lg, tid), "")
+        if name:
+            out["name"] = name
+            if athlete_abbr(name):
+                out["abbr"] = athlete_abbr(name)
+        return out
     if (lg, tid) not in TEAMS:
         return {}
     abbr, name = TEAMS[(lg, tid)]
@@ -191,6 +224,9 @@ INITIAL = {
     # The Weather page (weather_page.h) is up on a lit screen: rebuilt by
     # state_doc().
     "wxpage": False,
+    # The leaderboard cards' leagues (leaderboards.h leaderboards_text), every sport written out.
+    "leaderboards": "golf:",
+    "lbleagues": LB_LEAGUES,
     # The Flights page (flights.h): distance step, facing, receiver, whether
     # an adsb.lol key is set (the key itself is never sent), and fl, what the
     # page is doing: rebuilt by state_doc() from these.
@@ -406,6 +442,7 @@ FL_KEY = [""]
 
 def reset_state(overrides):
     PIC_FILES.clear()
+    FAV_NAMES.clear()
     STATE.clear()
     STATE.update(copy.deepcopy(INITIAL))
     STATE.update(overrides)
@@ -470,7 +507,12 @@ def parse_team_ref(v):
     lg, colon, tid = v.partition(":")
     m = re.match(r"\s*\d+", tid)
     ref = (lg, int(m.group())) if colon and lg in LEAGUES and m else None
-    return ref if ref in TEAMS else None
+    return ref if ref in TEAMS or (ref and athlete_league(lg) and ref[1] > 0) else None
+
+
+def athlete_name_clean(v):
+    """fav_names.h athlete_name_clean(): one line, no list separators, 23 bytes at most."""
+    return message_clean(v.replace(",", "").replace(";", "").replace("�", ""), 23, False)
 
 
 def timezone_index(v):
@@ -487,18 +529,18 @@ def counts(t):
 def live_auto_leagues():
     """live_leagues() with a mask of 0: the favorites' leagues, NFL with none."""
     used = {t["l"] for t in STATE["favs"] if counts(t)}
-    return [lg for lg in LEAGUES if lg in used] or ["nfl"]
+    return [lg for lg in GAME_LEAGUES if lg in used] or ["nfl"]
 
 
 def no_team_default():
     """set_request.h no_team_default(): Favorites with none set."""
-    return STATE["mode"] == 4 and not any(counts(t) for t in STATE["favs"])
+    return STATE["mode"] == 4 and not any(counts(t) and t["l"] in GAME_LEAGUES for t in STATE["favs"])
 
 
 def sport_rows():
     """sport_rows_(): a row per sport among the favorites, with two sports or more."""
     have = {LEAGUE_SPORT.get(t["l"]) for t in STATE["favs"] if counts(t)}
-    rows = [k for k in SPORT_KEYS if k in have]
+    rows = [k for k in SPORT_KEYS if k in have and k not in LEADERBOARD_SPORTS]
     return rows if len(rows) >= 2 else []
 
 
@@ -511,7 +553,7 @@ def state_doc():
         if STATE["sport"] not in STATE["sports"]:
             STATE["sport"] = ""
     if no_team_default():
-        STATE["live"] = list(LEAGUES)
+        STATE["live"] = list(GAME_LEAGUES)
     elif STATE.get("live_auto"):
         STATE["live"] = live_auto_leagues()
     else:
@@ -560,6 +602,43 @@ def state_doc():
     return STATE
 
 
+# The golf tours in kLeagues order: PGA, LPGA, DP World Tour.
+GOLF_TOURS = tuple(lg for lg in LEAGUES if LEAGUE_SPORT[lg] == "golf")
+
+
+def parse_leaderboards(v):
+    """leaderboards.h parse_leaderboards(): (on, named sports, skipped) from
+    "golf:pga,lpga;racing:"; a sport or league this firmware lacks is skipped."""
+    on, named, skipped = {}, set(), []
+    for part in v.split(";"):
+        if not part:
+            continue
+        sport, colon, keys = part.partition(":")
+        if not colon or sport not in LEADERBOARD_SPORTS:
+            skipped.append(sport)
+            continue
+        named.add(sport)
+        on[sport] = set()
+        for key in keys.split(","):
+            if not key:
+                continue
+            if LEAGUE_SPORT.get(key) == sport:
+                on[sport].add(key)
+            else:
+                skipped.append(f"{sport}:{key}")
+    return on, named, skipped
+
+
+def leaderboards_text(on):
+    """leaderboards.h leaderboards_text(): every leaderboard sport, its leagues in kLeagues order."""
+    return ";".join(sport + ":" + ",".join(lg for lg in LEAGUES if lg in on.get(sport, ()))
+                    for sport in SPORT_KEYS if sport in LEADERBOARD_SPORTS)
+
+
+def leaderboards_on():
+    return parse_leaderboards(STATE.get("leaderboards", ""))[0]
+
+
 def fl_text_ok(v):
     """set_request.h fl_text_ok(): printable ASCII with no spaces, at most kFlTextMax bytes."""
     return len(v.encode()) <= LIMITS["kFlTextMax"] and all("!" <= c <= "~" for c in v)
@@ -587,6 +666,9 @@ def card_ok(cid):
     if cid == "top25":
         leagues = {t["l"] for t in STATE["favs"] if counts(t)} | (set(STATE.get("live", [])) if STATE["mode"] == 5 else set())
         return not no_team_default() and bool(leagues & {"ncaa", "mcbb"})
+    if cid == "golf":
+        # golf_slots_(): a tour picked on the card, or a followed golfer's tour.
+        return bool(leaderboards_on().get("golf")) or any(t.get("l") in GOLF_TOURS for t in STATE["favs"] if t)
     return True
 
 
@@ -655,7 +737,7 @@ def remote_parse(v):
     if v.startswith("sport:"):
         return v if v[6:] in SPORT_KEYS else None
     if v.startswith("league:"):
-        return v if v[7:] in LEAGUES else None
+        return v if v[7:] in GAME_LEAGUES else None
     if v.startswith("list:") and len(v) > 5:
         return "list:" + v[5:].encode("utf-8")[:16].decode("utf-8", "ignore")
     if v.startswith("fxlist:") and len(v) > 7:
@@ -934,6 +1016,10 @@ def apply_set(kv):
                 ref = parse_team_ref(part)
                 if ref and ref not in refs:
                     refs.append(ref)
+                    # An athlete's name after the id, kept with its league and id.
+                    name = athlete_name_clean(part.split(":", 2)[2]) if athlete_league(ref[0]) and part.count(":") >= 2 else ""
+                    if name:
+                        FAV_NAMES[ref] = name
             # set_favorites_(): the list in order, then empty slots up to the four remote slots.
             # A button-only team keeps its mark wherever it moved (remap_lists_).
             solo = {r for r, t in zip(before, STATE["favs"]) if r and t.get("btn")}
@@ -1022,7 +1108,7 @@ def apply_set(kv):
         elif k in ("today", "jump", "banner", "favtake"):
             STATE[k] = v == "1"
         elif k == "live":
-            keys = [lg for lg in LEAGUES if lg in v.split(",")]
+            keys = [lg for lg in GAME_LEAGUES if lg in v.split(",")]
             STATE["live_auto"] = not keys
             LIVE_LIST[0] = keys
         elif k == "tz":
@@ -1058,6 +1144,13 @@ def apply_set(kv):
                 wx_lookup(town)
         elif k == "wxon":
             STATE["wxon"] = v == "1"
+        elif k == "leaderboards":
+            # The sports named take their leagues; the others keep theirs.
+            on, named, _skipped = parse_leaderboards(v)
+            if named:
+                cur = leaderboards_on()
+                cur.update(on)
+                STATE["leaderboards"] = leaderboards_text(cur)
         elif k == "wxunit":
             if v in ("0", "1", "2"):
                 STATE["wxunit"] = int(v)
@@ -1155,6 +1248,13 @@ def team_text(t):
     return f"{t['l']}:{t['id']}" if t and t.get("id") else ""
 
 
+def fav_text(t):
+    """settings_doc.h fav_ref_text(): an athlete's kept name rides after the id."""
+    ref = team_text(t)
+    name = athlete_name_clean(t.get("name", "")) if ref and athlete_league(t["l"]) else ""
+    return ref + ":" + name if name else ref
+
+
 def settings_doc():
     """settings_from_state(): the backup GET /gameday/settings writes."""
     s = state_doc()
@@ -1162,7 +1262,7 @@ def settings_doc():
     for k in SETTINGS_ORDER:
         if k == "favs":
             # A button-only team stays out: its button's team brings it back.
-            favs = [team_text(t) if counts(t) else "" for t in s["favs"]]
+            favs = [fav_text(t) if counts(t) else "" for t in s["favs"]]
             while favs and not favs[-1]:
                 favs.pop()
             out["favs"] = favs
@@ -1440,6 +1540,11 @@ def import_settings(doc):
                     k == "after" and v not in AFTER) or (
                     re.fullmatch(r"remote[1-4]", k) and remote_parse(v) is None):
                 skipped.append(f"{k}={v}")
+            elif k == "leaderboards":
+                _on, named, lb_skipped = parse_leaderboards(v)
+                skipped += [f"{k}={e}" for e in lb_skipped]
+                if named:
+                    kv.append((k, v))
             elif k == "nick" and not same_panel:
                 if v != STATE.get("nick", ""):
                     kept.append(k)
@@ -1453,8 +1558,8 @@ def import_settings(doc):
             if any(not isinstance(e, str) for e in v):
                 return fail(k + " should be a list of text.")
             if k == "live":
-                skipped += [f"live={e}" for e in v if e not in LEAGUES]
-                kv.append(("live", ",".join(e for e in v if e in LEAGUES)))
+                skipped += [f"live={e}" for e in v if e not in GAME_LEAGUES]
+                kv.append(("live", ",".join(e for e in v if e in GAME_LEAGUES)))
                 continue
             favs = []
             for e in v:
@@ -1539,13 +1644,23 @@ def selftest():
             return {c["id"]: c["on"] for c in value}
         return value
 
+    def favnames(favs):
+        """Each followed athlete's name and abbr as favs[] reports them, by league:id."""
+        return {f'{t["l"]}:{t["id"]}': {k: t[k] for k in ("name", "abbr") if k in t}
+                for t in favs if t and athlete_league(t["l"]) and t.get("name")}
+
     bad = 0
     for case in fx["cases"]:
         start = {**fx["base"], **case.get("start", {})}
-        start["favs"] = [to_team(r) for r in start["favs"]]
+        names = start.pop("favnames", {})
+        refs = start["favs"]
         if "cards" in start:
             start["cards"] = [{"id": cid, "on": on} for cid, on in start["cards"].items()]
         reset_state(start)
+        # Names already kept, followed or not, then the start's favorites with theirs.
+        for ref, name in names.items():
+            FAV_NAMES[parse_team_ref(ref)] = name
+        STATE["favs"] = [to_team(r) for r in refs]
         kv = [(k, v) for key in SET_KEYS for k, v in case["set"] if k == key]
         status = 200 if kv else 400
         if kv:
@@ -1555,7 +1670,7 @@ def selftest():
             bad += 1
             print(f"FAIL {case['name']}: status {status}")
         for key, want in case["expect"].items():
-            have = compact(key, got.get(key))
+            have = favnames(got["favs"]) if key == "favnames" else compact(key, got.get(key))
             if json.dumps(have) != json.dumps(want):
                 bad += 1
                 print(f"FAIL {case['name']}: {key} is {json.dumps(have)}, expected {json.dumps(want)}")

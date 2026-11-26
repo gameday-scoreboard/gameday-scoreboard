@@ -48,8 +48,22 @@
     mcbb: { prefix: "NCAAM", tab: "NCAAM", name: "Men's college basketball", path: "basketball/mens-college-basketball", logo: "ncaa", byId: true, scan: "groups=50&limit=300&" },
     wcbb: { prefix: "NCAAW", tab: "NCAAW", name: "Women's college basketball", path: "basketball/womens-college-basketball", logo: "ncaa", byId: true, scan: "groups=50&limit=300&" },
     nhl: { prefix: "NHL", tab: "NHL", name: "NHL", path: "hockey/nhl", logo: "nhl", byId: false, scan: "" },
+    // Golf has no teams: a favorite is a golfer, by ESPN athlete id. The
+    // picker searches golfers by name instead of showing team tiles, and the
+    // On now list skips these leagues: a tournament is not a game.
+    pga: { prefix: "PGA", tab: "PGA", name: "PGA Tour", path: "golf/pga", logo: "golf", byId: true, scan: "", golf: true },
+    lpga: { prefix: "LPGA", tab: "LPGA", name: "LPGA", path: "golf/lpga", logo: "golf", byId: true, scan: "", golf: true },
+    eur: { prefix: "DPWT", tab: "DPWT", name: "DP World Tour", path: "golf/eur", logo: "golf", byId: true, scan: "", golf: true },
   };
   const lgInfo = (lg) => LEAGUES[lg] || LEAGUES.nfl;
+  // The leaderboards setting, "golf:pga,lpga;racing:" (leaderboards.h), as a
+  // Map of sport to its league keys and back. A save names one sport; the
+  // panel keeps the others as they are.
+  const lbParse = (v) => new Map(String(v || "").split(";").filter(Boolean).map((p) => {
+    const i = p.indexOf(":");
+    return [i < 0 ? p : p.slice(0, i), i < 0 ? [] : p.slice(i + 1).split(",").filter(Boolean)];
+  }));
+  const lbText = (m) => [...m].map(([sport, keys]) => sport + ":" + keys.join(",")).join(";");
   // The league's name in "All NFL live games": its short name, or the long one
   // where the short one is an abbreviation owners don't use.
   const liveName = (lg) => ({ ncaa: "college football", mcbb: "men's college basketball", wcbb: "women's college basketball", epl: "Premier League" }[lg] || lgInfo(lg).name);
@@ -297,6 +311,9 @@
             <div class="ctl" id="newsRow"><label>News headlines<small>Shows ESPN headlines about your teams.</small></label><button class="sw" data-set="news" aria-label="News headlines"></button></div>
           </div>
           <div id="cardPark" hidden></div>
+          <div id="golfBox" hidden>
+            <div class="chips" id="golfChips" role="group" aria-label="Tours"></div>
+          </div>
           <div id="wxBox" hidden>
             <div class="sub">Weather</div>
             <p class="hint">The forecast for your town.</p>
@@ -706,10 +723,21 @@
     },
     cdname: String, cddate: (v) => (v === "none" ? "" : v),
     town: String, wxon: (v) => v === "1", wxunit: Number,
+    leaderboards: (v) => {
+      const m = lbParse(S && S.leaderboards);
+      for (const [sport, keys] of lbParse(v)) m.set(sport, keys);
+      return lbText(m);
+    },
     // The adsb.lol key (flkey) isn't here: the state only says whether one is set.
     flrad: Number, flface: Number, flrx: String,
     live: (v) => v.split(",").filter(Boolean),
-    favs: (v) => v.split(",").filter(Boolean).map(ref),
+    // An athlete's name rides after the id; a list sent without one keeps the name the panel has.
+    favs: (v) => v.split(",").filter(Boolean).map((k) => {
+      const r = ref(k);
+      const was = ((S && S.favs) || []).find((f) => f && f.l === r.l && f.id === r.id);
+      const name = k.split(":").slice(2).join(":") || (was && !teamByKey(r.l + ":" + r.id) && was.name);
+      return name ? Object.assign(r, { name }) : r;
+    }),
     // Teams as places in favs, which is how the state document lists them.
     lists: (v) => v.split(";").filter(Boolean).map((p) => {
       const [n, refs] = p.split("=");
@@ -1236,9 +1264,10 @@
     news: "ESPN's latest headlines for your teams, or your leagues on Live games, one every 3 minutes. Read once an hour.",
     weather: "Your town's forecast for 10 seconds every minute: the temperature now, today's high and low, and the next two days.",
     gamedaycard: "A QR code for gameday-scoreboard.com with a few words on getting a scoreboard, for 10 seconds every 20 minutes. For a panel that other people see, like one in a shop or an office.",
+    golf: "The tournament leaderboard between games: the top ten and the golfers you follow, a page every 5 seconds, every 10 minutes. Pick the tours here; following a golfer adds their tour too.",
   };
   const OWN_CARDS = { custom: "the date countdown", message: "the message card", picture: "your pictures" };
-  const CARD_GROUPS = [["Game info", ["next", "countdown", "clock", "gameleaders"]], ["Sports news", ["top25", "news"]]];
+  const CARD_GROUPS = [["Game info", ["next", "countdown", "clock", "gameleaders"]], ["Sports news", ["top25", "news", "golf"]]];
   const CARD_ICONS = {
     next: '<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
     countdown: '<path d="M7 3h10M7 21h10M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9s8 4 8 9"/>',
@@ -1247,6 +1276,7 @@
     top25: '<path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/>',
     news: '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M7 9h10M7 12.5h10M7 16h6"/>',
     gamedaycard: '<rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6"/><rect x="4" y="14" width="6" height="6"/><path d="M14 14h2v2h-2zM18 18h2v2h-2zM14 18h2M18 14h2"/>',
+    golf: '<path d="M8 21V3l9 4-9 4M4 21h8"/>',
     weather: '<circle cx="9" cy="9" r="3.5"/><path d="M9 2.5v1.5M2.5 9H4M4.4 4.4l1 1M13.6 4.4l-1 1M8 20h9a3.5 3.5 0 0 0 0-7 5 5 0 0 0-9.6 1.4A2.8 2.8 0 0 0 8 20z"/>',
   };
   const cardIcon = (id) => '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">' + (CARD_ICONS[id] || '<circle cx="12" cy="12" r="8"/>') + "</svg>";
@@ -1260,11 +1290,40 @@
   };
   const toggleCard = (id) => {
     const now = (S.cards || []).find((x) => x.id === id);
-    setGD({ cards: id + ":" + (now && now.on ? 0 : 1) });
+    const set = { cards: id + ":" + (now && now.on ? 0 : 1) };
+    // On with no tour and no golfer: it would have nothing to show, so it starts with the PGA Tour.
+    const bare = !(lbParse(S.leaderboards).get("golf") || []).length && !favKeys.some((k) => (LEAGUES[k.split(":")[0]] || {}).golf);
+    if (id === "golf" && now && !now.on && bare && golfTours().includes("pga")) set.leaderboards = "golf:pga";
+    setGD(set);
   };
   // A card's own settings go inside its row; while it is off they wait here,
   // still in the page, since the renders look their fields up by id.
-  const cardExtras = () => ({ weather: $("#wxBox") });
+  const cardExtras = () => ({ weather: $("#wxBox"), golf: $("#golfBox") });
+  // The Golf leaderboard card's tours: the panel's golf leaderboard leagues
+  // (state lbleagues), saved as leaderboards=golf:... Built once and updated
+  // in place, as the Live games chips are.
+  const golfTours = () => (S.lbleagues || []).filter((l) => l.sport === "golf").map((l) => l.key);
+  const renderGolfChips = () => {
+    $("#golfBox").hidden = !Array.isArray(S.lbleagues);  // firmware from before the setting
+    if (!Array.isArray(S.lbleagues)) return;
+    const host = $("#golfChips");
+    const on = lbParse(S.leaderboards).get("golf") || [];
+    if (host.children.length) {
+      for (const b of host.children) setOn(b, on.includes(b.dataset.lg), "aria-pressed");
+      return;
+    }
+    for (const l of S.lbleagues.filter((x) => x.sport === "golf")) {
+      const b = el("button", "chip", l.name);
+      b.dataset.lg = l.key;
+      setOn(b, on.includes(l.key), "aria-pressed");
+      b.onclick = () => {
+        const cur = lbParse(S.leaderboards).get("golf") || [];
+        const next = cur.includes(l.key) ? cur.filter((k) => k !== l.key) : cur.concat([l.key]);
+        setGD({ leaderboards: "golf:" + golfTours().filter((k) => next.includes(k)).join(",") });
+      };
+      host.appendChild(b);
+    }
+  };
   const cardsOpen = new Set();
   let cardsKey = "";
   let addSheet = null;
@@ -1311,6 +1370,7 @@
     }
     const cards = S.cards;
     renderOwnCards(cards);
+    renderGolfChips();
     const key = cards.map((c) => [c.id, c.on, c.ok, c.hint].join(":")).join();
     if (key === cardsKey) return renderAddSheet();
     cardsKey = key;
@@ -1544,6 +1604,14 @@
   // Favorites: one row per team in priority order. Every change posts the
   // whole list (favs=) so the device always sees one ordered list.
   let favKeys = [];
+  // A golfer has no team table: the panel keeps the name sent with the
+  // follow (favs= "pga:9478:Scottie Scheffler") and reports it in the state.
+  // Until it has one, the ESPN id stands in.
+  const ESPN_COMMON = "https://site.web.api.espn.com/apis/common/v3/";
+  const golferName = (key) => {
+    const f = ((S && S.favs) || []).find((x) => refKey(x) === key);
+    return (f && f.name) || "Golfer " + key.split(":")[1];
+  };
   // The state's favorite slots as keys, "" for an empty one. Playlists and
   // the remote's buttons count places in this list, gaps and all.
   let favSlots = [];
@@ -1585,13 +1653,15 @@
       img.alt = "";
       if (t) img.src = logoUrl(t[0], t[1], t[2]);
       row.appendChild(img);
-      const name = el("label", null, (i + 1) + ". " + (t ? t[3] : key));
+      const golf = !t && LEAGUES[key.split(":")[0]] && LEAGUES[key.split(":")[0]].golf;
+      const name = el("label", null, (i + 1) + ". " + (t ? t[3] : golf ? golferName(key) : key));
       const btn = remoteButtonFor(key, favSlots.indexOf(key));
       if (btnKeys.includes(key)) {
         // Added by a remote button: shown, marked, and no favorite anywhere else.
         row.classList.add("btnonly");
         name.appendChild(el("small", null, (t ? lgInfo(t[0]).name + " · " : "") + "Button only" + (btn ? " (button " + btn + ")" : "")));
       } else if (t) name.appendChild(el("small", null, lgInfo(t[0]).name + (btn && remotePaired ? " · remote button " + btn : "")));
+      else if (golf) name.appendChild(el("small", null, lgInfo(key.split(":")[0]).name + " golfer"));
       row.appendChild(name);
       const ctl = el("span", "favmove");
       const mk = (label, title, fn) => {
@@ -1761,7 +1831,8 @@
       chips.setAttribute("role", "group");
       chips.setAttribute("aria-label", "Teams in " + l.n);
       favSlots.forEach((key, fi) => {
-        if (!key || btnKeys.includes(key)) return;
+        // A golfer has no games to play in a playlist.
+        if (!key || btnKeys.includes(key) || (LEAGUES[key.split(":")[0]] || {}).golf) return;
         const t = teamByKey(key);
         const on = l.f.includes(fi);
         const c = el("button", "chip", t ? t[2] : key);
@@ -2407,7 +2478,8 @@
     btnKeys = (S.favs || []).filter((f) => f && f.id && f.btn).map(refKey);
     const keys = favSlots.filter(Boolean);
     // Redrawn when the list changes, or the remote's marks on it do.
-    const favSig = favSlots.join(",") + "|" + btnKeys.join(",") + "|" + JSON.stringify(remoteTargets());
+    const favSig = favSlots.join(",") + "|" + btnKeys.join(",") + "|" + JSON.stringify(remoteTargets()) + "|" +
+      (S.favs || []).map((f) => (f && f.name) || "").join(",");
     if (favSig !== lastFavSig) {
       lastFavSig = favSig;
       favKeys = keys;
@@ -3300,7 +3372,8 @@
     return gamesLoad;
   };
   const fetchGames = async () => {
-    const urls = Object.keys(LEAGUES).map((lg) => [lg, `${ESPN}${LEAGUES[lg].path}/scoreboard?${LEAGUES[lg].scan}dates=${scanDate()}`]);
+    const urls = Object.keys(LEAGUES).filter((lg) => !LEAGUES[lg].golf)
+      .map((lg) => [lg, `${ESPN}${LEAGUES[lg].path}/scoreboard?${LEAGUES[lg].scan}dates=${scanDate()}`]);
     const out = [];
     await Promise.all(urls.map(async ([lg, u]) => {
       const ctl = new AbortController();
@@ -3310,6 +3383,8 @@
         for (const ev of j.events || []) {
           const c = ev.competitions?.[0];
           if (!c) continue;
+          // Not a two-team game (a golf leaderboard, say): no sides to show.
+          if (!(c.competitors || []).some((k) => k.homeAway)) continue;
           const side = (ha) => {
             const x = c.competitors.find((k) => k.homeAway === ha) || {};
             return { id: Number(x.team?.id), abbr: x.team?.abbreviation || "", score: x.score || "0", name: x.team?.shortDisplayName || x.team?.displayName || "" };
@@ -3456,8 +3531,66 @@
     tile.onclick = () => toggleFav(t);
     return tile;
   };
+  // A golf tour's picker: no team tiles. The search box looks golfers up by
+  // name with ESPN's own search, any tour, and empty it lists the golfers
+  // already followed on this tour. A tap follows a golfer or stops.
+  let golfSearchSeq = 0;
+  let golfSearchTimer = 0;
+  const golferTile = (key, name, tour) => {
+    const on = favKeys.includes(key);
+    const tile = el("button", "tile" + (on ? " on" : ""));
+    tile.dataset.key = key;
+    tile.setAttribute("aria-pressed", String(on));
+    tile.appendChild(el("div", "n", name));
+    tile.appendChild(el("div", "a", LEAGUES[tour].name));
+    tile.onclick = () => {
+      if (favKeys.includes(key)) {
+        postFavs(favKeys.filter((k) => k !== key));
+        return toast("Stopped following " + name);
+      }
+      if (favKeys.length >= favMax()) return toast("That's the most favorites the panel holds");
+      // The name goes with the follow; the panel keeps it (fav_names.h).
+      postFavs(favKeys.concat([key + ":" + name.replace(/[,;]/g, "")]));
+      toast("Following " + name);
+    };
+    return tile;
+  };
+  const renderGolfTiles = () => {
+    const tiles = $("#tiles");
+    tiles.className = "tiles";
+    tiles.innerHTML = "";
+    const q = $("#q").value.trim();
+    clearTimeout(golfSearchTimer);
+    const seq = ++golfSearchSeq;
+    if (q.length < 3) {
+      const mine = favKeys.filter((k) => k.split(":")[0] === league);
+      tiles.appendChild(el("p", "hint", mine.length
+        ? "The golfers you follow on the " + LEAGUES[league].name + ". Search above to add more; each is pinned on their tour's leaderboard wherever they stand."
+        : "Search above for a golfer by name. A golfer you follow is pinned on their tour's leaderboard wherever they stand."));
+      for (const key of mine) tiles.appendChild(golferTile(key, golferName(key), league));
+      return;
+    }
+    tiles.appendChild(el("p", "hint", "Searching ESPN..."));
+    golfSearchTimer = setTimeout(() => {
+      fetch(ESPN_COMMON + "search?type=player&limit=25&query=" + encodeURIComponent(q))
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+        .then((j) => {
+          if (seq !== golfSearchSeq) return;
+          const found = (j.items || []).filter((it) => it.sport === "golf" && LEAGUES[it.league] && LEAGUES[it.league].golf && it.id && it.displayName);
+          tiles.innerHTML = "";
+          if (!found.length) return tiles.appendChild(el("div", "none", "No golfer on the PGA Tour, LPGA or DP World Tour matches"));
+          for (const it of found) tiles.appendChild(golferTile(it.league + ":" + Number(it.id), it.displayName, it.league));
+        })
+        .catch(() => {
+          if (seq !== golfSearchSeq) return;
+          tiles.innerHTML = "";
+          tiles.appendChild(el("div", "none", "Couldn't reach ESPN's search. Try again in a moment."));
+        });
+    }, 300);
+  };
   const renderTiles = () => {
     if (league === "now") return renderGames();
+    if (LEAGUES[league] && LEAGUES[league].golf) return renderGolfTiles();
     const q = $("#q").value.trim().toLowerCase();
     const tiles = $("#tiles");
     tiles.innerHTML = "";
@@ -3502,9 +3635,10 @@
       if (league === opened && !$("#q").value.trim() && $("#modal").classList.contains("open") && live(list)) showTab(tabButtons.find((b) => b.dataset.lg === "now"));
     });
   };
-  // One tab per league that has teams in this firmware's list.
+  // One tab per league that has teams in this firmware's list, and one per
+  // golf tour: golfers are picked by athlete id, not from a team list.
   for (const lg of Object.keys(LEAGUES)) {
-    if (!TEAMS.some((t) => t[0] === lg)) continue;
+    if (!LEAGUES[lg].golf && !TEAMS.some((t) => t[0] === lg)) continue;
     const b = el("button", null, LEAGUES[lg].tab);
     b.dataset.lg = lg;
     b.setAttribute("role", "tab");
@@ -3517,7 +3651,15 @@
     setOn(b, b.dataset.lg === lg, "aria-selected");
     b.tabIndex = b.dataset.lg === lg ? 0 : -1;
   });
-  const showTab = (b) => { league = b.dataset.lg; $$tabs(league); $("#q").value = ""; renderTiles(); };
+  const showTab = (b) => {
+    league = b.dataset.lg;
+    $$tabs(league);
+    $("#q").value = "";
+    const golf = LEAGUES[league] && LEAGUES[league].golf;
+    $("#q").placeholder = golf ? "Search golfers" : "Search teams";
+    $("#q").setAttribute("aria-label", golf ? "Search golfers" : "Search teams");
+    renderTiles();
+  };
   tabButtons.forEach((b, i) => {
     b.onclick = () => showTab(b);
     b.onkeydown = (ev) => {

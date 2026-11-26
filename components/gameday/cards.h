@@ -36,6 +36,7 @@ enum class Card : uint8_t {
   SCHEDULE = 10,
   RECAP = 11,
   GAMEDAY = 12,
+  GOLF = 13,
 };
 
 constexpr uint16_t card_bit(Card c) { return (uint16_t) (1u << (uint8_t) c); }
@@ -44,7 +45,7 @@ constexpr uint16_t card_bit(Card c) { return (uint16_t) (1u << (uint8_t) c); }
 constexpr uint16_t kCardsOffBits = card_bit(Card::LEADERS) | card_bit(Card::NEXT) | card_bit(Card::CLOCK) |
                                    card_bit(Card::CUSTOM) | card_bit(Card::MESSAGE) | card_bit(Card::TOP25) |
                                    card_bit(Card::PICTURE) | card_bit(Card::SCHEDULE) | card_bit(Card::RECAP) |
-                                   card_bit(Card::GAMEDAY);
+                                   card_bit(Card::GAMEDAY) | card_bit(Card::GOLF);
 
 // The Game Day card (gameday_card.h) is off on a home panel and on in a
 // build that defines GAMEDAY_CARD_ON. Its bit in cards_off
@@ -90,6 +91,7 @@ constexpr CardRow kCards[] = {
     {Card::NEWS,      "news",        "News headlines",             false, ""},
     {Card::WEATHER,   "weather",     "Weather",                    false, "Set your town below first"},
     {Card::GAMEDAY,   "gamedaycard", "Game Day card",              false, ""},
+    {Card::GOLF,      "golf",        "Golf leaderboard",           true,  "Pick a tour below, or follow a golfer"},
 };
 // clang-format on
 constexpr size_t kCardCount = sizeof(kCards) / sizeof(kCards[0]);

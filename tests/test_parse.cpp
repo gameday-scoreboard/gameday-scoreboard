@@ -39,6 +39,7 @@
 #include "recap.h"
 #include "regulatory.h"
 #include "score_log.h"
+#include "set_request.h"
 #include "poll_timing.h"
 #include "prefs_sync.h"
 #include "settings_change.h"
@@ -6335,6 +6336,669 @@ static void test_guarded_brightness() {
   CHECK_EQ(std::string(buf), std::string(",\"temp\":80.0,\"heat\":1,\"brownouts\":0,\"power\":\"ok\""));
 }
 
+// Golf (golf.h): the tours' leaderboards, recorded live on 2026-11-06 and
+// as a final on 2026-11-01 (fixtures/README.md). Steven Fisk (4426182) is
+// the followed golfer: 97th in the live PGA document, 3rd in the final.
+static std::string golf_head(const GolfBoard &b) {
+  char out[kGolfHead];
+  golf_header(b, out);
+  return out;
+}
+static std::string golf_line(const GolfBoard &b, const GolfRow &r, bool wide) {
+  char out[kGolfWide + 1];
+  golf_row(b, r, wide, out);
+  return out;
+}
+
+static void test_golf() {
+  CHECK_EQ(golf_url(League::PGA), std::string("https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard"));
+  CHECK_EQ(golf_url(League::LPGA), std::string("https://site.api.espn.com/apis/site/v2/sports/golf/lpga/scoreboard"));
+  CHECK_EQ(golf_url(League::EUR), std::string("https://site.api.espn.com/apis/site/v2/sports/golf/eur/scoreboard"));
+  CHECK_EQ((int) golf_slot(League::PGA), 0);
+  CHECK_EQ((int) golf_slot(League::LPGA), 1);
+  CHECK_EQ((int) golf_slot(League::EUR), 2);
+  CHECK_EQ((int) golf_slot(League::NFL), -1);
+  CHECK(golf_league(League::LPGA) && !golf_league(League::NBA));
+
+  // The scores ESPN writes: under par, level, over, and none yet.
+  int s = 99;
+  CHECK(golf_score("-11", s) && s == -11);
+  CHECK(golf_score("E", s) && s == 0);
+  CHECK(golf_score("+4", s) && s == 4);
+  CHECK(!golf_score("-", s));
+  CHECK(!golf_score("", s));
+  CHECK(!golf_score(nullptr, s));
+
+  // The PGA Tour, round 2 in progress: Ben James leads at -11, four under
+  // for the round and through 9 (he started on the back nine).
+  std::string pga = slurp("fixtures/scoreboard_pga_20261106.json");
+  GolfBoard b;
+  CHECK(parse_golf(pga, League::PGA, nullptr, 0, b));
+  CHECK(b.valid && b.state == GolfState::IN);
+  CHECK_EQ(std::string(b.event), std::string("World Wide Technology Championship"));
+  CHECK_EQ((int) b.round, 2);
+  CHECK_EQ((int) b.field, 120);
+  CHECK_EQ(b.rows.size(), (size_t) kGolfTopRows);
+  CHECK_EQ(b.rows[0].id, 5077389u);
+  CHECK_EQ((int) b.rows[0].pos, 1);
+  CHECK_EQ(std::string(b.rows[0].name), std::string("B. James"));
+  CHECK_EQ(std::string(b.rows[0].last), std::string("James"));
+  CHECK_EQ(std::string(b.rows[0].score), std::string("-11"));
+  CHECK_EQ(std::string(b.rows[0].today), std::string("-4"));
+  CHECK_EQ((int) b.rows[0].thru, 9);
+  CHECK(!b.rows[0].favorite);
+  CHECK_EQ(golf_head(b), std::string("PGA R2"));
+  CHECK_EQ(golf_line(b, b.rows[0], false), std::string(" 1 James  -11"));
+  CHECK_EQ(golf_line(b, b.rows[0], true), std::string("  1 B. James   -11  -4  9"));
+  CHECK_EQ(golf_pages(b), 2u);
+  char page[kGolfText];
+  golf_page(b, 1, true, page);
+  CHECK_EQ(std::string(page).substr(0, 25), golf_line(b, b.rows[5], true));
+  // Every row fits its display: 13 columns of the 5x8 font on a single
+  // panel, 25 on a wide one.
+  for (bool wide : {false, true})
+    for (const GolfRow &r : b.rows)
+      CHECK_EQ(golf_line(b, r, wide).size(), (size_t) (wide ? kGolfWide : kGolfNarrow));
+
+  // A followed golfer past the top is pinned in, in position order, and
+  // one inside the top is only marked.
+  const uint32_t favs[] = {4426182, 5077389};
+  GolfBoard fb;
+  CHECK(parse_golf(pga, League::PGA, favs, 2, fb));
+  CHECK_EQ(fb.rows.size(), (size_t) kGolfTopRows + 1);
+  CHECK(fb.rows[0].favorite);
+  const GolfRow &fisk = fb.rows.back();
+  CHECK_EQ(fisk.id, 4426182u);
+  CHECK_EQ((int) fisk.pos, 97);
+  CHECK(fisk.favorite);
+  CHECK_EQ(std::string(fisk.score), std::string("E"));
+  CHECK_EQ(std::string(fisk.today), std::string("-1"));
+
+  // The LPGA in Japan: Nasa Hataoka leads at -12. The document has no
+  // hole-by-hole linescores, so no thru: the rows say what ESPN said.
+  std::string lpga = slurp("fixtures/scoreboard_lpga_20261106.json");
+  GolfBoard lb;
+  CHECK(parse_golf(lpga, League::LPGA, nullptr, 0, lb));
+  CHECK(lb.state == GolfState::IN);
+  CHECK_EQ(std::string(lb.event), std::string("TOTO Japan Classic"));
+  CHECK_EQ((int) lb.field, 78);
+  CHECK_EQ(lb.rows[0].id, 10484u);
+  CHECK_EQ(std::string(lb.rows[0].score), std::string("-12"));
+  CHECK_EQ(std::string(lb.rows[0].today), std::string("-8"));
+  CHECK_EQ((int) lb.rows[0].thru, 0);
+  CHECK_EQ(golf_head(lb), std::string("LPGA R2"));
+
+  // The DP World Tour in Abu Dhabi: Tyrrell Hatton leads at -12.
+  std::string eur = slurp("fixtures/scoreboard_eur_20261106.json");
+  GolfBoard eb;
+  CHECK(parse_golf(eur, League::EUR, nullptr, 0, eb));
+  CHECK_EQ(std::string(eb.event), std::string("Abu Dhabi Aldar Championship"));
+  CHECK_EQ(eb.rows[0].id, 5553u);
+  CHECK_EQ(std::string(eb.rows[0].today), std::string("-7"));
+  CHECK_EQ(golf_head(eb), std::string("DPWT R2"));
+
+  // A final, from the week before: Andrew Novak won at -25. Billy Horschel
+  // (1651) is last at E with no score in any round (he withdrew before the
+  // first): pinned in as a favorite, he has no round score for round 4.
+  std::string fin = slurp("fixtures/scoreboard_pga_final_20261101.json");
+  const uint32_t hfavs[] = {1651};
+  GolfBoard gb;
+  CHECK(parse_golf(fin, League::PGA, hfavs, 1, gb));
+  CHECK(gb.state == GolfState::POST);
+  CHECK_EQ((int) gb.round, 4);
+  CHECK_EQ(std::string(gb.detail), std::string("Complete"));
+  CHECK_EQ(gb.rows[0].id, 11332u);
+  CHECK_EQ(std::string(gb.rows[0].score), std::string("-25"));
+  CHECK_EQ(golf_head(gb), std::string("PGA FINAL"));
+  const GolfRow &billy = gb.rows.back();
+  CHECK_EQ(billy.id, 1651u);
+  CHECK_EQ((int) billy.pos, 120);
+  CHECK_EQ(std::string(billy.score), std::string("E"));
+  CHECK_EQ(std::string(billy.today), std::string(""));
+  CHECK(billy.gone == GolfGone::LEFT);
+  CHECK_EQ(golf_line(gb, billy, false), std::string("OUT Horsc   E"));
+  CHECK_EQ(golf_line(gb, billy, true), std::string("OUT B. Horschel         E"));
+  CHECK_EQ((int) billy.thru, 0);
+  // Fresh through the week after the final, not a month later, not with
+  // no clock.
+  CHECK(golf_fresh(gb, gb.end_epoch + 3600));
+  CHECK(golf_fresh(gb, gb.end_epoch + kGolfStaleSecs));
+  CHECK(!golf_fresh(gb, gb.end_epoch + kGolfStaleSecs + 1));
+  CHECK(!golf_fresh(gb, 0));
+  // A round being played is read again in minutes, a finished event every
+  // few hours.
+  CHECK(b.round_live);
+  auto read_ms = [](GolfBoard board, int64_t at) {
+    board.read_epoch = at;
+    return golf_read_ms(board);
+  };
+  CHECK_EQ(read_ms(b, b.start_epoch + 86400), kGolfLiveReadMs);
+  CHECK(!gb.round_live);
+  CHECK_EQ(read_ms(gb, gb.end_epoch + 3600), kGolfIdleReadMs);
+  // Scores of a tournament in progress are left off once their read is an
+  // hour old; a final's stay.
+  b.read_epoch = b.start_epoch + 86400;
+  CHECK(golf_fresh(b, b.read_epoch + kGolfOldSecs));
+  CHECK(!golf_fresh(b, b.read_epoch + kGolfOldSecs + 1));
+
+  // Weather stopped round 3 of The RSM Classic: ESPN keeps the event "in"
+  // but the round's own state is "post". The board still reads R3, not a
+  // final, and is read every half hour until play starts again. The whole
+  // 592 KB document parses through the filter.
+  std::string sus = slurp("fixtures/scoreboard_pga_20261121_suspended.json");
+  GolfBoard sb;
+  CHECK(parse_golf(sus, League::PGA, nullptr, 0, sb));
+  CHECK(sb.state == GolfState::IN);
+  CHECK(!sb.round_live);
+  CHECK_EQ(std::string(sb.detail), std::string("Round 3 - Suspended"));
+  CHECK_EQ(golf_head(sb), std::string("PGA R3"));
+  CHECK_EQ((int) sb.field, 147);
+  CHECK_EQ(std::string(sb.rows[0].name), std::string("M. Penge"));
+  CHECK_EQ(std::string(sb.rows[0].score), std::string("-9"));
+  CHECK(!sb.round_done);
+  CHECK_EQ(read_ms(sb, sb.start_epoch + 2 * 86400), kGolfBreakReadMs);
+  CHECK_EQ(read_ms(sb, sb.end_epoch + 3600), kGolfBreakReadMs);
+
+  // Before an event: every few hours, then every half hour from 12 hours
+  // before its date until it starts, or until it is four days late.
+  GolfBoard pre;
+  pre.valid = true;
+  pre.state = GolfState::PRE;
+  pre.start_epoch = 1800000000;
+  const int64_t lead = pre.start_epoch - kGolfLeadSecs;
+  CHECK_EQ(read_ms(pre, lead - 2 * 86400), kGolfIdleReadMs);
+  CHECK_EQ(read_ms(pre, lead - 3600), 3600u * 1000u);
+  CHECK_EQ(read_ms(pre, lead - 60), kGolfBreakReadMs);
+  CHECK_EQ(read_ms(pre, lead + 60), kGolfBreakReadMs);
+  CHECK_EQ(read_ms(pre, pre.start_epoch + 6 * 3600), kGolfBreakReadMs);
+  CHECK_EQ(read_ms(pre, pre.start_epoch + kGolfStaleSecs + 1), kGolfIdleReadMs);
+  CHECK_EQ(read_ms(pre, 0), kGolfIdleReadMs);
+
+  // A team event lists pairs, not golfers: the board shows them by the
+  // pair's name on both panels.
+  std::string team = slurp("fixtures/scoreboard_pga_team_20260426.json");
+  GolfBoard tb;
+  CHECK(parse_golf(team, League::PGA, nullptr, 0, tb));
+  CHECK(tb.state == GolfState::POST);
+  CHECK_EQ(std::string(tb.event), std::string("Zurich Classic of New Orleans"));
+  CHECK_EQ(std::string(tb.rows[0].name), std::string("Smalley/Springer"));
+  CHECK_EQ(std::string(tb.rows[0].score), std::string("-30"));
+  CHECK_EQ(golf_line(tb, tb.rows[0], false), std::string(" 1 Smalle -30"));
+  CHECK_EQ(golf_line(tb, tb.rows[0], true), std::string("  1 Smalley/Springer  -30"));
+
+  // Not golf: a team game's document and an empty one both refuse.
+  GolfBoard no;
+  std::string nfl = slurp("fixtures/event_nfl_pre.json");
+  CHECK(!parse_golf(nfl, League::PGA, nullptr, 0, no));
+  std::string empty = "{}";
+  CHECK(!parse_golf(empty, League::PGA, nullptr, 0, no));
+
+  // A golfer favorite is a known favorite (set_request.h). Golf leagues
+  // never enter the Live games lists (a leaderboard is not a game), and
+  // the tours take turns in slot order.
+  CHECK(known_team((uint8_t) League::PGA, 5077389));
+  CHECK(known_team((uint8_t) League::LPGA, 10484));
+  CHECK(!known_team((uint8_t) League::PGA, 0));
+  std::vector<League> live = live_leagues(0, {(uint8_t) League::PGA, (uint8_t) League::NFL});
+  CHECK_EQ(live.size(), (size_t) 1);
+  CHECK(live[0] == League::NFL);
+  std::vector<League> scan = scan_leagues((uint8_t) Mode::LIVE, {League::NFL, League::PGA});
+  CHECK_EQ(scan.size(), (size_t) 1);
+  CHECK(scan[0] == League::NFL);
+  CHECK_EQ(golf_next(0b101, 0), 2);
+  CHECK_EQ(golf_next(0b101, 2), 0);
+  CHECK_EQ(golf_next(0, -1), -1);
+}
+
+// The end of The RSM Classic (2026-11-23, a four-way playoff) and the days
+// after it, with a missed cut, a withdrawal, and the other weeks that have no
+// leaderboard to show.
+static void test_golf_weeks() {
+  const uint32_t sami[] = {4585548, 9569, 11098};  // Valimaki, Duncan (cut), Champ (withdrew)
+  auto read = [&](const char *name, GolfBoard &b, League l = League::PGA) {
+    std::string json = slurp((std::string("fixtures/scoreboard_") + name).c_str());
+    b = GolfBoard();
+    return parse_golf(json, l, sami, 3, b);
+  };
+  auto read_ms = [](GolfBoard board, int64_t at) {
+    board.read_epoch = at;
+    return golf_read_ms(board);
+  };
+
+  // Round 4 is over with four golfers on -16: they share first. The day is
+  // the event's last, so the board stays at the live pace for the playoff.
+  GolfBoard b;
+  CHECK(read("pga_20261123_r4_done.json", b));
+  CHECK(b.state == GolfState::IN && !b.round_live && b.round_done && !b.playoff);
+  CHECK_EQ(golf_head(b), std::string("PGA R4"));
+  CHECK_EQ(golf_line(b, b.rows[0], false), std::string(" 1 Li     -16"));
+  CHECK_EQ(golf_line(b, b.rows[3], false), std::string(" 1 Thorbj -16"));
+  CHECK_EQ(golf_line(b, b.rows[0], true), std::string(" T1 H. Li      -16  -5  F"));
+  CHECK_EQ(golf_line(b, b.rows[3], true), std::string(" T1 Thorbjorns -16  -3  F"));
+  CHECK_EQ(golf_line(b, b.rows[4], true), std::string(" T5 J. Koivun  -14  -4  F"));
+  CHECK_EQ(golf_line(b, b.rows[7], true), std::string(" T7 Dumont de  -13  -3  F"));
+  CHECK_EQ(golf_line(b, b.rows[8], true), std::string("  9 N. Dunlap  -12  -6  F"));
+  const int64_t done_at = parse_iso8601_z("2026-11-23T19:10Z");
+  CHECK_EQ(read_ms(b, done_at), kGolfLiveReadMs);
+  CHECK_EQ(read_ms(b, done_at - 86400), kGolfBreakReadMs);
+  CHECK_EQ(read_ms(b, b.end_epoch + 86400), kGolfBreakReadMs);
+  // A followed golfer outside the ten, one who missed the cut and one who
+  // withdrew.
+  CHECK_EQ(b.rows.size(), (size_t) 13);
+  CHECK_EQ(golf_line(b, b.rows[10], true), std::string("T10 Valimaki   -11  -2  F"));
+  CHECK_EQ((int) b.rows[10].place, 10);
+  CHECK(b.rows[10].tied && b.rows[10].gone == GolfGone::NO);
+  CHECK_EQ(golf_line(b, b.rows[11], false), std::string("CUT Dunca  -1"));
+  CHECK_EQ(golf_line(b, b.rows[12], false), std::string("OUT Champ  +5"));
+
+  // The playoff, which ESPN calls period 5: named, its golfers still tied,
+  // and nobody who isn't in it marked out.
+  GolfBoard p;
+  CHECK(read("pga_20261123_playoff.json", p));
+  CHECK(p.playoff && p.round_live);
+  CHECK_EQ((int) p.round, 5);
+  CHECK_EQ(golf_head(p), std::string("PGA PLAYOFF"));
+  CHECK_EQ(golf_line(p, p.rows[0], true), std::string(" T1 H. Li             -16"));
+  CHECK_EQ(golf_line(p, p.rows[4], true), std::string(" T5 J. Koivun         -14"));
+  CHECK(p.rows[10].gone == GolfGone::NO && p.rows[11].gone == GolfGone::CUT && p.rows[12].gone == GolfGone::LEFT);
+  CHECK_EQ(read_ms(p, done_at), kGolfLiveReadMs);
+
+  // The final: the winner alone in first, the other three share second.
+  GolfBoard f;
+  CHECK(read("pga_20261123_final.json", f));
+  CHECK(f.state == GolfState::POST && !f.playoff);
+  CHECK_EQ(golf_head(f), std::string("PGA FINAL"));
+  CHECK_EQ(golf_line(f, f.rows[0], true), std::string("  1 M. Penge          -16"));
+  CHECK_EQ(golf_line(f, f.rows[1], true), std::string(" T2 H. Li             -16"));
+  CHECK_EQ(golf_line(f, f.rows[3], true), std::string(" T2 M. Thorbjornsen   -16"));
+  CHECK_EQ(golf_line(f, f.rows[4], true), std::string(" T5 J. Koivun         -14"));
+  CHECK(f.rows[10].gone == GolfGone::NO && f.rows[11].gone == GolfGone::CUT && f.rows[12].gone == GolfGone::LEFT);
+
+  // The morning after, ESPN lists the next event with no field. The read is
+  // a good one: the final stays up until it is stale, and the next event's
+  // date sets the pace.
+  GolfBoard next;
+  CHECK(read("pga_20261124_next.json", next));
+  CHECK(next.valid && next.state == GolfState::PRE && next.rows.empty());
+  CHECK_EQ(std::string(next.event), std::string("Hero World Challenge"));
+  const int64_t tue = parse_iso8601_z("2026-11-24T16:00Z");
+  CHECK(!golf_fresh(next, tue));
+  GolfBoard kept;
+  golf_take(kept, std::move(f), tue - 86400);
+  golf_take(kept, GolfBoard(next), tue);
+  CHECK_EQ(golf_head(kept), std::string("PGA FINAL"));
+  CHECK(golf_fresh(kept, tue));
+  CHECK_EQ(kept.next_epoch, next.start_epoch);
+  CHECK_EQ(golf_read_ms(kept), kGolfIdleReadMs);
+  CHECK(!golf_fresh(kept, kept.end_epoch + kGolfStaleSecs + 1));
+  golf_take(kept, GolfBoard(next), next.start_epoch - 3600);
+  CHECK_EQ(golf_read_ms(kept), kGolfBreakReadMs);
+  // With no final to keep (a restart that week, or the panel missed the
+  // end), the card has nothing, and the pace is the same.
+  GolfBoard fresh_boot;
+  golf_take(fresh_boot, GolfBoard(next), tue);
+  CHECK(!golf_fresh(fresh_boot, tue));
+  CHECK_EQ(golf_read_ms(fresh_boot), kGolfIdleReadMs);
+  golf_take(b, GolfBoard(next), tue);
+  CHECK(!golf_fresh(b, tue) && b.rows.empty());
+
+  // A field posted before the event, everyone at level par in no order, is
+  // no leaderboard either.
+  GolfBoard field;
+  CHECK(read("eur_20261125_pre.json", field, League::EUR));
+  CHECK_EQ((int) field.field, 156);
+  CHECK(!golf_fresh(field, parse_iso8601_z("2026-11-25T15:00Z")));
+  golf_take(kept, std::move(field), tue);
+  CHECK_EQ(golf_head(kept), std::string("PGA FINAL"));
+  // Nor is an event in progress before anyone has a score.
+  std::string json = R"({"events":[{"name":"Dawn Open","date":"2026-12-03T05:00Z","status":{"type":{"state":"in"}},
+    "competitions":[{"competitors":[{"id":"1","order":1,"athlete":{"shortName":"A. A"},"score":"-"}],
+    "status":{"period":1,"type":{"state":"in"}}}]}]})";
+  GolfBoard dawn;
+  CHECK(parse_golf(json, League::PGA, nullptr, 0, dawn));
+  CHECK(!golf_scored(dawn));
+  golf_take(kept, std::move(dawn), next.start_epoch + 8 * 3600);
+  CHECK_EQ(golf_head(kept), std::string("PGA FINAL"));
+  CHECK_EQ(golf_read_ms(kept), kGolfBreakReadMs);
+  // A board with scores takes over from the final.
+  GolfBoard live;
+  CHECK(read("pga_20261123_playoff.json", live));
+  golf_take(kept, std::move(live), next.start_epoch + 9 * 3600);
+  CHECK_EQ(golf_head(kept), std::string("PGA PLAYOFF"));
+
+  // No events at all (the off-season) is a good read of an empty week. A
+  // reply with no list of events is not.
+  json = R"({"leagues":[],"events":[]})";
+  GolfBoard none;
+  CHECK(parse_golf(json, League::PGA, nullptr, 0, none));
+  CHECK(none.valid && !golf_fresh(none, tue));
+  CHECK_EQ(read_ms(none, tue), kGolfIdleReadMs);
+  json = R"({"code":404,"message":"not found"})";
+  CHECK(!parse_golf(json, League::PGA, nullptr, 0, none));
+  json = R"({"events":null})";
+  CHECK(!parse_golf(json, League::PGA, nullptr, 0, none));
+
+  // The Presidents Cup's two sides are not a leaderboard.
+  GolfBoard cup;
+  CHECK(read("pga_20260924_presidents_cup.json", cup));
+  CHECK_EQ((int) cup.field, 2);
+  CHECK(cup.rows.empty() && !golf_fresh(cup, cup.end_epoch));
+
+  // Brooks Koepka withdrew in round 4 of the 2026 Canadian Open, listed
+  // last at -6. In the LPGA's document a golfer who missed the cut has no
+  // line for round 3 and an empty one for round 4.
+  const uint32_t koepka[] = {6798, 3474};
+  json = slurp("fixtures/scoreboard_pga_20260614_final.json");
+  GolfBoard can;
+  CHECK(parse_golf(json, League::PGA, koepka, 2, can));
+  CHECK_EQ(can.rows.size(), (size_t) 12);
+  CHECK_EQ(golf_line(can, can.rows[10], false), std::string("OUT Koepk  -6"));
+  CHECK_EQ(golf_line(can, can.rows[11], false), std::string("OUT Warin   E"));
+  CHECK(!can.rows[0].tied && can.rows[0].place == 1);
+  const uint32_t cut[] = {4832026, 8807};
+  json = slurp("fixtures/scoreboard_lpga_20260830_final.json");
+  GolfBoard fm;
+  CHECK(parse_golf(json, League::LPGA, cut, 2, fm));
+  CHECK_EQ(golf_line(fm, fm.rows[10], false), std::string("CUT Wanna  +1"));
+  CHECK_EQ(golf_line(fm, fm.rows[11], false), std::string("OUT Yang    E"));
+
+  // The DP World Tour gives a golfer who missed the cut empty lines for
+  // rounds 3 and 4; one who withdrew in round 4 has that one empty. Thriston
+  // Lawrence won a playoff, which ESPN leaves as the final's round 5.
+  const uint32_t omega[] = {5119683, 5100, 5312609};
+  json = slurp("fixtures/scoreboard_eur_20260906_final.json");
+  GolfBoard om;
+  CHECK(parse_golf(json, League::EUR, omega, 3, om));
+  CHECK_EQ((int) om.round, 5);
+  CHECK_EQ(om.rows.size(), (size_t) 13);
+  for (size_t i = 0; i < 10; i++)
+    CHECK(om.rows[i].gone == GolfGone::NO);
+  CHECK_EQ(golf_line(om, om.rows[0], false), std::string(" 1 Lawren -18"));
+  CHECK_EQ(golf_line(om, om.rows[1], true), std::string("  2 P. Casey          -18"));
+  CHECK_EQ(golf_line(om, om.rows[10], false), std::string("CUT Ding   -2"));
+  CHECK_EQ(golf_line(om, om.rows[11], false), std::string("OUT de Ja  +2"));
+  CHECK_EQ(golf_line(om, om.rows[12], false), std::string("OUT Kanek   E"));
+  // A 54-hole LPGA final: the cut golfers have no round 3 line.
+  const uint32_t shoprite[] = {7858, 4397117, 8543};
+  json = slurp("fixtures/scoreboard_lpga_20260531_final.json");
+  GolfBoard sr;
+  CHECK(parse_golf(json, League::LPGA, shoprite, 3, sr));
+  CHECK_EQ((int) sr.round, 3);
+  CHECK(sr.rows[0].gone == GolfGone::NO && sr.rows[9].gone == GolfGone::NO);
+  CHECK(sr.rows[10].gone == GolfGone::NO && sr.rows[11].gone == GolfGone::LEFT && sr.rows[12].gone == GolfGone::LEFT);
+  // A 54-hole final after a playoff, which is round 4 there: whether ESPN
+  // scores the playoff's line or leaves it empty, nobody is marked cut.
+  for (const char *extra : {"-1", "-"}) {
+    json = R"({"events":[{"name":"Fifty Four","status":{"type":{"state":"post"}},"competitions":[{"competitors":[)";
+    for (int i = 1; i <= 40; i++) {
+      json += std::string(i > 1 ? "," : "") + "{\"id\":\"" + std::to_string(i) + "\",\"order\":" + std::to_string(i) +
+              ",\"score\":\"-" + std::to_string(i <= 2 ? 12 : 11 - i / 8) + "\",\"athlete\":{\"shortName\":\"P. P" +
+              std::to_string(i) + "\"},\"linescores\":[";
+      for (int k = 1; k <= (i <= 2 ? 4 : 3); k++)
+        json += std::string(k > 1 ? "," : "") + "{\"period\":" + std::to_string(k) + ",\"displayValue\":\"" +
+                (k == 4 ? extra : "-3") + "\"}";
+      json += "]}";
+    }
+    json += R"(],"status":{"period":4,"type":{"state":"post","completed":true,"shortDetail":"Complete"}}}]}]})";
+    GolfBoard ff;
+    const uint32_t last[] = {40};
+    CHECK(parse_golf(json, League::LPGA, last, 1, ff));
+    CHECK_EQ((int) ff.round, 4);
+    CHECK_EQ(ff.rows.size(), (size_t) 11);
+    for (const GolfRow &r : ff.rows)
+      CHECK(r.gone == GolfGone::NO);
+    CHECK(ff.rows[0].place == 1 && !ff.rows[0].tied && ff.rows[1].place == 2 && !ff.rows[1].tied);
+  }
+
+  // A suffix is not a surname, and a place past 99 takes the name's room.
+  json = R"({"events":[{"name":"Names","status":{"type":{"state":"in"}},"competitions":[{"competitors":[)";
+  for (int i = 1; i <= 120; i++)
+    json += std::string(i > 1 ? "," : "") + "{\"id\":\"" + std::to_string(i) + "\",\"order\":" + std::to_string(i) +
+            ",\"score\":\"+" + std::to_string(i / 2) +
+            "\",\"athlete\":{\"shortName\":\"H. Varner III\",\"displayName\":\"Harold Varner III\"}}";
+  json += R"(],"status":{"period":1,"type":{"state":"in"}}}]}]})";
+  const uint32_t far[] = {115};
+  GolfBoard nb;
+  CHECK(parse_golf(json, League::PGA, far, 1, nb));
+  CHECK_EQ(std::string(nb.rows[0].last), std::string("Varner III"));
+  CHECK_EQ(golf_line(nb, nb.rows[10], false), std::string("114 Varne +57"));
+  CHECK_EQ(golf_line(nb, nb.rows[10], true), std::string("T114 H. Varner III    +57"));
+}
+
+// The panel reads a tour's document from a stream (parse_golf walks it and
+// reads one golfer at a time), a few bytes per read() as the gzip reply
+// inflates.
+struct GolfStream {
+  const std::string &s;
+  size_t pos{0};
+  int read() { return pos < s.size() ? (unsigned char) s[pos++] : -1; }
+  size_t readBytes(char *dst, size_t n) {
+    size_t take = std::min(std::min(n, (size_t) 7), s.size() - pos);
+    memcpy(dst, s.data() + pos, take);
+    pos += take;
+    return take;
+  }
+};
+
+// Everything a board shows, for comparing two reads.
+static std::string golf_text(const GolfBoard &b) {
+  std::string out = golf_head(b) + "|" + b.event + "|" + b.detail + "|" + std::to_string(b.field) + "|" +
+                    std::to_string(b.start_epoch) + "|" + std::to_string(b.end_epoch) + (b.round_live ? "|live" : "");
+  for (const GolfRow &r : b.rows)
+    out += "\n" + std::to_string(r.id) + (r.favorite ? "*" : " ") + golf_line(b, r, true) + "|" + golf_line(b, r, false);
+  return out;
+}
+
+static void test_golf_stream() {
+  // Every fixture reads the same from a stream as from a string.
+  const uint32_t favs[] = {4426182, 5077389, 1651};
+  for (const char *name : {"fixtures/scoreboard_pga_20261106.json", "fixtures/scoreboard_lpga_20261106.json",
+                           "fixtures/scoreboard_eur_20261106.json", "fixtures/scoreboard_pga_final_20261101.json",
+                           "fixtures/scoreboard_pga_20261121_suspended.json", "fixtures/scoreboard_pga_team_20260426.json",
+                           "fixtures/scoreboard_pga_20261123_r4_done.json", "fixtures/scoreboard_pga_20261123_playoff.json",
+                           "fixtures/scoreboard_pga_20261123_final.json", "fixtures/scoreboard_pga_20261124_next.json",
+                           "fixtures/scoreboard_pga_20260614_final.json", "fixtures/scoreboard_lpga_20260830_final.json",
+                           "fixtures/scoreboard_eur_20261125_pre.json", "fixtures/scoreboard_eur_20260906_final.json",
+                           "fixtures/scoreboard_lpga_20260531_final.json"}) {
+    std::string json = slurp(name);
+    GolfBoard a, b;
+    GolfStream in{json};
+    CHECK(parse_golf(json, League::PGA, favs, 3, a));
+    CHECK(parse_golf(in, League::PGA, favs, 3, b));
+    CHECK_EQ(golf_text(b), golf_text(a));
+  }
+
+  // A reply cut off part way through a golfer is a failed read, from a
+  // string and from a stream, and so is one cut off after the field.
+  std::string sus = slurp("fixtures/scoreboard_pga_20261121_suspended.json");
+  GolfBoard no;
+  const size_t mid = sus.find("\"order\":50");
+  CHECK(mid != std::string::npos);
+  std::string cut = sus.substr(0, mid + 200);
+  CHECK(!parse_golf(cut, League::PGA, nullptr, 0, no));
+  GolfStream cut_in{cut};
+  CHECK(!parse_golf(cut_in, League::PGA, nullptr, 0, no));
+  cut = sus.substr(0, sus.size() - 10);
+  CHECK(!parse_golf(cut, League::PGA, nullptr, 0, no));
+  CHECK(!no.valid);
+
+  // An event in progress with no competitors list is passed over for the
+  // next event with a field.
+  std::string json = R"({"events":[
+    {"name":"Live Open","status":{"type":{"state":"in"}},"competitions":[{"status":{"period":1}}]},
+    {"name":"Done Classic","status":{"type":{"state":"post"}},"competitions":[{"competitors":[
+      {"id":"1","order":1,"athlete":{"shortName":"A. Done","displayName":"Al Done"},"score":"-9"}],
+      "status":{"period":4,"type":{"state":"post","detail":"Final"}}}]}]})";
+  GolfBoard gb;
+  CHECK(parse_golf(json, League::PGA, nullptr, 0, gb));
+  CHECK_EQ(std::string(gb.event), std::string("Done Classic"));
+  CHECK(gb.state == GolfState::POST);
+  CHECK_EQ(std::string(gb.detail), std::string("Final"));
+  // With no competitors anywhere the read is good and the board is empty.
+  json = R"({"events":[{"name":"Live Open","status":{"type":{"state":"in"}},"competitions":[{"status":{"period":1}}]}]})";
+  GolfBoard blank;
+  CHECK(parse_golf(json, League::PGA, nullptr, 0, blank));
+  CHECK(blank.valid && blank.rows.empty() && !golf_scored(blank));
+
+  // Elements of the wrong type count in the field and are never rows; a
+  // field of the wrong type reads as missing.
+  json = R"({"events":[{"name":"Test Open","status":{"type":{"state":"in"}},"competitions":[{
+    "competitors":[7, "x", [1,2], null, true,
+      {"id":"11","order":1,"athlete":{"shortName":"A. One","displayName":"Al One"},"score":"-5",
+       "linescores":[{"period":2,"displayValue":"-2","linescores":[{"period":1},{"period":2},3]}]},
+      {"id":12,"order":2,"athlete":{"shortName":["B"],"displayName":{"x":1}},"team":{"displayName":"Two/Pair"},
+       "score":-4,"linescores":{"period":2}},
+      {"id":"13","order":"3","athlete":"C. Three","score":"+1"},
+      {"id":"14","order":-4,"athlete":{"shortName":"D. Four"},"score":"E","linescores":[1,{"period":"2"}]}],
+    "status":{"period":2,"type":{"state":"in","shortDetail":"Round 2"}}}]}]})";
+  GolfBoard tb;
+  GolfStream tin{json};
+  CHECK(parse_golf(tin, League::PGA, nullptr, 0, tb));
+  CHECK_EQ((int) tb.field, 9);
+  CHECK_EQ(tb.rows.size(), (size_t) 2);
+  CHECK(tb.round_live);
+  CHECK_EQ(std::string(tb.rows[0].today), std::string("-2"));
+  CHECK_EQ((int) tb.rows[0].thru, 3);
+  CHECK_EQ(std::string(tb.rows[1].name), std::string("Two/Pair"));
+  CHECK_EQ(tb.rows[1].id, 0u);
+  CHECK_EQ(std::string(tb.rows[1].score), std::string(""));
+  CHECK_EQ((int) tb.rows[1].thru, 0);
+
+  // The second event is the one in progress: it wins over the final before
+  // it, and the event after it is never read into a board.
+  json = R"({"season":2026,"leagues":[{"calendar":[{"label":"}]"}]}],"events":[
+    {"name":"Empty","status":{"type":{"state":"in"}},"competitions":[{"competitors":[]}]},
+    {"name":"Done Classic","status":{"type":{"state":"post"}},"competitions":[{"competitors":[
+      {"id":"1","order":1,"athlete":{"shortName":"A. Done","displayName":"Al Done"},"score":"-9"}]}]},
+    {"name":"Live Open","status":{"type":{"state":"in"}},"competitions":[{"competitors":[
+      {"id":"2","order":1,"athlete":{"shortName":"B. Live","displayName":"Bo Live"},"score":"-3",
+       "linescores":[{"period":1,"displayValue":"-3","linescores":[{},{},{},{}]}]}],
+      "status":{"period":1,"type":{"state":"in","shortDetail":"Round 1 - In Progress"}}}]},
+    {"name":"Later Open","status":{"type":{"state":"in"}},"competitions":[{"competitors":[
+      {"id":"3","order":1,"athlete":{"shortName":"C. Late"},"score":"E"}]}]}],"provider":{"id":1.5}})";
+  GolfBoard lb;
+  CHECK(parse_golf(json, League::PGA, nullptr, 0, lb));
+  CHECK_EQ(std::string(lb.event), std::string("Live Open"));
+  CHECK(lb.round_live);
+  CHECK_EQ((int) lb.round, 1);
+  CHECK_EQ(lb.rows[0].id, 2u);
+  CHECK_EQ(std::string(lb.rows[0].today), std::string("-3"));
+  CHECK_EQ((int) lb.rows[0].thru, 4);
+  // A broken event after the one picked still fails the read.
+  std::string broken = json;
+  broken.replace(broken.find("\"C. Late\""), 9, "\"C. Late");
+  CHECK(!parse_golf(broken, League::PGA, nullptr, 0, no));
+
+  // So does a bad value in a later event, or in a competition after the first.
+  for (const char *bad : {R"({"name":1.2.3})", R"({"name":"x\q"})",
+                          R"({"competitions":[{},{"status":{"period":1-2}}]})",
+                          R"({"competitions":[{},{"competitors":[{"order":1.2.3}]}]})"}) {
+    broken = json.substr(0, json.rfind("],\"provider\"")) + "," + bad + "]}";
+    CHECK(!parse_golf(broken, League::PGA, nullptr, 0, no));
+  }
+
+  // A document that repeats an order keeps the top at kGolfTopRows rows.
+  json = R"({"events":[{"competitions":[{"competitors":[)";
+  for (int i = 0; i < 40; i++)
+    json += std::string(i ? "," : "") + "{\"id\":\"" + std::to_string(i + 1) + "\",\"order\":1,\"athlete\":{\"shortName\":\"G\"}}";
+  json += "]}]}]}";
+  const uint32_t many[] = {30, 31, 32, 33, 34, 35, 36, 37};
+  GolfBoard rb;
+  CHECK(parse_golf(json, League::PGA, many, 8, rb));
+  CHECK_EQ((int) rb.field, 40);
+  CHECK_EQ(rb.rows.size(), (size_t) kGolfRowsMax);
+  CHECK_EQ(rb.rows.back().id, 35u);
+
+  // A followed golfer with no name gets no row and leaves the favorites'
+  // room to the named ones.
+  json = R"({"events":[{"competitions":[{"competitors":[)";
+  for (int i = 1; i <= 17; i++)
+    json += std::string(i > 1 ? "," : "") + "{\"id\":\"" + std::to_string(i == 11 ? 100 : i > 11 ? 89 + i : i) +
+            "\",\"order\":" + std::to_string(i) + (i == 11 ? "}" : ",\"athlete\":{\"shortName\":\"G\"}}");
+  json += "]}]}]}";
+  const uint32_t followed[] = {100, 101, 102, 103, 104, 105, 106};
+  GolfBoard nb;
+  CHECK(parse_golf(json, League::PGA, followed, 7, nb));
+  CHECK_EQ(nb.rows.size(), (size_t) kGolfRowsMax);
+  CHECK_EQ(nb.rows.back().id, 106u);
+
+  // Only the first competition is read: the second's golfers and round
+  // are left out.
+  json = R"({"events":[{"competitions":[
+    {"competitors":[{"id":"1","order":1,"athlete":{"shortName":"A. First"}}]},
+    {"competitors":[{"id":"2","order":1,"athlete":{"shortName":"B. Second"}},
+                    {"id":"3","order":2,"athlete":{"shortName":"C. Third"}}],"status":{"period":3}}]}]})";
+  GolfBoard cb;
+  CHECK(parse_golf(json, League::PGA, nullptr, 0, cb));
+  CHECK_EQ((int) cb.field, 1);
+  CHECK_EQ(cb.rows.size(), (size_t) 1);
+  CHECK_EQ(cb.rows[0].id, 1u);
+  CHECK_EQ((int) cb.round, 0);
+
+  // A repeated key replaces the first, as in a whole-document read: a
+  // second "events" list starts the pick over, and a second "competitions"
+  // that isn't a list leaves the event with no field.
+  json = R"({"events":[{"name":"First Live","status":{"type":{"state":"in"}},"competitions":[{"competitors":[
+      {"id":"1","order":1,"athlete":{"shortName":"A. A"}}]}]}],
+    "events":[{"name":"Second","status":{"type":{"state":"post"}},"competitions":[{"competitors":[
+      {"id":"2","order":1,"athlete":{"shortName":"B. B"}}]}]}]})";
+  GolfBoard eb2;
+  CHECK(parse_golf(json, League::PGA, nullptr, 0, eb2));
+  CHECK_EQ(std::string(eb2.event), std::string("Second"));
+  json = R"({"events":[
+    {"name":"Cleared","competitions":[{"competitors":[{"id":"1","order":1,"athlete":{"shortName":"A. A"}}],
+      "status":{"period":2}}],"competitions":{"note":1}},
+    {"name":"Kept","competitions":[{"competitors":[{"id":"2","order":1,"athlete":{"shortName":"B. B"}}]}]}]})";
+  GolfBoard kb;
+  CHECK(parse_golf(json, League::PGA, nullptr, 0, kb));
+  CHECK_EQ(std::string(kb.event), std::string("Kept"));
+
+  // A golfer's lines past kGolfLines rounds are left out: round 9 of nine
+  // reads as no score yet, round 8 as its own.
+  std::string lines;
+  for (int round = 1; round <= 9; round++)
+    lines += std::string(round > 1 ? "," : "") + "{\"period\":" + std::to_string(round) + ",\"displayValue\":\"-" +
+             std::to_string(round) + "\",\"linescores\":[{},{}]}";
+  for (int round : {8, 9}) {
+    json = R"({"events":[{"competitions":[{"competitors":[{"id":"1","order":1,"athlete":{"shortName":"A. A"},"linescores":[)" +
+           lines + R"(]}],"status":{"period":)" + std::to_string(round) + "}}]}]}";
+    GolfBoard pb;
+    CHECK(parse_golf(json, League::PGA, nullptr, 0, pb));
+    CHECK_EQ(std::string(pb.rows[0].today), std::string(round == 8 ? "-8" : ""));
+    CHECK_EQ((int) pb.rows[0].thru, round == 8 ? 2 : 0);
+  }
+
+  // Keys and strings with escapes, a key with no quotes and one written
+  // with \u: the same as a whole-document read takes them.
+  json = R"({"we\"ird\\key":"va\"l\\ue }]",'single':'q\'s',
+    "events":[{"name":"va\"l\\ue }]","x\"y":{"a\\":"}"},competitions:[{"c\\\"":1,
+      "competitors":[{"id":"1","order":1,"athlete":{"shortName":"A. A"}}]}]}]})";
+  GolfBoard xb;
+  GolfStream xin{json};
+  CHECK(parse_golf(xin, League::PGA, nullptr, 0, xb));
+  CHECK_EQ(std::string(xb.event), std::string("va\"l\\ue }]"));
+  CHECK_EQ(xb.rows.size(), (size_t) 1);
+
+  // A number or a word runs only as far as ArduinoJson reads one, and an
+  // event field that must be read needs a real number. Each document reads
+  // once its bad value is made good.
+  const std::string field = R"("competitions":[{"competitors":[{"order":1,"athlete":{"shortName":"A"}}]}])";
+  const std::pair<const char *, const char *> values[] = {
+      {R"("x":1"y",)", R"("x":1,)"}, {R"("x":tru,)", R"("x":true,)"}, {R"("x":1{},)", R"("x":1,)"},
+      {R"("x":5[1],)", R"("x":5,)"}, {R"("name":1.2.3,)", R"("name":1.2,)"}};
+  for (const auto &v : values) {
+    json = R"({"events":[{)" + std::string(v.first) + field + "}]}";
+    CHECK(!parse_golf(json, League::PGA, nullptr, 0, no));
+    json = R"({"events":[{)" + std::string(v.second) + field + "}]}";
+    CHECK(parse_golf(json, League::PGA, nullptr, 0, no));
+  }
+  json = R"({"x":-1.5e3,"y":null,"events":[{"name":12,"date":false,"competitions":[{"competitors":[
+    {"order":1,"athlete":{"shortName":"A"}}]}]}]})";
+  GolfBoard sb2;
+  CHECK(parse_golf(json, League::PGA, nullptr, 0, sb2));
+  CHECK_EQ(std::string(sb2.event), std::string(""));
+}
+
 static void test_rankings() {
   CHECK_EQ(rankings_url(League::NCAA),
            std::string("https://sports.core.api.espn.com/v2/sports/football/leagues/college-football/rankings/1"));
@@ -7372,9 +8036,10 @@ static void test_season() {
   CHECK(!season_read_due(t, 0, t - kSeasonRetryMs, true, true));
   CHECK(season_read_due(t, 0, t - kSeasonBigRetryMs, true, true));
 
-  // Which leagues have the cards, and which read once a day.
+  // Which leagues have the cards, and which read once a day. Golf has no
+  // season schedule to recap, like MLB's is too big to read.
   for (const auto &l : kLeagues) {
-    CHECK_EQ(season_cards(l), l.league != League::MLB);
+    CHECK_EQ(season_cards(l), l.league != League::MLB && !golf_league(l.league));
     CHECK_EQ(season_big(l), !l.season_list);
   }
   CHECK(season_big(*league_info(League::NHL)) && season_cards(*league_info(League::NHL)));
@@ -10650,6 +11315,9 @@ int main() {
   test_offseason();
   test_countdown();
   test_rankings();
+  test_golf();
+  test_golf_weeks();
+  test_golf_stream();
   test_panel_text();
   test_prefs_sync();
   test_message();

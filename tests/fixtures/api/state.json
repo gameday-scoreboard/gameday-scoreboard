@@ -171,12 +171,19 @@
     {"id": "seasonrecap", "name": "Season recap", "on": true, "ok": true, "hint": "Only for teams in Favorite teams, not baseball"},
     {"id": "news", "name": "News headlines", "on": false, "ok": true, "hint": ""},
     {"id": "weather", "name": "Weather", "on": true, "ok": true, "hint": "Set your town below first"},
-    {"id": "gamedaycard", "name": "Game Day card", "on": false, "ok": true, "hint": ""}
+    {"id": "gamedaycard", "name": "Game Day card", "on": false, "ok": true, "hint": ""},
+    {"id": "golf", "name": "Golf leaderboard", "on": true, "ok": true, "hint": "Pick a tour below, or follow a golfer"}
   ],
   "town": "75019",
   "wxon": true,
   "wxpage": false,
   "wxunit": 0,
+  "leaderboards": "golf:pga",
+  "lbleagues": [
+    {"key": "pga", "name": "PGA Tour", "sport": "golf"},
+    {"key": "lpga", "name": "LPGA", "sport": "golf"},
+    {"key": "eur", "name": "DP World Tour", "sport": "golf"}
+  ],
   "wx": {
     "place": "Coppell, Texas",
     "lat": 32.9546,

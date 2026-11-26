@@ -223,6 +223,17 @@ int main() {
       return parse_rankings(json, p);
     });
   }
+  {
+    // A golf tour's whole leaderboard document (golf.h): the PGA Tour's, the
+    // biggest of the three, at its full 592 KB (The RSM Classic's 147-man
+    // field on 2026-11-21), with two followed golfers pinned.
+    std::string json = slurp("fixtures/scoreboard_pga_20261121_suspended.json");
+    measure("poll_golf", [&] {
+      GolfBoard b;
+      const uint32_t favs[] = {5077389, 4426182};
+      return parse_golf(json, League::PGA, favs, 2, b);
+    });
+  }
   // The weather card's reads from Open-Meteo (weather.h): the town's lookup,
   // once per town, and the forecast every half hour (with the Weather
   // page's next hours and suns in it).

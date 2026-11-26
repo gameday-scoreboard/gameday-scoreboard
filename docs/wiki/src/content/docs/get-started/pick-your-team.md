@@ -18,7 +18,7 @@ Once the app has put the panel on your Wi-Fi, it opens the panel so you can add 
 1. Open the panel's address in a browser on any phone or computer on the same Wi-Fi. It's the `gameday-xxxxxx.local` name the panel shows when it starts, with your panel's own six characters, like `gameday-2f6a70.local`. If your phone won't open a `.local` address, use the IP address the panel shows instead.
 2. Make sure **Favorite teams** is on, the first of the two cards under the board on the Home tab.
 3. On the Teams tab, under **Favorites**, tap **Add a favorite**.
-4. Pick a league tab and tap a logo, or type in **Search teams** to find a team in any league. Add more if you like, then tap **Done**.
+4. Pick a league tab and tap a logo, or type in **Search teams** to find a team in any league. Add more if you like, then tap **Done**. On the **PGA**, **LPGA** and **DPWT** tabs there are no logos: search for a golfer by name (see [Golf](/using/golf/)).
 
 The page says **Added the** and the team's name, and the panel switches to it within a few seconds.
 
@@ -38,6 +38,7 @@ Lost the address? Hold the button on the controller for about 1.5 seconds and th
 | NHL | Every team |
 | MLS | Every team |
 | Premier League (EPL) | Every team |
+| PGA Tour, LPGA, DP World Tour | Golfers, by name. They're pinned on their tour's leaderboard between games. See [Golf](/using/golf/) |
 
 Soccer clubs are followed into their cup competitions too: Premier League clubs into the Champions League, Europa League and Conference League, and MLS clubs into the CONCACAF Champions Cup.
 

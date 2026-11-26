@@ -40,6 +40,7 @@
 #include "celebrate_lvgl.h"
 #include "countdown.h"
 #include "espn_parse.h"
+#include "fav_names.h"
 #include "favorites.h"
 #include "flights.h"
 #include "flights_page.h"
@@ -51,6 +52,7 @@
 #include "board_text.h"
 #include "health.h"
 #include "hook.h"
+#include "leaderboards.h"
 #include "line_score.h"
 #include "live_scan.h"
 #include "message.h"
@@ -622,6 +624,13 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   const std::string &top25_head() const { return this->top25_head_; }
   const std::string &top25_col(int i) const { return this->top25_col_[i == 1 ? 1 : 0]; }
   void set_top25_cols(uint32_t cols) { this->top25_cols_ = cols >= 2 ? 2 : 1; }
+  // The golf card's page (gd_golf_card in firmware/pages/gameday-live.yaml):
+  // its header, "" while the card is down, and its rows. wide says the
+  // display has room for today's score and thru.
+  const char *golf_head() const { return this->golf_ != nullptr ? this->golf_->head : ""; }
+  const char *golf_text() const { return this->golf_ != nullptr ? this->golf_->text : ""; }
+  void set_golf_wide(bool wide) { this->golf_wide_ = wide; }
+  bool golf_on() const { return this->card_on(::espn::Card::GOLF); }
   // The news card's headline on the scoreboard page now, "" while it is
   // down, and its top line ("DAL NEWS"); gd_news_card draws them and says
   // how long a headline too tall for the panel takes to roll.
@@ -796,6 +805,36 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void top25_tick_();
   void top25_show_();
   void top25_hide_();
+  // The golf card: one leaderboard per tour (golf.h slots), read while the
+  // panel follows a golfer in that tour or the leaderboards setting picks
+  // it. The boards and the card's turns live in PSRAM, made when a tour is
+  // first on and freed once none is, so a panel without golf keeps none.
+  struct GolfCard {
+    ::espn::GolfBoard board[::espn::kGolfSlots];
+    uint32_t read_ms[::espn::kGolfSlots]{};    // millis() of the last good read, 0 = none
+    uint32_t fail_ms[::espn::kGolfSlots]{};    // millis() of the last failed read, 0 = none since
+    uint8_t read_slot{0};
+    int slot{-1};  // the tour up now, or the last one shown
+    uint32_t page{0};
+    uint32_t pages{0};
+    bool shown{false};
+    uint32_t since_ms{0};  // when the page went up, or the card last came down
+    char head[::espn::kGolfHead]{};  // "" while the card is down
+    char text[::espn::kGolfText]{};
+  };
+  GolfCard *golf_{nullptr};
+  GolfCard &golf_card_();
+  void golf_free_();
+  bool golf_read_due_{false};
+  bool golf_wide_{false};
+  uint32_t golf_tick_ms_{0};
+  uint8_t golf_slots_() const;  // bit per slot: the tours with a followed golfer
+  bool golf_shown_() const { return this->golf_ != nullptr && this->golf_->shown; }
+  // The Top 25 or golf card is up: no other card takes its turn over a list.
+  bool list_card_up_() const { return this->top25_shown_ || this->golf_shown_(); }
+  void golf_tick_();
+  void golf_show_();
+  void golf_hide_();
   // The news card (news.h): the last read's headlines, one per line (PSRAM),
   // where they came from, and the card's turns. It and the message card take
   // turns with the board, never both up at once.
@@ -1181,12 +1220,34 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     int8_t sched_before;
     uint8_t sched_mode;
     uint8_t sched_sport;  // the sport row playing before, 1 + Sport; 0 = none
-    uint8_t spare[4];
+    // Test builds kept the Golf card's tours here, a bit per tour (PGA,
+    // LPGA, DP World Tour). The first boot with the leaderboards blob moves
+    // them there and zeroes this byte, so it is spare again.
+    uint8_t old_golf_tours;
+    uint8_t spare[3];
   } __attribute__((packed));
   static_assert(sizeof(Prefs10) == 104,
                 "Prefs10 is saved: a new size needs a new preference key or a migration, not a new number");
   ESPPreferenceObject pref10_;
   Prefs10 prefs10_{};
+  // The leaderboards setting (leaderboards.h): a bit per League, in its own blob.
+  ESPPreferenceObject lb_pref_;
+  uint32_t leaderboards_{0};
+  void load_leaderboards_();
+  void set_leaderboards_(uint32_t mask);
+  // Followed athletes' names (fav_names.h), in their own blob. The copy in
+  // RAM is PSRAM, made when the blob loads or the first name comes in.
+  static_assert(FAV_MAX == ::espn::kFavNamesMax, "a kept name per favorite");
+  ESPPreferenceObject fav_names_pref_;
+  ::espn::FavNames *fav_names_{nullptr};
+  void load_fav_names_();
+  // Keeps each athlete's name from names (parallel to the favorites list
+  // just set), saving only what changed.
+  void put_fav_names_(const std::vector<::espn::TeamRef> &teams, const std::vector<std::string> &names);
+  bool put_fav_name_(uint8_t league, uint32_t id, const std::string &name);  // no save
+  const char *fav_name_(uint8_t league, uint32_t id) const {
+    return ::espn::fav_name_get(this->fav_names_, league, id);
+  }
   // The options of playlist n (1..count); every other list has none.
   ::espn::ListOpt list_opt_(uint8_t n) const;
   // Every 10 s from loop(): a schedule that starts puts its playlist on, one
@@ -1476,6 +1537,15 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     ::espn::Poll top25_poll;
     bool top25_ok{false};
     uint32_t top25_bytes{0};
+    // The golf card's leaderboard for one tour (golf.h), on this task too.
+    // golf_favs is the tour's followed golfers, by ESPN athlete id.
+    bool need_golf{false};
+    uint8_t golf_slot{0};
+    std::array<uint32_t, FAV_MAX> golf_favs{};
+    uint8_t golf_fav_n{0};
+    ::espn::GolfBoard golf_board;
+    bool golf_ok{false};
+    uint32_t golf_bytes{0};
     // The news card's headlines (news.h), from news_src, read on this task
     // like the message list.
     bool need_news{false};
@@ -1552,6 +1622,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void start_top25_job_();
   void run_top25_job_();
   void apply_top25_job_();
+  void start_golf_job_();
+  void run_golf_job_();
+  void apply_golf_job_();
   void start_news_job_();
   void run_news_job_();
   void apply_news_job_();
@@ -2014,13 +2087,14 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   std::string recap_message_, recap_ticker_;
   int64_t recap_scan_next_{0};  // the last scan's next kickoff today, 0 for none
   static_assert(::espn::leagues_fill_indexes(), "League values must run 0 to kLeagueCount - 1");
-  // Per league, indexed by League: the walks back and forward (recap.h,
-  // RecapWalk), the kickoff the forward walk found (0 for none) and its
-  // fwd_match: "BOS at NYR", the first game on that day.
-  ::espn::RecapWalk recap_back_[::espn::kLeagueCount];
-  ::espn::RecapWalk recap_fwd_[::espn::kLeagueCount];
-  int64_t recap_fwd_next_[::espn::kLeagueCount]{};
-  std::string recap_fwd_match_[::espn::kLeagueCount];
+  // Per league with games, indexed by game_league_slot (leagues.h): the
+  // walks back and forward (recap.h, RecapWalk), the kickoff the forward
+  // walk found (0 for none) and its fwd_match: "BOS at NYR", the first game
+  // on that day. A leaderboard league has no finals to walk.
+  ::espn::RecapWalk recap_back_[::espn::kGameLeagueCount];
+  ::espn::RecapWalk recap_fwd_[::espn::kGameLeagueCount];
+  int64_t recap_fwd_next_[::espn::kGameLeagueCount]{};
+  std::string recap_fwd_match_[::espn::kGameLeagueCount];
   bool recap_job_(Job &j, int64_t tnow);  // fills j with the next walk step, if any
   void apply_recap_job_();
   void recap_absorb_(const Job &j, int64_t tnow);  // a scan's finals, games to come and next kickoff
