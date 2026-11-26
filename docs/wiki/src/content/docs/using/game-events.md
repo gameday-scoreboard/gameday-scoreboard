@@ -13,7 +13,7 @@ The panel can be the heart of game day at home. As the game it follows goes on, 
 | `esphome.gameday_start` | Kickoff, tip-off, first pitch or puck drop. |
 | `esphome.gameday_score` | Either side scores. |
 | `esphome.gameday_lead_change` | A side takes the lead, the lead changes hands, or the score comes level. |
-| `esphome.gameday_period` | A quarter, half, period or inning ends. |
+| `esphome.gameday_period` | A quarter, half, period, inning or set ends. |
 | `esphome.gameday_final` | The game is over. |
 | `esphome.gameday_test` | You pressed **Send a test event** on the device page. |
 
@@ -183,7 +183,7 @@ These follow the same game, and change only when what they show does. Off the Sc
 | **Team Score**, **Opponent Score** | The two scores; unknown before the start. In volleyball, the sets won. |
 | **Team**, **Opponent** | The two sides, like `DAL` and `PHI`. **Team** is your team in Favorite teams. |
 | **Team Color**, **Opponent Color** | Each side's color as `0,42,92`, so a light can follow it: `rgb_color: "{{ states('sensor.gameday_team_color').split(',') \| map('int') \| list }}"`. |
-| **Period** | Where the game is: `3rd quarter`, `Halftime`, `End of 1st`, `Top of the 5th`, `Final`. Empty before the start. |
+| **Period** | Where the game is: `3rd quarter`, `Halftime`, `End of 1st`, `Top of the 5th`, `End of the 2nd set`, `Final`. Empty before the start. |
 | **Game Clock** | The clock while it runs, like `4:32`, or `67'` in soccer. Empty between periods, in baseball and in volleyball. |
 
 Use your panel's own entity names; Home Assistant names them after the panel.
