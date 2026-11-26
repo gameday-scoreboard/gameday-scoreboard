@@ -662,6 +662,11 @@ void GamedayComponent::favorites_changed_(bool first_pick, const std::vector<Lea
   const ::espn::Team *fallback_before = this->fallback_team_();
   this->fx_between_end_("the favorites changed");
   this->rebuild_favorites_(true);
+  // Every tour on reads again, so a golfer followed or dropped is on the next
+  // turn, not at the next read (up to 6 hours away after a final).
+  if (this->golf_ != nullptr)
+    for (uint32_t &ms : this->golf_->read_ms)
+      ms = 0;
   if (this->prefs2_.mode == (uint8_t) Mode::FAVORITES && (was_fav_mode || this->favorites_mode_())) {
     // The list changed under the mode: drop the board and let the next
     // cycle refresh what is missing and re-pick.

@@ -21,7 +21,8 @@ A golfer you follow:
 
 - takes a place in your favorites list, by name, and counts toward the same limit as teams;
 - turns on their tour's leaderboard, even if you didn't pick that tour on the card;
-- stays on the board while they're in the field, even when they're far down the leaderboard.
+- stays on the board while they're in the field, even when they're far down the leaderboard;
+- is on the board from the next golf turn after you follow them, and off it from the next turn after you stop.
 
 A golfer who isn't playing this week simply isn't on the board. They come back the next time they play.
 
