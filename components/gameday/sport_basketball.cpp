@@ -46,20 +46,24 @@ static Basketball::Box box_of(JsonObjectConst side) {
                     {"fieldGoalsAttempted", &b.fg_tried},
                     {"threePointFieldGoalsMade", &b.three_made},
                     {"threePointFieldGoalsAttempted", &b.three_tried},
-                    {"rebounds", &b.rebounds}};
-  size_t found = 0;
+                    {"rebounds", &b.rebounds},
+                    {"freeThrowsMade", &b.ft_made},
+                    {"freeThrowsAttempted", &b.ft_tried}};
+  constexpr unsigned kTeam = 0x1F, kFree = 0x60;  // want's bits: the first five, the last two
+  unsigned found = 0;
   for (JsonObjectConst s : side["statistics"].as<JsonArrayConst>()) {
     const char *name = s["name"].as<const char *>();
     const char *value = s["displayValue"].as<const char *>();
     if (name == nullptr || value == nullptr || !isdigit((unsigned char) value[0]))
       continue;
-    for (const auto &w : want)
-      if (strcmp(name, w.name) == 0) {
-        *w.to = (uint8_t) std::min(255L, atol(value));
-        found++;
+    for (size_t i = 0; i < sizeof(want) / sizeof(want[0]); i++)
+      if (strcmp(name, want[i].name) == 0) {
+        *want[i].to = (uint8_t) std::min(255L, atol(value));
+        found |= 1u << i;
       }
   }
-  b.has = found == sizeof(want) / sizeof(want[0]) && b.fg_tried > 0;
+  b.has = (found & kTeam) == kTeam && b.fg_tried > 0;
+  b.has_ft = b.has && (found & kFree) == kFree;
   return b;
 }
 
@@ -76,7 +80,7 @@ void basketball_from_event(JsonObjectConst ev, GameSnapshot &s) {
   else if (name == "STATUS_HALFTIME")
     b.phase = Phase::HALFTIME;
   // A college game's misses come with the points the shot was worth.
-  if (s.last_play.find("misses ") != std::string::npos)
+  if (s.last_play.find("misses ") != std::string::npos || s.last_play.find("missed ") != std::string::npos)
     s.play_value = 0;
   // The game's points leaders, for the situation row (row_text.h). Before
   // the start ESPN's list is the season's (points per game), so only now.
@@ -87,6 +91,18 @@ void basketball_from_event(JsonObjectConst ev, GameSnapshot &s) {
       JsonObjectConst top = top_leader(c, "points");
       std::string who = leader_short_surname(str_or_empty(top["athlete"]["shortName"]));
       std::string pts = str_or_empty(top["displayValue"]);
+      // Before anyone scores there is no line for the side at all.
+      JsonObjectConst reb = top_leader(c, "rebounds"), ast = top_leader(c, "assists");
+      const int rebs = std::min(99, std::max(0, atoi(str_or_empty(reb["displayValue"]).c_str())));
+      const int asts = std::min(99, std::max(0, atoi(str_or_empty(ast["displayValue"]).c_str())));
+      char *extra = ours ? b.team_extra : b.opp_extra;
+      const bool dish = asts >= 3 && asts * 4 >= rebs * 3;
+      if (dish || rebs >= 3) {
+        std::string name = leader_surname(str_or_empty((dish ? ast : reb)["athlete"]["shortName"]));
+        while (name.size() > 16 && glyph_count(name) > 0)  // bytes, never half a letter
+          name = glyph_prefix(name, glyph_count(name) - 1);
+        snprintf(extra, sizeof(b.team_extra), "%.16s %d %s", name.c_str(), dish ? asts : rebs, dish ? "ast" : "reb");
+      }
       if (who.empty() || pts.empty() || pts == "0")
         continue;
       (ours ? b.team_scorer : b.opp_scorer) = who + " " + pts;
@@ -151,9 +167,11 @@ std::string basketball_box_line(const GameSnapshot &s) {
   if (!a.has || !b.has)
     return "";
   auto pct = [](const Basketball::Box &x) { return (x.fg_made * 200 + x.fg_tried) / (2 * x.fg_tried); };
-  char buf[72];
-  snprintf(buf, sizeof(buf), "FG %d%% to %d%% | 3PT %u/%u to %u/%u | Rebounds %u-%u", pct(a), pct(b), a.three_made,
-           a.three_tried, b.three_made, b.three_tried, a.rebounds, b.rebounds);
+  const char *us = s.team_abbr.c_str(), *them = s.opp_abbr.c_str();
+  char buf[128];
+  snprintf(buf, sizeof(buf), "FG %s %d%%, %s %d%% | 3PT %s %u/%u, %s %u/%u | Rebounds %s %u, %s %u", us, pct(a), them,
+           pct(b), us, a.three_made, a.three_tried, them, b.three_made, b.three_tried, us, a.rebounds, them,
+           b.rebounds);
   return buf;
 }
 
@@ -237,7 +255,7 @@ std::string basketball_status_text(const GameSnapshot &s, const TickerOptions &o
       add_last_play(out, o.held_play);  // tidied when it was held
     else
       add_part(out, break_line(s, o));
-  } else if (o.row_timeout && timeout_play(s.last_play) && out.empty()) {
+  } else if (o.row_timeout && (timeout_play(s.last_play) || o.held_break) && out.empty()) {
     add_part(out, break_line(s, o));
   }
   if (out.empty())

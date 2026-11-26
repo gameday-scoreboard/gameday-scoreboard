@@ -12,18 +12,21 @@
 //
 // Football: down and distance, then the win chance after a big swing
 // (WinSwing below).
-// Basketball: the last basket, each side's points leader, the playoff
-// series, the win chance after a big swing. No timeout line: the stopped clock already shows
-// the break, and ESPN gives no count of basketball timeouts left.
+// Basketball: its two rows are story_rows.h's; here only the playoff series at
+// halftime.
 // Soccer: the latest goal.
 //
-// Every line is white (football's down turns red in the red zone): a team
-// color, even lifted, was hard to read across a room, and the logos and
-// abbreviations above already carry the colors.
+// Every line is white (football's down turns red in the red zone): a whole
+// line in a team color, even lifted, was hard to read across a room, and the
+// logos and abbreviations above already carry the colors. Only the team's
+// name on basketball's row is in its color.
 
+#include <algorithm>
 #include <cctype>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <string>
 
 #include "espn_parse.h"
@@ -39,6 +42,10 @@ struct RowLine {
   std::string forms;
   uint32_t rgb{0xFFFFFF};
   uint8_t secs{4};  // how long its turn lasts
+  // Basketball's two rows (story_rows.h): 1 our name in its color, then form
+  // 0, over form 1 on the bottom row; 2 the same for theirs; 3 our name and
+  // form 0, their name and form 1, over form 2. 0 is a line like the others.
+  uint8_t side{0};
 
   // A shorter form, for when the longer ones don't fit.
   void add_form(const std::string &f) {
@@ -46,6 +53,25 @@ struct RowLine {
       return;
     this->forms += '\n';
     this->forms += f;
+  }
+  // Form i into out, cut to fit, "" past the last. The page asks on a timer,
+  // so it takes no memory.
+  template<size_t N> void form_to(int i, char (&out)[N]) const {
+    size_t at = 0;
+    for (; i > 0 && at != std::string::npos; i--) {
+      at = this->forms.find('\n', at);
+      if (at != std::string::npos)
+        at++;
+    }
+    out[0] = '\0';
+    if (at == std::string::npos)
+      return;
+    size_t end = this->forms.find('\n', at);
+    if (end == std::string::npos)
+      end = this->forms.size();
+    const size_t len = std::min(end - at, N - 1);
+    memcpy(out, this->forms.data() + at, len);
+    out[len] = '\0';
   }
   // Form i, "" past the last.
   std::string form(int i) const {
@@ -67,7 +93,29 @@ struct RowLines {
   // Bumped when the lead line has news (a new basket, a new down), so the
   // page shows it at once instead of waiting for its turn.
   uint32_t news{0};
+  // Which line the news is, and the last play's (basketball; 0xFF for none).
+  uint8_t jump{0}, play_at{0xFF};
+  // A notice is in the ticker ("no update for 5 min"), so the ticker keeps the
+  // bottom row from basketball's details.
+  bool notice{false};
 
+  // A line of up to three forms, one string for all of them: the update keeps
+  // it like its other strings, so this is the one allocation a line takes.
+  // Already as the panel draws it.
+  RowLine *put(const char *a, const char *b, const char *c, uint8_t secs) {
+    if (n >= kMax || a[0] == '\0')
+      return nullptr;
+    RowLine &l = line[n++];
+    l = RowLine();
+    char buf[128];
+    if (c != nullptr)
+      snprintf(buf, sizeof(buf), "%s\n%s\n%s", a, b, c);
+    else
+      snprintf(buf, sizeof(buf), "%s\n%s", a, b);
+    l.forms.assign(buf);
+    l.secs = secs;
+    return &l;
+  }
   RowLine *add(const std::string &text, uint32_t rgb, uint8_t secs = 4) {
     if (n >= kMax || text.empty())
       return nullptr;
@@ -80,55 +128,36 @@ struct RowLines {
   }
 };
 
-// The latest basket the board has seen, held until the next one: ESPN's
-// last play moves on with every rebound and foul, so the panel keeps the
-// last one that scored. Follows one game; another game starts it over.
+// The last basketball play worth reading, for the ticker while ESPN's last
+// play is a player checking in. Follows one game.
 struct RowHold {
   std::string event_id;
-  std::string basket;  // "McDaniels 3", "Burries FT"
-  std::string play;    // the last play worth reading, tidied for the ticker
+  std::string play;     // tidied for the ticker
   bool timeout{false};  // a timeout came after it
-  int total{-1};       // both scores added, at the last read
 
   // One read of the board game.
   void read(const GameSnapshot &g) {
     if (g.event_id != this->event_id) {
       this->event_id = g.event_id;
-      this->basket.clear();
       this->play.clear();
       this->timeout = false;
-      this->total = -1;
     }
-    if (g.sport == Sport::BASKETBALL && g.state == GameState::IN && !g.last_play.empty()) {
-      if (timeout_play(g.last_play)) {
-        this->timeout = true;
-      } else if (!basketball_junk_play(g)) {
-        this->timeout = false;
-        // Tidied with this play's own side: the next read's play can be the
-        // other team's.
-        this->play = basketball_tidy_play(g, g.last_play);
-      }
+    if (g.sport != Sport::BASKETBALL || g.state != GameState::IN || g.last_play.empty())
+      return;
+    if (timeout_play(g.last_play)) {
+      this->timeout = true;
+    } else if (!basketball_junk_play(g)) {
+      this->timeout = false;
+      // Tidied with this play's own side: the next read's play can be the
+      // other team's.
+      this->play = basketball_tidy_play(g, g.last_play);
     }
-    if (g.sport != Sport::BASKETBALL || g.state != GameState::IN)
-      return;
-    // A basket the read didn't name (another play came after it): the one
-    // held isn't the last any more.
-    const int total = g.team_score + g.opp_score;
-    if (total != this->total && this->total >= 0)
-      this->basket.clear();
-    this->total = total;
-    if (g.play_value <= 0 || g.play_athlete.empty())
-      return;
-    std::string who = detail::leader_short_surname(g.play_athlete);
-    bool ft = g.play_type.find("Free Throw") != std::string::npos ||
-              g.play_type.find("FreeThrow") != std::string::npos;  // the NBA's, college's
-    this->basket = who + " " + (ft ? std::string("FT") : std::to_string(g.play_value));
   }
 };
 
 struct RowOptions {
   bool win_chance{true};  // the Win chance switch (winbar)
-  bool last_play{true};   // the Last play switch: the last basket
+  bool last_play{true};   // the Last play switch: basketball's plays
 };
 
 // When the win chance is worth showing: the first number of a game, a
@@ -230,27 +259,6 @@ inline void add_win_chance(RowLines &r, const GameSnapshot &g, uint8_t secs) {
   l->add_form(::esphome::gameday::panel_text(num));
 }
 
-// The last basket, "Last: McDaniels 3", so its number isn't read as the
-// player's points in the game.
-inline void add_basket(RowLines &r, const std::string &basket, uint32_t rgb) {
-  if (basket.empty())
-    return;
-  RowLine *l = r.add("Last: " + basket, rgb);
-  if (l != nullptr)
-    l->add_form(::esphome::gameday::panel_text(basket));
-}
-
-// A side's points leader, "IND Nesmith 19 pts".
-inline void add_scorer(RowLines &r, const std::string &abbr, const std::string &scorer, uint32_t rgb) {
-  if (scorer.empty())
-    return;
-  RowLine *l = r.add(abbr + " " + scorer + " pts", rgb);
-  if (l == nullptr)
-    return;
-  l->add_form(::esphome::gameday::panel_text(abbr + " " + scorer));
-  l->add_form(::esphome::gameday::panel_text(scorer + " pts"));
-}
-
 // Down and distance, "2nd & 17", then "2nd&17" and "2&17" for when the
 // clear part of the field strip is narrower (the ball or the line to gain
 // near midfield).
@@ -272,10 +280,8 @@ inline void add_down(RowLines &r, const GameSnapshot &g, uint32_t rgb) {
 
 // The row's lines for the board game, into r (filled in place: the
 // component's loop stack has no room to spare for a copy). `playing` is a
-// game on and not at halftime (gameday.cpp emit_); `hold` has already read
-// this game.
-inline void fill_row_lines(RowLines &r, const GameSnapshot &g, const RowHold &hold, const RowOptions &o,
-                           bool playing) {
+// game on and not at halftime (gameday.cpp emit_).
+inline void fill_row_lines(RowLines &r, const GameSnapshot &g, const RowOptions &o, bool playing) {
   r.n = 0;
   if (!g.valid || g.state != GameState::IN)
     return;
@@ -289,21 +295,10 @@ inline void fill_row_lines(RowLines &r, const GameSnapshot &g, const RowHold &ho
       if (o.win_chance)
         add_win_chance(r, g, 4);
       break;
-    case Sport::BASKETBALL: {
-      const std::string series = basketball_series(g);
-      if (!playing) {
-        r.add(series, white);
-        break;
-      }
-      if (o.last_play && hold.event_id == g.event_id)
-        add_basket(r, hold.basket, white);
-      add_scorer(r, g.team_abbr, g.nba.team_scorer, white);
-      add_scorer(r, g.opp_abbr, g.nba.opp_scorer, white);
-      r.add(series, white);
-      if (o.win_chance)
-        add_win_chance(r, g, 4);
+    case Sport::BASKETBALL:
+      if (!playing)
+        r.add(basketball_series(g), white);
       break;
-    }
     case Sport::SOCCER:
       r.add(soccer_situation(g), white);
       break;
@@ -312,21 +307,38 @@ inline void fill_row_lines(RowLines &r, const GameSnapshot &g, const RowHold &ho
   }
 }
 
-inline RowLines row_lines(const GameSnapshot &g, const RowHold &hold, const RowOptions &o, bool playing) {
+inline RowLines row_lines(const GameSnapshot &g, const RowOptions &o, bool playing) {
   RowLines r;
-  fill_row_lines(r, g, hold, o, playing);
+  fill_row_lines(r, g, o, playing);
   return r;
 }
 
-// What counts as news on the row: the held basket, football's down and
-// distance, soccer's latest goal. The component bumps RowLines::news when
-// it changes.
-inline std::string row_news(const GameSnapshot &g, const RowHold &hold) {
-  if (g.sport == Sport::BASKETBALL)
-    return hold.basket;
+// A line's text (its first form) but for its digits, hashed, so "Langsy 21
+// pts" and "Langsy 23 pts" are the same line. Never 0.
+inline uint32_t row_shape(const std::string &text) {
+  uint32_t h = 2166136261u;
+  for (char c : text) {
+    if (c == '\n')
+      break;
+    if (!isdigit((unsigned char) c))
+      h = (h ^ (uint8_t) c) * 16777619u;
+  }
+  return h == 0 ? 1 : h;
+}
+
+// Basketball stopped: a timeout (through its substitutions, RowHold), or the
+// break between two periods.
+inline bool basketball_break(const GameSnapshot &g, bool held = false) {
+  return held || timeout_play(g.last_play) || g.nba.phase == Phase::END_PERIOD;
+}
+
+// What counts as news on the row: football's down and distance, a basketball
+// break (the story and the plays have their own). The component bumps
+// RowLines::news when it changes.
+inline std::string row_news(const GameSnapshot &g, bool held = false) {
   if (g.sport == Sport::FOOTBALL)
     return g.short_down_distance;
-  return "";
+  return g.sport == Sport::BASKETBALL && basketball_break(g, held) ? "break" : "";
 }
 
 }  // namespace espn

@@ -12,8 +12,8 @@
 namespace espn {
 
 // Whether the read's last play was a made two of this kind by this side.
-// ESPN's scoreValue is 2 for a made two and 0 for a miss, and its team says
-// whose play it was. Only a document with no scoreValue falls back to the
+// A play's value is 2 for a made two (the parser makes a miss 0), and its team
+// says whose play it was. Only a document with no scoreValue falls back to the
 // words, and then a make only ("makes driving dunk", never "misses").
 inline bool celeb_two_play(const GameSnapshot &cur, bool ours, const char *kind) {
   const uint32_t side = ours ? cur.team_id : cur.opp_id;

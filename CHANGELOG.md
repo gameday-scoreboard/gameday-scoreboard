@@ -58,7 +58,7 @@ A new Flights page shows planes over your home, women's college basketball and g
 
 ### 🐛 Fixes
 
-- 🏀 Basketball's bottom rows say whose points they show ("USA Langsy 21 pts"), a timeout brings the team stats instead of the records again, players checking in stay off the ticker, and a missed shot no longer shows as the last basket
+- 🏀 Basketball's two bottom rows tell the story on a 128-wide board: the team in its color and what's happening ("USA on a 16-2 run", "FAMU scoreless 4:24", "FAMU three"), then the detail under it ("7 of 13 shooting", "Baker Jr. from 25 feet"). A timeout brings both teams' shooting, threes and rebounds, players checking in stay off the ticker, and a missed shot no longer shows as the last basket
 - 🏙️ A town typed for Weather while the Clock, Effects or the Smart board is up is looked up right away, instead of waiting for the Scoreboard
 - ⏱️ The device page's Weather card counts up the time since the last forecast read, where it could stay on the same number for minutes
 - 🎆 Editing the effect playlist that's playing no longer starts it over: it carries on from the effect that's up, and a change to that effect shows at once
