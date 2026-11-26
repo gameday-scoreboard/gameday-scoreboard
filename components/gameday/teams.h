@@ -1393,7 +1393,7 @@ constexpr Team kTeams[] = {
     {League::WCVB, 254, "UTAH", "Utah Utes", 0},
     {League::WCVB, 3084, "UVU", "Utah Valley Wolverines", 0},
     {League::WCVB, 2670, "VCU", "VCU Rams", 0},
-    {League::WCVB, 2674, "VAL", "Valparaiso VALPARAISO", 0},
+    {League::WCVB, 2674, "VAL", "Valparaiso Beacons", 0},
     {League::WCVB, 238, "VAN", "Vanderbilt Commodores", 0},
     {League::WCVB, 222, "VILL", "Villanova Wildcats", 0},
     {League::WCVB, 258, "UVA", "Virginia Cavaliers", 0},
