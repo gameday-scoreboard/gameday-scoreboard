@@ -341,11 +341,10 @@ static void test_ticker_and_row() {
   bare.opp_record.clear();
   CHECK_EQ(status_text(bare, o, ""), std::string("In Progress"));
 
-  RowHold hold;
-  RowLines r = row_lines(g, hold, RowOptions(), true);
+  RowLines r = row_lines(g, RowOptions(), true);
   CHECK_EQ((int) r.n, 1);
   CHECK_EQ(r.line[0].form(0), std::string("25-19 17-25"));
-  CHECK_EQ((int) row_lines(live(0, 0, 1, {3}, {2}), hold, RowOptions(), true).n, 0);
+  CHECK_EQ((int) row_lines(live(0, 0, 1, {3}, {2}), RowOptions(), true).n, 0);
 
   // No scoring log and no leaders read for volleyball.
   ScoreLog log;
