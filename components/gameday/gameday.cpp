@@ -5238,9 +5238,9 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   UpdateFields f;
   f.game_state = g.valid ? ::espn::state_name(g.state) : "NOT_FOUND";
   f.team_abbr = g.team_abbr;
-  f.team_score = g.team_score;
+  f.team_score = ::espn::board_team_score(g);
   f.opponent_abbr = g.opp_abbr;
-  f.opponent_score = g.opp_score;
+  f.opponent_score = ::espn::board_opp_score(g);
   f.team_logo = g.team_logo;
   f.opponent_logo = g.opp_logo;
   f.possession = g.possession;
@@ -5391,6 +5391,7 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   opts.row_win = wide && this->win_chance_on();
   opts.win_due = playing && this->win_swing_.ticker;
   opts.row_timeout = wide;
+  opts.row_sets = wide;
   if (this->row_hold_.event_id == g.event_id) {
     opts.held_play = this->row_hold_.play.c_str();
     opts.held_break = this->row_hold_.timeout;
@@ -6667,7 +6668,7 @@ bool GamedayComponent::recap_job_(Job &j, int64_t tnow) {
   for (uint8_t i = 0; i < ::espn::kLeagueCount; i++) {
     if (!(leagues & ::espn::recap_bit(i)))
       continue;
-    if (this->recap_back_[i].back_due(::espn::espn_day(tnow, i), ::espn::recap_count(this->recap_days_, i),
+    if (this->recap_back_[::espn::game_league_slot(i)].back_due(::espn::espn_day(tnow, i), ::espn::recap_count(this->recap_days_, i),
                                       j.recap_day)) {
       j.need_recap = true;
       j.recap_forward = false;
@@ -6680,7 +6681,8 @@ bool GamedayComponent::recap_job_(Job &j, int64_t tnow) {
   for (uint8_t i = 0; i < ::espn::kLeagueCount; i++) {
     if (!(leagues & ::espn::recap_bit(i)))
       continue;
-    if (this->recap_fwd_[i].fwd_due(::espn::espn_day(tnow, i), this->recap_fwd_next_[i], tnow, j.recap_day)) {
+    const size_t slot = ::espn::game_league_slot(i);
+    if (this->recap_fwd_[slot].fwd_due(::espn::espn_day(tnow, i), this->recap_fwd_next_[slot], tnow, j.recap_day)) {
       j.need_recap = true;
       j.recap_forward = true;
       j.recap_league = i;
@@ -6692,9 +6694,10 @@ bool GamedayComponent::recap_job_(Job &j, int64_t tnow) {
 
 void GamedayComponent::apply_recap_job_() {
   Job &j = this->job_;
-  if (j.recap_league >= ::espn::kLeagueCount)
-    return;
   uint8_t i = j.recap_league;
+  const size_t slot = ::espn::game_league_slot(i);
+  if (slot >= ::espn::kGameLeagueCount)
+    return;
   int64_t tnow = (int64_t) this->time_->timestamp_now();
   int32_t today = ::espn::espn_day(tnow, i);
   if (!j.recap_ok) {
@@ -6707,20 +6710,20 @@ void GamedayComponent::apply_recap_job_() {
   if (j.recap_forward) {
     bool found = j.next_kickoff > tnow;
     if (found) {
-      this->recap_fwd_next_[i] = j.next_kickoff;
+      this->recap_fwd_next_[slot] = j.next_kickoff;
       // The game the Next card names. The scan keeps a college day's ranked
       // games first, so the first kickoff may not be among them.
-      this->recap_fwd_match_[i].clear();
+      this->recap_fwd_match_[slot].clear();
       for (const auto &p : j.pending)
         if (p.kickoff_epoch == j.next_kickoff) {
-          this->recap_fwd_match_[i] = ::espn::recap_matchup(p);
+          this->recap_fwd_match_[slot] = ::espn::recap_matchup(p);
           break;  // the first one kept at that time: best ranked, then ESPN's order
         }
     }
-    if (!this->recap_fwd_[i].fwd_read(today, found)) {
+    if (!this->recap_fwd_[slot].fwd_read(today, found)) {
       ESP_LOGI(TAG, "No %s kickoff in the next week", ::espn::recap_league_word(i));
-      this->recap_fwd_next_[i] = 0;
-      this->recap_fwd_match_[i].clear();
+      this->recap_fwd_next_[slot] = 0;
+      this->recap_fwd_match_[slot].clear();
     }
   } else {
     ::espn::RecapDay d;
@@ -6728,8 +6731,8 @@ void GamedayComponent::apply_recap_job_() {
     d.day = j.recap_day;
     d.finals.assign(std::make_move_iterator(j.finals.begin()), std::make_move_iterator(j.finals.end()));
     ::espn::recap_merge(this->recap_days_, std::move(d));
-    this->recap_back_[i].back_read(today, ::espn::recap_count(this->recap_days_, i));
-    if (this->recap_back_[i].step == ::espn::RecapWalk::kDone)
+    this->recap_back_[slot].back_read(today, ::espn::recap_count(this->recap_days_, i));
+    if (this->recap_back_[slot].step == ::espn::RecapWalk::kDone)
       ESP_LOGI(TAG, "Recent %s finals: %u", ::espn::recap_league_word(i),
                (unsigned) ::espn::recap_count(this->recap_days_, i));
   }
@@ -6753,10 +6756,11 @@ int64_t GamedayComponent::recap_next_kickoff_(std::string *matchup) const {
   for (uint8_t i = 0; i < ::espn::kLeagueCount; i++) {
     if (!(leagues & ::espn::recap_bit(i)))
       continue;
-    int64_t k = this->recap_fwd_next_[i];
+    const size_t slot = ::espn::game_league_slot(i);
+    int64_t k = this->recap_fwd_next_[slot];
     if (k > tnow && (best == 0 || k < best)) {
       best = k;
-      match = this->recap_fwd_match_[i];
+      match = this->recap_fwd_match_[slot];
     }
   }
   if (best != 0 && best == this->recap_scan_next_)
@@ -7331,10 +7335,10 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   game["l"] = ::espn::league_key((League) league);
   game["ta"] = g.team_abbr;
   game["ti"] = g.team_id;
-  game["ts"] = g.team_score;
+  game["ts"] = ::espn::board_team_score(g);
   game["oa"] = g.opp_abbr;
   game["oi"] = g.opp_id;
-  game["os"] = g.opp_score;
+  game["os"] = ::espn::board_opp_score(g);
   game["tr"] = g.team_record;
   game["or"] = g.opp_record;
   game["p"] = g.possession;
@@ -7406,8 +7410,8 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
         o["tbd"] = true;
       o["oi"] = e.game.opp_id;
       o["oa"] = e.game.opp_abbr;
-      o["ts"] = e.game.team_score;
-      o["os"] = e.game.opp_score;
+      o["ts"] = ::espn::board_team_score(e.game);
+      o["os"] = ::espn::board_opp_score(e.game);
       o["tv"] = e.game.tv;
       o["detail"] = e.game.short_detail;
       o["done"] = e.game.completed;
@@ -7763,6 +7767,10 @@ void GamedayComponent::send_test_event_() {
       case ::espn::Sport::BASKETBALL:
         e.play = "score";
         e.points = 3;
+        break;
+      case ::espn::Sport::VOLLEYBALL:
+        e.play = "set";
+        e.points = 1;
         break;
       default:
         e.play = "touchdown";

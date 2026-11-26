@@ -83,7 +83,8 @@ std::string team_day_url(League league, uint32_t group, int64_t day_epoch, const
   int y, m, d;
   civil_from_epoch(day_epoch - 5 * 3600, y, m, d);
   char buf[48];
-  if ((league == League::MCBB || league == League::WCBB || league == League::NCAA) && group != 0) {
+  if ((league == League::MCBB || league == League::WCBB || league == League::NCAA || league == League::WCVB) &&
+      group != 0) {
     snprintf(buf, sizeof(buf), "groups=%u&", (unsigned) group);
     url += buf;
   }
@@ -339,6 +340,8 @@ Splash decide_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool opp
     return basketball_splash(prev, cur, opponent_splashes, neutral);
   if (cur.sport == Sport::HOCKEY)
     return hockey_splash(prev, cur, opponent_splashes, neutral);
+  if (cur.sport == Sport::VOLLEYBALL)
+    return volleyball_splash(prev, cur, opponent_splashes, neutral);
   Splash none;
   if (!prev.valid || !cur.valid || prev.event_id != cur.event_id)
     return none;
@@ -512,6 +515,8 @@ std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std
     return basketball_status_text(s, o, kickoff_local);
   if (s.sport == Sport::HOCKEY)
     return hockey_status_text(s, o, kickoff_local);
+  if (s.sport == Sport::VOLLEYBALL)
+    return volleyball_status_text(s, o, kickoff_local);
   std::string out;
   switch (s.state) {
     case GameState::NOT_FOUND:
@@ -780,6 +785,8 @@ std::string clock_text(const GameSnapshot &s) {
     return basketball_clock_text(s);
   if (s.sport == Sport::HOCKEY)
     return hockey_clock_text(s);
+  if (s.sport == Sport::VOLLEYBALL)
+    return volleyball_clock_text(s);
   bool has_clock = s.display_clock.find(':') != std::string::npos && s.period > 0;
   bool special = s.short_detail.find(':') == std::string::npos;  // Halftime, End of 3rd, Delayed, Final
   if (!has_clock || special) {

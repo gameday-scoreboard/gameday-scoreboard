@@ -100,7 +100,7 @@ Groups your favorites into named playlists you can switch between. **New playlis
 
 ### Choosing teams
 
-**Add a favorite** opens the team chooser. It has a search box and a tab per league: **NFL**, **NCAAF** (college football), **MLB**, **MLS**, **EPL** (Premier League), **NBA**, **WNBA**, **NCAAM** (men's college basketball), **NCAAW** (women's college basketball) and **NHL**. Search looks through every league at once. The chooser stays open so you can add several: a tap adds a team to the end of your list, a tap on a checked team takes it out, and **Done** closes it.
+**Add a favorite** opens the team chooser. It has a search box and a tab per league: **NFL**, **NCAAF** (college football), **MLB**, **MLS**, **EPL** (Premier League), **NBA**, **WNBA**, **NCAAM** (men's college basketball), **NCAAW** (women's college basketball), **NHL** and **NCAAVB** (women's college volleyball). Search looks through every league at once. The chooser stays open so you can add several: a tap adds a team to the end of your list, a tap on a checked team takes it out, and **Done** closes it.
 
 The first tab, **On now**, lists today's games in every league, under **Live now**, **Later today**, **Final** and **Postponed or canceled**. Tap a side to add that team. The chooser opens on **On now** when a game is live, and on your first favorite's league otherwise.
 
@@ -138,7 +138,7 @@ Only the switches for sports your panel follows are shown. Hockey and basketball
 
 ### Live pictures
 
-Drawn in the row under the clock during a game, on a 128-wide board (not on a single 64x64 panel). Both start on. The card is hidden when the panel only follows sports with nothing to turn off here (hockey, baseball, soccer).
+Drawn in the row under the clock during a game, on a 128-wide board (not on a single 64x64 panel). Both start on. The card is hidden when the panel only follows sports with nothing to turn off here (hockey, baseball, soccer, volleyball).
 
 | Setting | What it does |
 | --- | --- |
@@ -147,11 +147,11 @@ Drawn in the row under the clock during a game, on a 128-wide board (not on a si
 
 ### Celebrations
 
-The panel fills the screen with a splash when someone scores, in the scoring team's color. On a white or pale team color the words are dark so they stay readable. Your team's always show. **Opponent scores too** turns the other side's on or off in football, baseball, hockey and soccer. Basketball only celebrates the win, so the switch makes no difference there.
+The panel fills the screen with a splash when someone scores, in the scoring team's color. On a white or pale team color the words are dark so they stay readable. Your team's always show. **Opponent scores too** turns the other side's on or off in football, baseball, hockey, soccer and volleyball, where a set won is the score that splashes. Basketball only celebrates the win, so the switch makes no difference there.
 
 A **Celebrations** choice sets how big the show is:
 
-- **Full** (the default): fireworks over goalposts for a touchdown, a light sweep for a field goal or a run, the ball arcing out of the park for a home run, a rippling net for a soccer goal, the spinning red goal lamp for a hockey goal, a three dropping through the hoop in basketball, and when your team wins, a victory screen with the final score under its name and confetti in its colors for 10 seconds.
+- **Full** (the default): fireworks over goalposts for a touchdown, a light sweep for a field goal, a run or a volleyball set, the ball arcing out of the park for a home run, a rippling net for a soccer goal, the spinning red goal lamp for a hockey goal, a three dropping through the hoop in basketball, and when your team wins, a victory screen with the final score under its name and confetti in its colors for 10 seconds.
 - **Subtle**: a quick flash in the team's color with white words, for every score and the win.
 - **Off**: no full-screen splash at all. The scores on the board still change, and Home Assistant still gets its events.
 

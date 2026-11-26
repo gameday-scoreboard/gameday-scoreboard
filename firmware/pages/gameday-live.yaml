@@ -825,9 +825,10 @@ script:
             lv_obj_set_hidden(cv, true);
           if (!drawn && wide) {
             // The row between the logos' columns, where football's timeout
-            // pips and soccer's red cards sit; basketball and hockey have
-            // nothing under the logos, so their text gets the full width.
-            const bool full = sport == 2 || sport == 3;
+            // pips and soccer's red cards sit; basketball, hockey and
+            // volleyball have nothing under the logos, so their text gets the
+            // full width.
+            const bool full = sport == 2 || sport == 3 || sport == 5;
             lv_obj_set_style_text_align(id(tt_down_lbl), LV_TEXT_ALIGN_CENTER, 0);
             lv_obj_set_pos(id(tt_down_lbl), full ? 0 : 32, 48);
             lv_obj_set_width(id(tt_down_lbl), full ? W : W - 64);

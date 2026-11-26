@@ -302,6 +302,9 @@ inline void fill_row_lines(RowLines &r, const GameSnapshot &g, const RowOptions 
     case Sport::SOCCER:
       r.add(soccer_situation(g), white);
       break;
+    case Sport::VOLLEYBALL:
+      r.add(volleyball_sets(g), white);
+      break;
     default:
       break;
   }

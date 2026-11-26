@@ -194,6 +194,10 @@ inline CelebPlan decide_celebration(const GameSnapshot &prev, const GameSnapshot
       p.kind = CelebKind::GOAL_LAMP;
       p.duration_ms = kCelebGoalMs;
       return p;
+    case Sport::VOLLEYBALL:  // a set
+      p.kind = CelebKind::WAVE;
+      p.duration_ms = kCelebWaveMs;
+      return p;
     case Sport::BASKETBALL:
     default:
       // Nothing but the win splashes here; a stray text gets the flash.
