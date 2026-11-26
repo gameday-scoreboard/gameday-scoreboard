@@ -2809,7 +2809,7 @@ bool GamedayComponent::card_ok_(::espn::Card c) const {
       if (this->countdown_.ymd == 0)
         return false;
       // Its day is over: nothing until the owner picks another.
-      return !this->clock_set_() || (int64_t) this->time_->timestamp_now() < this->custom_start_() + ::espn::kDayS;
+      return !this->clock_set_() || (int64_t) this->time_->timestamp_now() < this->custom_end_();
     }
     case ::espn::Card::MESSAGE:
       return !this->msg_src_().empty() || !this->msg_text_.empty();
@@ -5711,8 +5711,7 @@ void GamedayComponent::clock_next_line_(UpdateFields &f, const GameSnapshot &g) 
   const GameSnapshot &g = this->game_;
   if (g.valid && g.state == GameState::IN)
     return CountdownCard::NONE;
-  int64_t start = this->custom_start_();
-  bool custom = this->card_on(::espn::Card::CUSTOM) && start != 0 && now < start + ::espn::kDayS;
+  bool custom = this->card_on(::espn::Card::CUSTOM) && this->countdown_.ymd != 0 && now < this->custom_end_();
   // After the game's clock keeps the screen between games; the owner's own
   // countdown and the weather still get their turns.
   bool next = this->countdown_on() && !this->wake_clock_ && !this->wake_fx_ && g.valid && g.state == GameState::PRE && !g.time_tbd &&
@@ -5739,15 +5738,11 @@ void GamedayComponent::clock_next_line_(UpdateFields &f, const GameSnapshot &g) 
 }
 
 int64_t GamedayComponent::custom_start_() const {
-  uint32_t ymd = this->countdown_.ymd;
-  if (ymd == 0)
-    return 0;
-  ESPTime t{};
-  t.year = ymd / 10000;
-  t.month = ymd / 100 % 100;
-  t.day_of_month = ymd % 100;
-  t.recalc_timestamp_local();
-  return t.timestamp > 0 ? (int64_t) t.timestamp : 0;
+  return ::espn::countdown_day_start(this->countdown_.ymd, utc_offset_at);
+}
+
+int64_t GamedayComponent::custom_end_() const {
+  return ::espn::countdown_day_end(this->countdown_.ymd, utc_offset_at);
 }
 
 void GamedayComponent::countdown_fields_(UpdateFields &f) {
@@ -5777,7 +5772,7 @@ void GamedayComponent::countdown_fields_(UpdateFields &f) {
     color = g.team_color;
   } else {
     f.countdown_at = this->custom_start_();
-    f.countdown_end = f.countdown_at + ::espn::kDayS;
+    f.countdown_end = this->custom_end_();
     std::string name = panel_text(this->countdown_.name);
     f.next_line = name.empty() ? ::espn::countdown_day_label(this->countdown_.ymd) : name;
   }

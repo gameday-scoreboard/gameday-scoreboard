@@ -69,6 +69,7 @@ A new Flights page shows the planes over your home, women's college basketball j
 - 🖼️ Adding a picture while a message card on **Whenever no game is on** holds the board says so, and which setting to change, instead of "It's up next"
 - 🌇 The kickoff forecast shows a sun until sunset at the stadium, where a 5 PM kickoff in early November could show a moon with the sun still up
 - 🌙 Night mode turned off for a night that starts between 1 and 2 AM stays off when the clocks go back, instead of the panel dimming again at the second start
+- 📅 **Date countdown** reads **Today** until midnight on the day the clocks go back, and is gone at midnight on the day they go forward, where it ended an hour early or late
 
 ## v2026.11.5
 

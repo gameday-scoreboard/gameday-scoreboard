@@ -1650,8 +1650,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   ::espn::CountdownCard countdown_card_(int64_t now) const;
   void countdown_fields_(UpdateFields &f);
   void countdown_tick_();
-  // The custom countdown's day: when it starts, local time; 0 with none set.
+  // The custom countdown's day: the local midnights it starts and ends at.
+  // Only with a day set (countdown_.ymd not 0).
   int64_t custom_start_() const;
+  int64_t custom_end_() const;
   ::espn::CountdownCard countdown_shown_{::espn::CountdownCard::NONE};
   uint32_t countdown_tick_ms_{0};
   // A new local day redraws the board, whose kickoff labels ("Tomorrow 1:30
