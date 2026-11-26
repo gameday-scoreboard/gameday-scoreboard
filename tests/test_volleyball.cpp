@@ -57,7 +57,8 @@ static std::string slurp(const std::string &path) {
   return ss.str();
 }
 
-constexpr uint32_t kNebraska = 158, kWisconsin = 275, kGeorgia = 61, kMissSt = 344, kNotreDame = 87;
+constexpr uint32_t kNebraska = 158, kWisconsin = 275, kGeorgia = 61, kMissSt = 344, kNotreDame = 87, kCincinnati = 2132,
+                   kTexasTech = 2641;
 
 static GameSnapshot event(const char *file, uint32_t team) {
   GameSnapshot s;
@@ -286,6 +287,41 @@ static void test_live_numbers() {
   CHECK(!volleyball_set_over(nba) && !volleyball_match_point(nba));
 }
 
+// Read live from ESPN on 11/25: TTU @ CIN and WIS @ NEB.
+static void test_recorded_live() {
+  // CIN up 2-0, 24-19 in the third: a match point.
+  GameSnapshot g = event("event_wcvb_live.json", kCincinnati);
+  CHECK(g.state == GameState::IN);
+  CHECK_EQ(board_team_score(g), 24);
+  CHECK_EQ(board_opp_score(g), 19);
+  CHECK_EQ(clock_text(g), std::string("Set 3  2-0"));
+  CHECK_EQ(volleyball_sets(g), std::string("25-17 25-11"));
+  CHECK(volleyball_match_point(g) && !volleyball_set_over(g) && !at_break(g));
+  GameSnapshot t = event("event_wcvb_live.json", kTexasTech);
+  CHECK_EQ(board_team_score(t), 19);
+  CHECK_EQ(clock_text(t), std::string("Set 3  0-2"));
+  CHECK_EQ(volleyball_sets(t), std::string("17-25 11-25"));
+
+  // "End of 2nd": the set is in the sets won and its points stay up.
+  GameSnapshot e = event("event_wcvb_setend.json", kCincinnati);
+  CHECK(e.state == GameState::IN);
+  CHECK(volleyball_set_over(e) && at_break(e) && ha_at_break(e));
+  CHECK_EQ(board_team_score(e), 25);
+  CHECK_EQ(board_opp_score(e), 11);
+  CHECK_EQ(clock_text(e), std::string("End 2  2-0"));
+  CHECK_EQ(volleyball_sets(e), std::string("25-17 25-11"));
+
+  // ESPN said "End of 3rd" for ten seconds before the third's first point,
+  // NEB up 2-0: still the third under way at 0-0.
+  GameSnapshot x = event("event_wcvb_endglitch.json", kNebraska);
+  CHECK(x.state == GameState::IN);
+  CHECK(!volleyball_set_over(x) && !ha_at_break(x));
+  CHECK_EQ(board_team_score(x), 0);
+  CHECK_EQ(board_opp_score(x), 0);
+  CHECK_EQ(clock_text(x), std::string("Set 3  2-0"));
+  CHECK_EQ(volleyball_sets(x), std::string("25-21 25-10"));
+}
+
 static void test_ticker_and_row() {
   GameSnapshot g = live(1, 1, 3, {25, 17, 12}, {19, 25, 9});
   TickerOptions o;
@@ -472,6 +508,7 @@ int main() {
   test_team();
   test_pre_post();
   test_live_numbers();
+  test_recorded_live();
   test_ticker_and_row();
   test_splash();
   test_action_and_interest();

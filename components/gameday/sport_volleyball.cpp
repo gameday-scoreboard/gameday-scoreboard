@@ -22,6 +22,8 @@ static int set_number(const GameSnapshot &s) { return s.period > 0 ? s.period : 
 bool volleyball_set_over(const GameSnapshot &s) {
   if (s.sport != Sport::VOLLEYBALL || s.state != GameState::IN || set_number(s) == 0)
     return false;
+  // The sets won, not ESPN's "End of 3rd": it can say that for a few seconds
+  // before the set's first point.
   return s.team_score + s.opp_score >= set_number(s);
 }
 
