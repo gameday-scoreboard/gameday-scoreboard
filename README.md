@@ -25,7 +25,7 @@ If you already use Home Assistant and want room lighting to celebrate too, [game
 
 Building your own? [Runs on your own panel](https://install.gameday-scoreboard.com/diy/) lists the boards and panels it runs on, how to wire a bare ESP32-S3, and what differs from a Game Day Scoreboard.
 
-- The [Waveshare ESP32-S3-RGB-Matrix](https://www.waveshare.com/esp32-s3-rgb-matrix.htm), the board in ready-made Game Day Scoreboards (build `gameday-waveshare.yaml`; not yet run on hardware), or
+- The [Waveshare ESP32-S3-RGB-Matrix](https://www.waveshare.com/esp32-s3-rgb-matrix.htm), the board in ready-made Game Day Scoreboards (build `gameday-waveshare.yaml`; no fuse or reverse-polarity protection, so check the power leads before you plug them in), or
 - An ESP32-S3 HUB75 controller on the [MoonHub75](https://github.com/MoonModules/Hardware/tree/main/MOONHUB75) pinout, with 16MB flash, octal PSRAM, and a button on GPIO0 (build `gameday.yaml`)
 - One 64x64 HUB75 panel, or a 128x64 display: one 128x64 panel or two 64x64 side by side (one firmware; pick the size on the device page)
 
