@@ -559,6 +559,8 @@ jobs:
     strategy:
       matrix:
         include:
+          - variant: waveshare
+            yaml: firmware/gameday-waveshare-demo.yaml
           - variant: moonhub75
             yaml: firmware/gameday-demo.yaml
           - variant: scoreboard75
