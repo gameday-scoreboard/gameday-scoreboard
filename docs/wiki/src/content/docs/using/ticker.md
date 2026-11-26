@@ -13,7 +13,7 @@ The ticker is the line that scrolls along the bottom of the panel. It carries wh
 | --- | --- |
 | Before the game | The kickoff day and time in the panel's timezone, the odds and TV channel, the venue, and each sport's extras: a bowl or playoff name in football, the probable pitchers in baseball, the playoff series in basketball and hockey, form and the cup stage in soccer. |
 | During the game | The game situation and the last play, each with its own switch. |
-| At a break | Halftime in football, the hits and errors between half innings in baseball, the series or records in basketball and hockey, and the goals, cards and stats at half time in soccer. |
+| At a break | Halftime in football, the hits and errors between half innings in baseball, the series or the team stats in basketball, the series or records in hockey, and the goals, cards and stats at half time in soccer. |
 | After the final | "Final" with the records, or the sport's result line, like hits and errors in baseball or the goals in soccer. |
 
 Before a playoff game in baseball, basketball and hockey, the ticker starts with the round, like "NLCS - Game 2", as football's does with a bowl or playoff name.
@@ -52,7 +52,7 @@ On a 128-wide board the row under the clock says some things itself, so the tick
 
 - In football, while **Win chance** under **Live pictures** is on, the win chance is on the row and not in the ticker. With it off, or on a single 64x64 panel, the ticker keeps it. Either way it shows only when it's news: when the game comes up, after a touchdown, field goal or turnover, and when ESPN's number moves 10 points or more since it last showed, no more than once every 3 minutes for a move. In the ticker it then stays until the next play, so a full pass reaches it.
 - In football, the down and distance, like "3rd & 4 at FIU 31", is on the field strip (or the row under the clock with **Field strip** off), so the ticker leaves it out and goes straight to the last play. A single 64x64 panel keeps it in the ticker.
-- In basketball, a timeout as the last play, like "Official TV Timeout", isn't shown: the stopped clock already says it, and the ticker shows the two records until the next play. A single 64x64 panel keeps it in the ticker.
+- In basketball, the ticker's row belongs to the row above it during the game: the two tell one story at a time, with the team and what's happening over the detail (see [Basketball](/using/basketball/#during-the-game)). The ticker is back at halftime, before and after the game, and when it has a notice to show. A single 64x64 panel keeps the ticker.
 
 A **Pre-game season leaders** switch, on to start, adds the season leaders before the game. Like the situation switches, it shows only on a panel that follows a sport it covers: football, baseball, basketball or hockey.
 

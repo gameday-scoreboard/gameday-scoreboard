@@ -57,6 +57,7 @@ A new Flights page shows the planes over your home, women's college basketball j
 
 ### 🐛 Fixes
 
+- 🏀 Basketball's two bottom rows tell the story on a 128-wide board: the team in its color and what's happening ("USA on a 16-2 run", "FAMU scoreless 4:24", "FAMU three"), then the detail under it ("7 of 13 shooting", "Baker Jr. from 25 feet"). A timeout brings both teams' shooting, threes and rebounds, players checking in stay off the ticker, and a missed shot no longer shows as the last basket
 - 🏙️ A town typed for Weather while the Clock, Effects or the Smart board is up is looked up right away, instead of waiting for the Scoreboard
 - ⏱️ The device page's Weather card counts up the time since the last forecast read, where it could stay on the same number for minutes
 - 🎆 Editing the effect playlist that's playing no longer starts it over: it carries on from the effect that's up, and a change to that effect shows at once
@@ -66,6 +67,8 @@ A new Flights page shows the planes over your home, women's college basketball j
 - 🏷️ Home Assistant lists the panel as **Scoreboard by Game Day** instead of gameday-scoreboard by bharvey88
 - 🔎 Loading the scoreboard says **Looking for** and your team, or the live games it follows, instead of Looking up scores
 - 🖼️ Adding a picture while a message card on **Whenever no game is on** holds the board says so, and which setting to change, instead of "It's up next"
+- 🌇 The kickoff forecast shows a sun until sunset at the stadium, where a 5 PM kickoff in early November could show a moon with the sun still up
+- 🌙 Night mode turned off for a night that starts between 1 and 2 AM stays off when the clocks go back, instead of the panel dimming again at the second start
 - 📅 **Date countdown** reads **Today** until midnight on the day the clocks go back, and is gone at midnight on the day they go forward, where it ended an hour early or late
 
 ## v2026.11.5

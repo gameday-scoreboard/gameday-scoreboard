@@ -45,7 +45,7 @@
 #include "flights_page.h"
 #include "fx_playlists.h"
 #include "game_leaders.h"
-#include "row_text.h"
+#include "story_rows.h"
 #include "guard.h"
 #include "ha_events.h"
 #include "board_text.h"
@@ -1758,14 +1758,19 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // The board game's scores as they went by, for the halftime and final
   // tickers (score_log.h): about 1 KB of internal RAM for two games.
   ::espn::ScoreLog score_log_;
-  // The board game's last basket, held until the next (row_text.h), and
-  // the row's news so far: the page jumps to the lead line when it changes.
+  // The board game's last play worth reading (row_text.h), and the row's
+  // news so far: the page jumps to the news when it changes.
   ::espn::RowHold row_hold_;
+  // What is happening in each basketball game on the board or among the
+  // favorites (story.h), in PSRAM.
+  ::espn::StoryBook stories_;
   // When the board game's win chance shows (row_text.h WinSwing): after a
   // score, a turnover or a big move, not on every turn of the row.
   ::espn::WinSwing win_swing_;
   std::string row_news_;
   uint32_t row_news_n_{0};
+  uint32_t row_story_n_{0}, row_play_n_{0};
+  uint8_t row_jump_{0};
   // Hockey's latest goal per game, for the row under the clock: four games,
   // about 200 bytes (sport_hockey.cpp).
   ::espn::GoalHolds goal_holds_;
