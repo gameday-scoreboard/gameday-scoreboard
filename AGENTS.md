@@ -19,8 +19,8 @@ is the short version.
   The installer offers the Waveshare and both MoonHub75 builds, Waveshare
   first; the Waveshare build ran on a board for the first time on 2026-11-25.
   `firmware/gameday-waveshare-demo.yaml`, `firmware/gameday-demo.yaml` and
-  `firmware/gameday-scoreboard75-demo.yaml` add the scripted demo (`firmware/pages/demo.yaml`) for test builds; they
-  are never released.
+  `firmware/gameday-scoreboard75-demo.yaml` add the scripted demo
+  (`firmware/pages/demo.yaml`) for test builds; they are never released.
 - `components/gameday`: ESPN fetching, parsing and game logic (C++).
 - `components/panel_layout`: the one-panel or two-panel layout, applied at
   boot from a saved preference.

@@ -34,4 +34,4 @@ If the installer says the browser can't talk to the controller over USB, switch 
 
 ## Built your own?
 
-The same installer works on a MoonHub75 board, your own ESP32-S3 board wired to the MoonHub75 pinout, or a Waveshare ESP32-S3-RGB-Matrix. See [Install on your own board](/diy/install/).
+The same installer works on a Waveshare ESP32-S3-RGB-Matrix, a MoonHub75 board, or your own ESP32-S3 board wired to the MoonHub75 pinout. See [Install on your own board](/diy/install/).
