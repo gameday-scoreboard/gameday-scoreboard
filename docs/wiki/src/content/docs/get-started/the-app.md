@@ -175,6 +175,10 @@ On iPhone and Android, **After the game** also has **Show the Smart board**: you
 :::
 
 :::note[Coming in the next app update]
+On iPhone, **After the game** also has **Show the weather**: the [Weather](/using/weather/) page between games, until the **Turns on** time before your next game. **Turns on** shows with it too. It shows once the panel runs firmware with the Weather page.
+:::
+
+:::note[Coming in the next app update]
 On iPhone and Android, **After the game** also has **Show effects**: the effect the Effects page is set to, whenever no game of yours is on, until the **Turns on** time before your next game. See [Between games](/using/effects/#between-games).
 :::
 
