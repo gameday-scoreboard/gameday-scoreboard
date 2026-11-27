@@ -465,7 +465,9 @@ static image::Image *load(TestLogoCache &c, http_request::HttpRequestComponent &
   c.setup();
   c.get(url(1));
   run_task(c);
-  c.loop();
+  // A shrink takes a pass for the decode and three for the vote.
+  for (int i = 0; i < 6; i++)
+    c.loop();
   return c.get(url(1));
 }
 
@@ -517,7 +519,7 @@ static void test_no_psram_decodes_straight() {
   image::Image *img = load(c, http, png_header(128, 128));
   CHECK(img != nullptr);
   CHECK(img != nullptr && painted(img).empty());
-  CHECK(fake_log::warnings == 2);
+  CHECK(fake_log::warnings == 1);
   CHECK(runtime_image::fake_decoder::live == 0);
 }
 
@@ -548,6 +550,57 @@ static void test_other_sizes_decode_straight() {
   }
 }
 
+// The shrink spreads over loop() passes: the logo is not ready after the
+// pass that starts it, nor while the vote runs, and a pass that finishes it
+// says so. A second logo downloaded meanwhile waits its turn, and is shrunk
+// after. Nothing drops the logo being shrunk to make room.
+static void test_shrink_takes_passes() {
+  reset_fakes();
+  runtime_image::fake_decoder::fill = 0xFFFFFFFF;
+  http_request::HttpRequestComponent http;
+  http.replies[url(1)] = {200, png_header(128, 128)};
+  http.replies[url(2)] = {200, png_header(128, 128)};
+  TestLogoCache c;
+  c.set_http(&http);
+  c.setup();
+  c.get(url(1));
+  c.get(url(2));
+  run_task(c);
+  // Pass 1 starts the first shrink, pass 2 decodes, passes 3 to 5 vote.
+  int first_ready_at = 0, second_ready_at = 0;
+  for (int pass = 1; pass <= 12; pass++) {
+    bool ready = c.loop();
+    if (first_ready_at == 0 && c.get(url(1)) != nullptr) {
+      first_ready_at = pass;
+      CHECK(ready);
+    }
+    if (second_ready_at == 0 && c.get(url(2)) != nullptr)
+      second_ready_at = pass;
+    if (pass == 1)
+      CHECK(fake_heap::psram_blocks == 1);
+  }
+  CHECK(first_ready_at == 5);
+  CHECK(second_ready_at == 10);
+  CHECK(fake_heap::psram_blocks == 0);
+  CHECK(runtime_image::fake_decoder::live == 0);
+  CHECK(c.waiting(url(1)) == false);
+}
+
+// While a logo is being shrunk it is on its way: the board waits for it.
+static void test_shrinking_logo_is_waiting() {
+  reset_fakes();
+  http_request::HttpRequestComponent http;
+  http.replies[url(1)] = {200, png_header(64, 64)};
+  TestLogoCache c;
+  c.set_http(&http);
+  c.setup();
+  c.get(url(1));
+  run_task(c);
+  c.loop();
+  CHECK(c.get(url(1)) == nullptr);
+  CHECK(c.waiting(url(1)));
+}
+
 int main() {
   test_download_decode_drops_the_decoder();
   test_full_cache_holds_no_decoders();
@@ -566,6 +619,8 @@ int main() {
   test_no_psram_decodes_straight();
   test_wrong_size_decodes_straight();
   test_other_sizes_decode_straight();
+  test_shrink_takes_passes();
+  test_shrinking_logo_is_waiting();
   printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;
 }

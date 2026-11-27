@@ -17,6 +17,8 @@ The Game Day Scoreboard ships with one 128x64 panel, and its firmware starts on 
 
 ## What each layout shows
 
+Team logos are 32 LEDs square in every layout. The panel makes each one from ESPN's logo, giving every LED one of the logo's own colors, so thin outlines and letters stay whole and white lines stay white instead of turning gray.
+
 ### Wide: 128x64
 
 The logos sit at the far edges with the abbreviations and big scores between them. Under the scores is the game clock, and under that the situation row: down and distance in football, red in the red zone; the count, a diamond of the runners and the outs in baseball; the latest goal in soccer; a team and what is happening to it in basketball, with the detail on the row below ([Basketball](/using/basketball/#during-the-game)); the finished sets in volleyball. The records sit under the logos, with football's timeout pips or soccer's red card marks under them. The ticker runs along the bottom.

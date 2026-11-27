@@ -138,7 +138,8 @@ void LogoCache::make_room_() {
   std::vector<::espn::LogoSlot> slots;
   slots.reserve(this->entries_.size());
   for (auto &e : this->entries_) {
-    bool busy = e->state == State::QUEUED || e->state == State::LOADING || e->state == State::DOWNLOADED;
+    bool busy = e->state == State::QUEUED || e->state == State::LOADING || e->state == State::DOWNLOADED ||
+                e->state == State::DECODING;
     bool pinned = this->pinned_url_(e->url);
     slots.push_back({e->used_ms, busy, pinned});
   }
@@ -300,60 +301,95 @@ bool LogoCache::Logo::paint(const uint32_t *px) {
   return true;
 }
 
-// Decodes a size x size logo at full size into PSRAM and shrinks it with
-// logo_shrink.h, so thin lines survive. One PSRAM block holds the decoded
-// picture (64 KB for 128 px), the shrink's scratch (64 KB) and its result, and
-// is freed before this returns, as is the decoder. False when PSRAM has no
-// block that big or the PNG does not decode at the size its header gave.
-bool LogoCache::shrink_(Logo &logo, const Bytes &body, int size) {
-  runtime_image::RuntimeImage src(runtime_image::PNG, image::IMAGE_TYPE_RGB, image::TRANSPARENCY_ALPHA_CHANNEL);
-  const size_t pixels = src.get_buffer_size(size, size);
-  const size_t words = ::espn::shrink::scratch_words(size) + (size_t) LOGO_SIZE * LOGO_SIZE;
-  if (pixels != (size_t) size * size * 4)
-    return false;
-  auto *mem = static_cast<uint8_t *>(heap_caps_malloc(pixels + words * 4, MALLOC_CAP_SPIRAM));
-  if (mem == nullptr) {
-    ESP_LOGW(TAG, "No PSRAM to shrink a %d px logo (largest free block %u bytes)", size,
-             (unsigned) heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM));
-    return false;
-  }
-  const uint32_t start = millis();
-  memset(mem, 0, pixels);
-  auto *scratch = reinterpret_cast<uint32_t *>(mem + pixels);
-  uint32_t *out = scratch + ::espn::shrink::scratch_words(size);
-  bool ok = src.set_external_buffer(mem, size, size) && src.begin_decode(body.size()) && feed(src, body) &&
-            src.get_width() == size && src.get_height() == size;
-  if (ok) {
-    ::espn::shrink::rare_vote(src.get_data_start(), size, scratch, out);
-    ok = logo.paint(out);
-  }
+LogoCache::Shrink::~Shrink() {
   // Lets go of the buffer and ends any decode before the buffer is freed.
-  src.release();
-  heap_caps_free(mem);
-  if (ok)
-    ESP_LOGD(TAG, "Shrank a %d px logo to %d px in %u ms", size, LOGO_SIZE, (unsigned) (millis() - start));
-  return ok;
+  this->src.release();
+  if (this->mem != nullptr)
+    heap_caps_free(this->mem);
 }
 
-// Decodes into the entry itself, so the image object lives in PSRAM with it.
-// Safe without the lock: the entry is DOWNLOADED until the caller marks it
-// READY, so nothing draws it and nothing drops it.
-//
-// A logo the shrink takes (logo_shrink.h, fits()) is shrunk by it. Any other,
-// or one it could not shrink, is decoded straight to 32 px, which keeps one
-// source pixel per LED.
+// Starts shrinking a logo the shrink takes (logo_shrink.h, fits()), taking its
+// body. False, with the body left alone, for any other logo, or when PSRAM has
+// no block for the full-size picture; the caller then decodes it straight.
+bool LogoCache::start_shrink_(Entry *job, Bytes &body) {
+  int w = 0, h = 0;
+  if (!::espn::shrink::png_size(body.data(), body.size(), w, h) || !::espn::shrink::fits(w, h))
+    return false;
+  std::unique_ptr<Shrink> s(new Shrink());
+  const size_t pixels = s->src.get_buffer_size(w, h);
+  if (pixels != (size_t) w * h * 4)
+    return false;
+  const size_t words = ::espn::shrink::scratch_words(w) + (size_t) LOGO_SIZE * LOGO_SIZE;
+  s->mem = static_cast<uint8_t *>(heap_caps_malloc(pixels + words * 4, MALLOC_CAP_SPIRAM));
+  if (s->mem == nullptr) {
+    ESP_LOGW(TAG, "No PSRAM to shrink a %d px logo (largest free block %u bytes); decoding it straight to %d px", w,
+             (unsigned) heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM), LOGO_SIZE);
+    return false;
+  }
+  memset(s->mem, 0, pixels);
+  s->size = w;
+  if (!s->src.set_external_buffer(s->mem, w, h) || !s->src.begin_decode(body.size())) {
+    ESP_LOGW(TAG, "Could not start decoding a %d px logo; decoding it straight to %d px", w, LOGO_SIZE);
+    return false;
+  }
+  s->job = job;
+  s->body = std::move(body);
+  s->started_ms = millis();
+  job->image.emplace(runtime_image::PNG, image::IMAGE_TYPE_RGB565, image::TRANSPARENCY_ALPHA_CHANNEL, nullptr, false,
+                     LOGO_SIZE, LOGO_SIZE);
+  this->shrink_ = std::move(s);
+  return true;
+}
+
+// One step of the logo being shrunk. True when a logo became ready.
+bool LogoCache::shrink_step_() {
+  Shrink &w = *this->shrink_;
+  w.passes++;
+  bool ok = true;
+  if (!w.vote.has_value()) {
+    // feed_data takes a non-const pointer but only reads it.
+    int used = w.src.feed_data(w.body.data() + w.offset, w.body.size() - w.offset);
+    if (used < 0) {
+      ESP_LOGW(TAG, "Logo decode error: %s", runtime_image::decode_error_to_string(used));
+      ok = false;
+    } else {
+      w.offset += (size_t) used;
+      if (w.offset < w.body.size() && used > 0)
+        return false;  // more next pass
+      ok = w.src.end_decode() && w.src.get_width() == w.size && w.src.get_height() == w.size;
+      if (ok) {
+        w.vote.emplace(w.src.get_data_start(), w.size, w.scratch(), w.out());
+        return false;
+      }
+      ESP_LOGW(TAG, "A %d px logo decoded at %dx%d", w.size, w.src.get_width(), w.src.get_height());
+    }
+  } else if (!w.vote->step()) {
+    return false;
+  } else {
+    ok = w.job->image->paint(w.out());
+  }
+  Entry *job = w.job;
+  Bytes body = std::move(w.body);
+  if (ok)
+    ESP_LOGD(TAG, "Shrank a %d px logo to %d px in %u passes, %u ms", w.size, LOGO_SIZE, (unsigned) w.passes,
+             (unsigned) (millis() - w.started_ms));
+  this->shrink_.reset();
+  // The logos that came in meanwhile wait for the next pass.
+  this->downloaded_ = true;
+  if (!ok) {
+    ESP_LOGW(TAG, "Could not shrink a logo; decoding it straight to %d px", LOGO_SIZE);
+    ok = this->decode_(job->image, body);
+  }
+  return this->finish_(job, ok);
+}
+
+// Decodes straight to 32 px, into the entry itself, so the image object lives
+// in PSRAM with it. The decoder keeps one source pixel per LED. Safe without
+// the lock: the entry is DECODING until finish_() marks it, so nothing draws
+// it and nothing drops it.
 bool LogoCache::decode_(std::optional<Logo> &image, const Bytes &body) {
   image.emplace(runtime_image::PNG, image::IMAGE_TYPE_RGB565, image::TRANSPARENCY_ALPHA_CHANNEL, nullptr, false,
                 LOGO_SIZE, LOGO_SIZE);
-  int w = 0, h = 0;
-  if (::espn::shrink::png_size(body.data(), body.size(), w, h) && ::espn::shrink::fits(w, h)) {
-    if (this->shrink_(*image, body, w))
-      return true;
-    ESP_LOGW(TAG, "Could not shrink a %dx%d logo; decoding it straight to %d px", w, h, LOGO_SIZE);
-    image.reset();
-    image.emplace(runtime_image::PNG, image::IMAGE_TYPE_RGB565, image::TRANSPARENCY_ALPHA_CHANNEL, nullptr, false,
-                  LOGO_SIZE, LOGO_SIZE);
-  }
   bool ok = image->begin_decode(body.size()) && feed(*image, body);
   if (ok) {
     image->drop_decoder();
@@ -363,10 +399,29 @@ bool LogoCache::decode_(std::optional<Logo> &image, const Bytes &body) {
   return ok;
 }
 
+// Marks a decoded or failed logo. Returns ok.
+bool LogoCache::finish_(Entry *job, bool ok) {
+  Locked guard(this->lock_);
+  if (ok) {
+    job->state = State::READY;
+    ::espn::logo_loaded(job->fails, job->wait_ms);
+  } else {
+    job->image.reset();
+    job->state = State::FAILED;
+    job->failed_ms = millis();
+    ::espn::logo_failed(job->fails, job->wait_ms, false, 0, random_uint32());
+  }
+  return ok;
+}
+
+// A logo the shrink takes is shrunk a step a pass, and the logos downloaded
+// after it wait for it. Any other is decoded straight, all in one pass.
 bool LogoCache::loop() {
   if (this->lock_ == nullptr)
     return false;
   this->retry_(millis());
+  if (this->shrink_ != nullptr)
+    return this->shrink_step_();
   if (!this->downloaded_.exchange(false))
     return false;
   bool ready = false;
@@ -380,24 +435,20 @@ bool LogoCache::loop() {
           job = e.get();
           body = std::move(e->body);
           e->body = {};
+          e->state = State::DECODING;
           break;
         }
       }
     }
     if (job == nullptr)
       return ready;
-    // Only the main loop drops entries, so job stays valid without the lock.
-    bool ok = this->decode_(job->image, body);
-    Locked guard(this->lock_);
-    if (ok) {
-      job->state = State::READY;
-      ::espn::logo_loaded(job->fails, job->wait_ms);
-      ready = true;
-    } else {
-      job->state = State::FAILED;
-      job->failed_ms = millis();
-      ::espn::logo_failed(job->fails, job->wait_ms, false, 0, random_uint32());
+    // Only the main loop drops entries, and never a DECODING one, so job
+    // stays valid without the lock.
+    if (this->start_shrink_(job, body)) {
+      this->downloaded_ = true;  // the rest wait for it
+      return ready;
     }
+    ready |= this->finish_(job, this->decode_(job->image, body));
   }
 }
 
