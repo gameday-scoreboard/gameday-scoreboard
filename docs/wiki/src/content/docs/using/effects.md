@@ -52,7 +52,7 @@ It only takes over while **Showing** is on **Scoreboard**: with the Clock, the S
 With **After the game** on **Show effects**, the effect between games changes for three holidays:
 
 - **July 4**: fireworks in red, white and blue (**PS Fireworks**).
-- **Halloween**, October 31: orange glowing eyes (**Halloween Eyes**).
+- **Halloween**, October 31: ghosts swirling in orange and purple (**PS Ghost Rider**).
 - **Christmas**, December 24 to 26: falling snow (**Snow Fall**).
 
 The holiday's effect plays all day, from midnight to midnight on the panel's own clock. The next day, or once your next game is near, your own effect, palette, speed and intensity come back as you had them. If you pick an effect, palette, speed or intensity during a holiday, the panel keeps yours, and the holiday's effect comes back the next time the panel plays effects between games.

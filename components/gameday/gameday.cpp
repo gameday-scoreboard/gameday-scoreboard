@@ -1315,9 +1315,19 @@ void GamedayComponent::fx_theme_tick_() {
   } else if (team) {
     const GameSnapshot &g = this->game_;
     const bool live = g.valid && g.state == GameState::IN;
-    const std::string &color = g.valid ? g.team_color : this->schedule_.team_color;
-    want = ::espn::fx_team_slots(::espn::parse_color(color), live, ::espn::parse_color(g.opp_color),
-                                 h.bg_slot != nullptr && h.bg_slot());
+    // The board's game, else the team's schedule, else (Favorites) the
+    // favorite on the board, as the countdown screen picks it.
+    const std::string *color = g.valid ? &g.team_color : &this->schedule_.team_color;
+    if (!g.valid && this->favorites_mode_() && !this->fav_.empty())
+      color = &this->fav_[this->fav_shown_ >= 0 && (size_t) this->fav_shown_ < this->fav_.size() ? this->fav_shown_ : 0]
+                   .sched.team_color;
+    // No color until ESPN's first read: keep what the slots have rather
+    // than draw the team white for a moment.
+    if (color->empty())
+      want = this->fx_slots_;
+    else
+      want = ::espn::fx_team_slots(::espn::parse_color(*color), live, ::espn::parse_color(g.opp_color),
+                                   h.bg_slot != nullptr && h.bg_slot());
   } else {
     want = ::espn::fx_wled_slots();
   }

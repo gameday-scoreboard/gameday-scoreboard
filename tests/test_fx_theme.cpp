@@ -50,13 +50,13 @@ void test_slots() {
   // A black team draws white, and its second is then gold.
   s = fx_team_slots(0x000000, false, 0, false);
   TCHECK(s.c[0] == 0xFFFFFF && s.c[1] == 0xFFD000, "black team");
-  TCHECK(fx_wled_slots().c[0] == 0xFFAA00 && fx_wled_slots().c[1] == 0, "WLED's own");
+  TCHECK(fx_wled_slots().c[0] == 0xFFA000 && fx_wled_slots().c[1] == 0, "WLED's own");
 }
 
 void test_dates() {
   TCHECK(holiday_on(7, 4) >= 0 && strcmp(kHolidays[holiday_on(7, 4)].name, "July 4") == 0, "July 4");
   TCHECK(holiday_on(7, 3) < 0 && holiday_on(7, 5) < 0, "around July 4");
-  TCHECK(holiday_on(10, 31) >= 0 && strcmp(kHolidays[holiday_on(10, 31)].effect, "Halloween Eyes") == 0,
+  TCHECK(holiday_on(10, 31) >= 0 && strcmp(kHolidays[holiday_on(10, 31)].effect, "PS Ghost Rider") == 0,
          "Halloween");
   TCHECK(holiday_on(10, 30) < 0 && holiday_on(11, 1) < 0, "around Halloween");
   for (int d = 24; d <= 26; d++)

@@ -42,7 +42,7 @@ Effects play in your team's colors, and holiday effects come on by themselves fo
 ### ✨ New
 
 - 🎨 Effects start on your team's colors, with your opponent's during a live game
-- 🎄 **Holiday effects** under **After the game**: fireworks on July 4, glowing eyes on Halloween and snow December 24 to 26 when **Show effects** is picked
+- 🎄 **Holiday effects** under **After the game**: fireworks on July 4, ghosts on Halloween and snow December 24 to 26 when **Show effects** is picked
 
 ## v2026.11.6
 

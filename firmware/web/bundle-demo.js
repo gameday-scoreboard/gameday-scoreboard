@@ -252,7 +252,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
             <div class="ctl"><label for="afterGame">After the game<small id="afterHint"></small></label><select id="afterGame">
               <option value="scoreboard">Stay on the scoreboard</option><option value="off">Turn off</option><option value="clock">Show the clock</option><option value="smartboard">Show the Smart board</option><option value="effects">Show effects</option><option value="flights">Show flights</option><option value="weather">Show the weather</option>
             </select></div>
-            <div class="ctl" id="holidayRow" hidden><label>Holiday effects<small>On July 4, Halloween and December 24 to 26, the effect between games is the holiday's: fireworks, glowing eyes or falling snow. Your own effect comes back the next day.</small></label><button class="sw" data-set="holidayfx" aria-label="Holiday effects"></button></div>
+            <div class="ctl" id="holidayRow" hidden><label>Holiday effects<small>On July 4, Halloween and December 24 to 26, the effect between games is the holiday's: fireworks, ghosts or falling snow. Your own effect comes back the next day.</small></label><button class="sw" data-set="holidayfx" aria-label="Holiday effects"></button></div>
           </div>
         </div>
       </div>

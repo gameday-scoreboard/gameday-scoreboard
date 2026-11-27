@@ -59,10 +59,10 @@ struct FxSlots {
   bool operator!=(const FxSlots &o) const { return !(*this == o); }
 };
 
-// WLED's own slots, what wled_fx starts with: orange, then black, black.
+// What wled_fx starts its slots on (wf_segment.h): orange, then black, black.
 inline FxSlots fx_wled_slots() {
   FxSlots s;
-  s.c[0] = 0xFFAA00;
+  s.c[0] = 0xFFA000;
   return s;
 }
 
@@ -106,17 +106,21 @@ struct Holiday {
   const char *name;
   const char *effect;   // in the Effect select's spelling (pages/effects.yaml)
   const char *palette;  // in the Effect Palette select's spelling
-  uint8_t speed;        // the effect's own defaults
+  uint8_t speed;
   uint8_t intensity;
   uint32_t c[3];  // the color slots
 };
 
-// PS Fireworks draws from the palette only, so its slot 2 can be white;
-// Halloween Eyes draws its eyes in slot 1 on "Default" and Snow Fall its
-// snow in white, both over slot 2 as the background.
+// PS Fireworks and PS Ghost Rider draw from the palette only, so their slot
+// 2 can be a color; Snow Fall draws its snow in white over slot 2 as the
+// background. Halloween Eyes was the obvious pick, but its eyes are two
+// pixels each on a 64-wide panel and off 16 to 32 s at a time, so the
+// screen sat dark. PS Fireworks at 200 and 120 bursts often enough to read
+// as fireworks on a 64x64 panel (its defaults, 128 and 50, mostly show the
+// dark sky).
 inline constexpr Holiday kHolidays[] = {
-    {7, 4, 4, "July 4", "PS Fireworks", "* Colors Only", 128, 50, {0xFF0000, 0xFFFFFF, 0x0030FF}},
-    {10, 31, 31, "Halloween", "Halloween Eyes", "Default", 128, 128, {0xFF5000, 0x000000, 0x000000}},
+    {7, 4, 4, "July 4", "PS Fireworks", "* Colors Only", 200, 120, {0xFF0000, 0xFFFFFF, 0x0030FF}},
+    {10, 31, 31, "Halloween", "PS Ghost Rider", "* Colors Only", 70, 0, {0xFF5000, 0x8000FF, 0x000000}},
     {12, 24, 26, "Christmas", "Snow Fall", "Default", 128, 128, {0xFFFFFF, 0x000000, 0x000000}},
 };
 inline constexpr int kHolidayCount = (int) (sizeof(kHolidays) / sizeof(kHolidays[0]));
