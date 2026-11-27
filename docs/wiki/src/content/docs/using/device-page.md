@@ -120,6 +120,7 @@ The chooser is for favorites only.
 | **Night schedule** | Off to start. Dims the panel, or turns the screen off, between **Starts at** and **Ends at**. **Screen at night** On keeps it lit at **Night brightness**, Off turns it dark. A live game of your team or a favorite keeps it at normal brightness. The remote, a team pick or **Panel on** turns it off for the rest of the night. See [Night schedule](/using/brightness-and-clock/#night-schedule). |
 | **Game-day wake** | Off to start. Turns a panel you switched off back on before a game of your team or a favorite, **Turns on** 5 minutes to 2 hours before (15 to start). See [Game-day wake and after the game](/using/brightness-and-clock/#game-day-wake-and-after-the-game). |
 | **After the game** | What the panel does once the final has been up a while: **Stay on the scoreboard** (to start), **Turn off**, **Show the clock**, **Show the Smart board**, **Show effects**, **Show flights** or **Show the weather** until your next game is close. |
+| **Holiday effects** | On to start, and only shown with **Show effects**. On July 4, Halloween and December 24 to 26, the effect between games is the holiday's. See [Holiday effects](/using/effects/#holiday-effects). |
 
 ### Ticker
 
@@ -229,6 +230,8 @@ The next sections are folded shut, each with a one-line summary. Tap one to open
 ### Diagnostics
 
 **Diagnostics** says why the panel last restarted and when (power on, restart, update, crash, froze or a power dip), any crash, freeze or power dip since it was plugged in, free memory, the chip temperature, power dips, the last read from ESPN and the firmware version and build. Under **Signal**, the panel's Wi-Fi signal, it draws the last day of signal, says when the signal is weak, and counts **Wi-Fi drops** with the cause of the last one. **ESPN data** is how much the panel has downloaded from ESPN since it started, for anyone on a capped internet plan.
+
+**Log detail** sets how much the panel writes to its log: **INFO** normally, which keeps the log to what matters. When you're chasing a problem, or support asks for a log, set it to **DEBUG** for every ESPN read and network step. It goes back to INFO the next time the panel restarts. Home Assistant has the same setting as **Log Level**.
 
 While a new release waits, **Diagnostics** also shows **Update ready on the ticker**: when the ticker last started saying so. See [Update ready on the ticker](/using/updates/#update-ready-on-the-ticker).
 

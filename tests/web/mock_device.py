@@ -200,7 +200,7 @@ INITIAL = {
     # night.h: the schedule, and what it is doing now ("", "dim", "off", "game", "skipped")
     "night": False, "nightstart": "23:00", "nightend": "07:00", "nightscreen": True, "nightlevel": 16, "night_now": "",
     # wake.h: Game-day wake, After the game, and what it is doing now ("", "asleep", "clock")
-    "wake": False, "wakelead": 15, "after": "scoreboard", "wake_now": "",
+    "wake": False, "wakelead": 15, "after": "scoreboard", "holidayfx": True, "wake_now": "",
     "misses": 0, "captive": False, "stale_s": 4, "fallback": False, "recap": False, "espn_kb": 412, "espn_reads": 23,
     # GamedayComponent::health_json_(), added at the end of each read.
     "health": {"up": 7260, "start": "restart", "boots": 2, "fault": "crash", "fault_ago": 90000,
@@ -1139,6 +1139,8 @@ def apply_set(kv):
         elif k == "after":
             if v in AFTER:
                 STATE["after"] = v
+        elif k == "holidayfx":
+            STATE["holidayfx"] = v == "1"
         elif k == "celebrate":
             if v in ("0", "1", "2"):
                 STATE["celebrate"] = int(v)

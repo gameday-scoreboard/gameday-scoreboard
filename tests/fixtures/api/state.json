@@ -230,6 +230,7 @@
   "wake": true,
   "wakelead": 15,
   "after": "off",
+  "holidayfx": true,
   "wake_now": "",
   "autoupd": false,
   "beta": false,

@@ -11,13 +11,14 @@ ifeq ($(OS),Windows_NT)
 LDFLAGS += -static
 endif
 
-all: build/test_parse build/test_networks build/test_api build/test_settings build/test_logo_cache build/test_logo_cache_asan build/test_picture build/test_celebrate build/test_celeb_football build/test_celeb_hockey build/test_celeb_baseball build/test_celeb_soccer build/test_volleyball build/test_smart_board build/test_flights build/test_weather_page build/test_clock
+all: build/test_parse build/test_networks build/test_api build/test_settings build/test_logo_cache build/test_logo_cache_asan build/test_logo_shrink build/test_picture build/test_celebrate build/test_celeb_football build/test_celeb_hockey build/test_celeb_baseball build/test_celeb_soccer build/test_volleyball build/test_smart_board build/test_flights build/test_weather_page build/test_clock
 	./build/test_parse
 	./build/test_networks
 	./build/test_api
 	./build/test_settings
 	./build/test_logo_cache
 	./build/test_logo_cache_asan
+	./build/test_logo_shrink
 	./build/test_picture
 	./build/test_celebrate
 	./build/test_celeb_football
@@ -30,7 +31,7 @@ all: build/test_parse build/test_networks build/test_api build/test_settings bui
 	./build/test_weather_page
 	./build/test_clock
 
-SRCS = test_parse.cpp golden_football.cpp test_set.cpp test_fx_playlists.cpp ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp ../components/gameday/sport_volleyball.cpp
+SRCS = test_parse.cpp golden_football.cpp test_set.cpp test_fx_playlists.cpp test_fx_theme.cpp ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp ../components/gameday/sport_volleyball.cpp
 PARSER_ONLY = ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp ../components/gameday/sport_volleyball.cpp
 
 build/test_parse: build/miniz.o $(SRCS) $(wildcard ../components/gameday/*.h) miniz.h
@@ -127,15 +128,20 @@ build/test_settings: test_settings.cpp $(wildcard ../components/gameday/*.h)
 
 # The logo cache's state machine, with FreeRTOS, http_request and RuntimeImage
 # replaced by the stand-ins in logo_stubs/.
-build/test_logo_cache: test_logo_cache.cpp ../components/gameday/logo_cache.cpp ../components/gameday/logo_cache.h ../components/gameday/logo_lru.h $(wildcard logo_stubs/*.h logo_stubs/*/*.h logo_stubs/*/*/*.h logo_stubs/*/*/*/*.h)
+build/test_logo_cache: test_logo_cache.cpp ../components/gameday/logo_cache.cpp ../components/gameday/logo_cache.h ../components/gameday/logo_lru.h ../components/gameday/logo_shrink.h $(wildcard logo_stubs/*.h logo_stubs/*/*.h logo_stubs/*/*/*.h logo_stubs/*/*/*/*.h)
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) -Ilogo_stubs test_logo_cache.cpp ../components/gameday/logo_cache.cpp -o $@ $(LDFLAGS)
 
 # The same with the address sanitizer, which stops on a logo freed while the
 # logo task still writes to it (test_full_cache_keeps_busy_logos).
-build/test_logo_cache_asan: test_logo_cache.cpp ../components/gameday/logo_cache.cpp ../components/gameday/logo_cache.h ../components/gameday/logo_lru.h $(wildcard logo_stubs/*.h logo_stubs/*/*.h logo_stubs/*/*/*.h logo_stubs/*/*/*/*.h)
+build/test_logo_cache_asan: test_logo_cache.cpp ../components/gameday/logo_cache.cpp ../components/gameday/logo_cache.h ../components/gameday/logo_lru.h ../components/gameday/logo_shrink.h $(wildcard logo_stubs/*.h logo_stubs/*/*.h logo_stubs/*/*/*.h logo_stubs/*/*/*/*.h)
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) -g -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=all -Ilogo_stubs test_logo_cache.cpp ../components/gameday/logo_cache.cpp -o $@
+
+# The logo shrink, from hand-made sources.
+build/test_logo_shrink: test_logo_shrink.cpp ../components/gameday/logo_shrink.h
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) -fsanitize=address,undefined test_logo_shrink.cpp -o $@
 
 # The picture card's GIF player and upload checks, against fixtures/pictures/.
 build/test_picture: test_picture.cpp $(wildcard ../components/gameday/*.h)

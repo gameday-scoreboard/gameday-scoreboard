@@ -37,6 +37,15 @@ through `update_important` in the panel's state.
 
 ## Unreleased
 
+Effects play in your team's colors, and with After the game on Show effects, holiday effects come on for July 4, Halloween and Christmas.
+
+### ✨ New
+
+- 🎨 Effects start on your team's colors, with your opponent's during a live game
+- 🎄 **Holiday effects** under **After the game**: fireworks on July 4, ghosts on Halloween and snow December 24 to 26 when **Show effects** is picked
+
+## v2026.11.6
+
 A new Flights page shows the planes over your home, women's college basketball and volleyball join in, it can play an effect whenever no game of yours is on, a Game Day card shows a QR code between games, and Add network lists nearby Wi-Fi.
 
 ### ⚠️ Heads up
@@ -58,6 +67,7 @@ A new Flights page shows the planes over your home, women's college basketball a
 
 ### 🐛 Fixes
 
+- 🎨 Team logos keep their thin outlines and letters: each LED takes one of the logo's own colors, where thin lines could break into specks
 - 🏀 Basketball's two bottom rows tell the story on a 128-wide board: the team in its color and what's happening ("USA on a 16-2 run", "FAMU scoreless 4:24", "FAMU three"), then the detail under it ("7 of 13 shooting", "Baker Jr. from 25 feet"). A timeout brings both teams' shooting, threes and rebounds, players checking in stay off the ticker, and a missed shot no longer shows as the last basket
 - 🏙️ A town typed for Weather while the Clock, Effects or the Smart board is up is looked up right away, instead of waiting for the Scoreboard
 - ⏱️ The device page's Weather card counts up the time since the last forecast read, where it could stay on the same number for minutes
@@ -66,6 +76,7 @@ A new Flights page shows the planes over your home, women's college basketball a
 - 🌧️ **Speed** on the Rain effect slows it down now; before, it fell at the same pace at any speed
 - 🎮 A **Remote** button set to **Live games** or a league's live games, like **All NFL live games**, shows that name on the board for a moment, as a playlist's button does
 - 🏷️ Home Assistant lists the panel as **Scoreboard by Game Day** instead of gameday-scoreboard by bharvey88
+- 🪵 The panel's log stays at INFO, so it shows what matters; **Log detail** under Diagnostics, or **Log Level** in Home Assistant, turns on DEBUG while troubleshooting, until the next restart
 - 🔎 Loading the scoreboard says **Looking for** and your team, or the live games it follows, instead of Looking up scores
 - 🖼️ Adding a picture while a message card on **Whenever no game is on** holds the board says so, and which setting to change, instead of "It's up next"
 - 🌇 The kickoff forecast shows a sun until sunset at the stadium, where a 5 PM kickoff in early November could show a moon with the sun still up

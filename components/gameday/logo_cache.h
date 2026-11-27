@@ -16,6 +16,7 @@
 #include "esphome/components/http_request/http_request.h"
 #include "esphome/components/runtime_image/runtime_image.h"
 #include "esphome/core/static_task.h"
+#include "logo_shrink.h"
 #include "psram.h"
 
 namespace esphome::gameday {
@@ -76,9 +77,14 @@ class LogoCache {
   struct Logo : runtime_image::RuntimeImage {
     using RuntimeImage::RuntimeImage;
     void drop_decoder() { this->decoder_.reset(); }
+    // Shows 32x32 pixels the cache shrank itself (0xAARRGGBB, row by row),
+    // the way end_decode() shows a decoded picture. False when the buffer
+    // could not be allocated.
+    bool paint(const uint32_t *px);
   };
 
-  enum class State : uint8_t { QUEUED, LOADING, DOWNLOADED, READY, FAILED };
+  // DECODING: the main loop has the body and is decoding or shrinking it.
+  enum class State : uint8_t { QUEUED, LOADING, DOWNLOADED, DECODING, READY, FAILED };
   struct Entry {
     static void *operator new(size_t size) { return psram_alloc(size); }
     static void operator delete(void *p) { psram_free(p); }
@@ -93,10 +99,38 @@ class LogoCache {
     uint32_t wait_ms{0};  // how long after failed_ms to ask again
   };
 
+  // A logo being shrunk from its full size (logo_shrink.h), one step each
+  // loop() pass: the decode, which stops itself after 15 ms a call, then the
+  // three steps of the vote. Done at once, a 128 px logo held the main loop
+  // for about 95 ms. One PSRAM block holds the full-size picture, the vote's
+  // scratch and the 32 px result; it and the decoder go when this does.
+  // Main loop only.
+  struct Shrink {
+    static void *operator new(size_t size) { return psram_alloc(size); }
+    static void operator delete(void *p) { psram_free(p); }
+    Shrink() : src(runtime_image::PNG, image::IMAGE_TYPE_RGB, image::TRANSPARENCY_ALPHA_CHANNEL) {}
+    ~Shrink();
+    uint32_t *scratch() const { return reinterpret_cast<uint32_t *>(this->mem + (size_t) this->size * this->size * 4); }
+    uint32_t *out() const { return this->scratch() + ::espn::shrink::scratch_words(this->size); }
+
+    Entry *job{nullptr};  // DECODING while this lives, so nothing drops it
+    Bytes body;
+    runtime_image::RuntimeImage src;
+    uint8_t *mem{nullptr};
+    int size{0};
+    size_t offset{0};  // bytes of body the decoder has taken
+    std::optional<::espn::shrink::RareVote> vote;
+    uint32_t started_ms{0};
+    uint16_t passes{0};
+  };
+
   static void task_fn_(void *arg);
   void run_();
   bool download_(const std::string &url, Bytes &body, bool &throttled, uint32_t &retry_after_ms);
   bool decode_(std::optional<Logo> &image, const Bytes &body);
+  bool start_shrink_(Entry *job, Bytes &body);
+  bool shrink_step_();
+  bool finish_(Entry *job, bool ok);
   void make_room_();
   void start_task_();
   bool pinned_url_(std::string_view url) const;
@@ -112,6 +146,7 @@ class LogoCache {
   uint16_t start_fails_{0};  // failed task starts in a row
   std::atomic<bool> downloaded_{false};
   std::atomic<uint32_t> bytes_downloaded_{0};
+  std::unique_ptr<Shrink> shrink_;  // main loop only
 };
 
 }  // namespace esphome::gameday

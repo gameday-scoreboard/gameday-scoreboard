@@ -68,7 +68,10 @@ struct WakePrefs {
   uint8_t on;     // 1 = wake before a game
   uint8_t lead;   // minutes before the start
   uint8_t after;  // After
-  uint8_t spare[5];
+  // 1 = Holiday effects off (fx_theme.h). An "off" byte, so a spare byte
+  // from before it reads as on.
+  uint8_t noholiday;
+  uint8_t spare[4];
 } __attribute__((packed));
 static_assert(sizeof(WakePrefs) == 8,
               "WakePrefs is saved: a new size needs a new preference key or a migration, not a new number");
@@ -87,6 +90,7 @@ inline void wake_sanitize(WakePrefs &p) {
     p.lead = kWakeLeadDefault;
   if (p.after >= kAfterCount)
     p.after = (uint8_t) After::SCOREBOARD;
+  p.noholiday = p.noholiday ? 1 : 0;
 }
 
 // True from lead minutes before the kickoff until kWakeLateS after it.

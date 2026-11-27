@@ -42,6 +42,7 @@
   "wake": true,
   "wakelead": 15,
   "after": "off",
+  "holidayfx": true,
   "cards": {
     "next": true,
     "clock": false,
