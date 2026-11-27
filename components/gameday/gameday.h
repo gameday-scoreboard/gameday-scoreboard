@@ -35,14 +35,17 @@
 #include "best_game.h"
 #include "captive.h"
 #include "cards.h"
+#include "gameday_card.h"
 #include "celebrate.h"
 #include "celebrate_lvgl.h"
 #include "countdown.h"
 #include "espn_parse.h"
 #include "favorites.h"
+#include "flights.h"
+#include "flights_page.h"
 #include "fx_playlists.h"
 #include "game_leaders.h"
-#include "row_text.h"
+#include "story_rows.h"
 #include "guard.h"
 #include "ha_events.h"
 #include "board_text.h"
@@ -71,6 +74,7 @@
 #include "showing.h"
 #include "update_nudge.h"
 #include "weather.h"
+#include "weather_page.h"
 #include "wifi_history.h"
 #ifdef GAMEDAY_DEMO
 #include "demo.h"
@@ -243,7 +247,7 @@ class GamedaySelect : public select::Select, public Component {
 //                                    beta=0/1 (follow the beta channel; release builds only)
 //                                    lists=Name=nfl:6,nba:6;Name2=... (every playlist, playlists.h)
 //                                    list=0-16 (the playlist Favorite teams plays, 0 = every favorite)
-//                                    sport=football|baseball|basketball|hockey|soccer|none (a sport row)
+//                                    sport=football|baseball|basketball|hockey|soccer|volleyball|none (a sport row)
 //                                    a playlist's teams may carry its options as @ tokens (playlists.h ListOpt)
 //                                    fxlists=Name=Matrix|Party|128|128|15,...,@shuffle;Name2=... (every
 //                                    effect playlist, fx_playlists.h) fxlist=0-4 (play one, 0 stops)
@@ -442,6 +446,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   }
   // What the boot screen's hold says it is looking for (showing.h).
   std::string looking_for() const;
+  // The screen shows nothing: Power off, or the night schedule's screen-off.
+  // pages/guard.yaml pauses LVGL on the "screen" action while it is.
+  bool screen_dark() { return !(this->power_on_ && this->display_on()) || this->guard_brightness(255) == 0; }
   // pages/smart_board.yaml's gd_sb_pinned, read for showing_now_().
   void set_sb_pinned_ref(const bool *pinned) { this->sb_pinned_ = pinned; }
   // Stored inverted so panels from before this setting keep showing it.
@@ -560,6 +567,24 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // page goes up until the next game is near (pages/smart_board.yaml, on
   // the "smartboard" action, which fires each time this changes).
   bool smart_between() const { return this->wake_smart_; }
+  // pages/flights.yaml's gd_fl_pinned, read for showing_now_().
+  void set_fl_pinned_ref(const bool *pinned) { this->fl_pinned_ = pinned; }
+  // After the game is Flights and it is between games: the Flights page goes
+  // up until the next game is near (pages/flights.yaml, on the "flights"
+  // action, which fires each time this changes).
+  bool flights_between() const { return this->wake_fl_; }
+  // What the Flights page draws now (flights_page.h), wide for two panels:
+  // the last read's planes moved on to where they are now. Main loop only.
+  void flights_view(::espn::FlView &v, bool wide) const;
+  // pages/weather.yaml's gd_wxp_pinned, read for showing_now_().
+  void set_wxp_pinned_ref(const bool *pinned) { this->wxp_pinned_ = pinned; }
+  // After the game is Weather and it is between games: the Weather page goes
+  // up until the next game is near (pages/weather.yaml, on the "weather"
+  // action, which fires each time this changes).
+  bool weather_between() const { return this->wake_wxp_; }
+  // What the Weather page draws now (weather_page.h), wide for two panels.
+  // Main loop only.
+  void weather_view(::espn::WxPageView &v, bool wide) const;
   // After the game is Effects: the panel put the Effects page up itself,
   // between games, so the page's start doesn't count as somebody picking
   // it (no night skip, no lighting a dark panel). pages/effects.yaml.
@@ -579,6 +604,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // for the panel rolls up; the page says how long one pass takes, and the
   // card stays up at least that long.
   const std::string &msg_card() const { return this->msg_card_; }
+  // The Game Day card (gameday_card.h): its wording while it is up, -1
+  // while it is down (gd_gameday_card in firmware/pages/gameday-live.yaml).
+  int gameday_card() const { return this->gdcard_shown_ ? this->gdcard_wording_ : -1; }
   // The board game's line score at halftime and the final, laid out for a
   // display width_px wide (line_score.h); font 0 the rest of the time. Read by
   // gd_update in firmware/pages/gameday-live.yaml.
@@ -693,6 +721,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t every;
     uint8_t spare[3];
   } __attribute__((packed));
+  static_assert(sizeof(PrefsMsg) == 366,
+                "PrefsMsg is saved: a new size needs a new preference key or a migration, not a new number");
   ESPPreferenceObject msg_pref_;
   std::string msg_text_, msg_url_;
   uint8_t msg_every_{::espn::kMsgEveryDefault};
@@ -701,6 +731,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   void msg_reset_();    // a new text or address: back to the top, up soon
   void msg_tick_();     // main loop: the card's turns and the reads they need
   bool card_between_(uint32_t now) const;  // the message and news cards may be up
+  bool board_between_(uint32_t now) const;  // card_between_, the Game Day card aside
   void msg_show_(const std::string &page);
   std::string say_text_;
   int say_secs_{::espn::kSayDefaultSecs};
@@ -728,6 +759,14 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool msg_shown_{false};
   uint32_t msg_since_ms_{0};  // when the card last went up or down
   uint32_t msg_tick_ms_{0};
+  // The Game Day card (gameday_card.h). Its first turn is a full wait after
+  // the start, so a panel that starts doesn't open on it.
+  bool gdcard_shown_{false};
+  int gdcard_wording_{0};       // the wording up, or the next one while down
+  uint32_t gdcard_since_ms_{0};  // when the card last went up or down
+  uint32_t gdcard_tick_ms_{0};
+  void gdcard_tick_();
+  void gdcard_show_(bool up);
   uint32_t msg_roll_ms_{0};
   uint32_t splash_ms_{0};  // the last splash, so the card never covers one
   uint32_t splash_hold_ms_{::espn::kMsgSplashGapMs};  // how long after it the cards wait
@@ -830,6 +869,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   struct PrefsNick {
     char text[::espn::kNickMax + 1];
   } __attribute__((packed));
+  static_assert(sizeof(PrefsNick) == 33,
+                "PrefsNick is saved: a new size needs a new preference key or a migration, not a new number");
   ESPPreferenceObject nick_pref_;
   std::string nick_;
   void load_nick_();
@@ -845,6 +886,9 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // loop, read as the "wifi" object of GET /gameday/state on the HTTP task.
   void wifi_tick_();
   std::string wifi_json_();
+  // Seconds since the weather and plane reads, and the flights wait left,
+  // worked out per request because the cached state document goes stale
+  std::string ages_json_() const;
   ::espn::WifiHistory wifi_hist_;
   std::mutex wifi_mutex_;
   uint32_t wifi_sample_ms_{0};
@@ -885,24 +929,34 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t tz_index;  // a position in kTimezones, which only ever grows at the end (timezones.h)
     uint8_t flags;
   } __attribute__((packed));
+  static_assert(sizeof(Prefs) == 7,
+                "Prefs is saved: a new size needs a new preference key or a migration, not a new number");
   // Kept separate so adding fields never invalidates the original blob.
   struct Prefs2 {
     uint8_t mode;
     uint8_t rotate_minutes;
   } __attribute__((packed));
+  static_assert(sizeof(Prefs2) == 2,
+                "Prefs2 is saved: a new size needs a new preference key or a migration, not a new number");
   struct Prefs3 {
     uint8_t fav_league[4];
     uint32_t fav_id[4];  // 0 = slot empty
   } __attribute__((packed));
+  static_assert(sizeof(Prefs3) == 20,
+                "Prefs3 is saved: a new size needs a new preference key or a migration, not a new number");
   struct Prefs4 {
     uint8_t lockon_minutes;
     uint16_t release_seconds;
     uint8_t collide;  // 0 = stick with the higher slot, 1 = alternate on the rotate timer
   } __attribute__((packed));
+  static_assert(sizeof(Prefs4) == 4,
+                "Prefs4 is saved: a new size needs a new preference key or a migration, not a new number");
   struct Prefs6 {
     uint8_t auto_update;  // 1 = install new releases on its own
     int32_t tried_day;    // espn::auto_update_day() of the last install try, 0 = never
   } __attribute__((packed));
+  static_assert(sizeof(Prefs6) == 5,
+                "Prefs6 is saved: a new size needs a new preference key or a migration, not a new number");
   // Favorites 5-16 (1-4 stay in Prefs3, so older panels keep theirs) and the
   // settings that came with the longer list.
   // Its size is fixed: a blob that changes size fails to load and resets every
@@ -915,6 +969,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t flags;                 // FAV7_*
     uint16_t live_mask;            // Live mode: 1 << League per league, 0 = the leagues you follow
   } __attribute__((packed));
+  static_assert(sizeof(Prefs7) == 63,
+                "Prefs7 is saved: a new size needs a new preference key or a migration, not a new number");
   static constexpr uint8_t FAV7_TODAY = 1;  // idle playlist shows only today's games
   static constexpr uint8_t FAV7_JUMP = 2;   // Jump to the action
   // The score banner is on by default, and a saved spare bit is 0: set means off.
@@ -930,7 +986,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t celeb;   // byte 2, celebrate.h celeb_level_from_stored: 0 is Full, so a saved spare byte stays Full
     uint8_t viz;     // byte 3, VIZ8_*: set bits turn a picture off, so a saved spare byte is 0
   } __attribute__((packed));
-  static_assert(sizeof(Prefs8) == 4, "Prefs8 is a saved 4-byte blob; a new size fails to load and resets it");
+  static_assert(sizeof(Prefs8) == 4,
+                "Prefs8 is saved: a new size needs a new preference key or a migration, not a new number");
   static_assert(offsetof(Prefs8, viz) == 3, "the pictures' bits live in Prefs8's last byte");
   static constexpr uint8_t VIZ8_NOFIELD = 1;   // football's field strip off
   static constexpr uint8_t VIZ8_NOWIN = 2;     // the win chance line off (was the win bar's)
@@ -955,6 +1012,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     // Was spare, so older firmware has it off. The blob has no spare left.
     uint8_t news;
   } __attribute__((packed));
+  static_assert(sizeof(CountdownPrefs) == 29,
+                "CountdownPrefs is saved: a new size needs a new preference key or a migration, not a new number");
   ESPPreferenceObject countdown_pref_;
   CountdownPrefs countdown_{};
   void save_countdown_();
@@ -971,6 +1030,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t unit;        // ::espn::kWxUnit*
     char country[2];     // the place's, "US", from the lookup; zeros for none
   } __attribute__((packed));
+  static_assert(sizeof(PrefsWx) == 94,
+                "PrefsWx is saved: a new size needs a new preference key or a migration, not a new number");
   ESPPreferenceObject wx_pref_;
   PrefsWx wx_{};
   void load_wx_();
@@ -1035,6 +1096,64 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t espn_quiet_ms_() const;
   std::atomic<uint64_t> wx_bytes_{0};
   std::atomic<uint32_t> wx_requests_{0};
+  // The Flights page (flights.h, flights_page.h, pages/flights.yaml): its
+  // settings in their own blob, fixed size with spare bytes like the wake's.
+  struct PrefsFl {
+    uint8_t rad;   // the distance step, 0 to kFlRadiusSteps - 1
+    uint8_t face;  // the way the owner's window faces, 0 any, 1 to 8 for N to NW
+    char rx[::espn::kFlTextMax + 1];   // the owner's receiver, "" for none
+    char key[::espn::kFlTextMax + 1];  // the owner's adsb.lol key, never sent back
+    uint8_t spare[6];
+  } __attribute__((packed));
+  static_assert(sizeof(PrefsFl) == 136,
+                "PrefsFl is saved: a new size needs a new preference key or a migration, not a new number");
+  ESPPreferenceObject fl_pref_;
+  PrefsFl fl_{};
+  void load_fl_();
+  void set_fl_(const PrefsFl &p);
+  // A route adsbdb answered, kept for kFlRouteHitMs (kFlRouteMissMs when it
+  // knew none); call "" for an empty slot.
+  struct FlRouteSlot {
+    char call[9]{};
+    uint32_t at_ms{0};
+    ::espn::Route route;
+  };
+  // The last read's planes and the routes: in PSRAM, read only on the main loop.
+  struct FlData {
+    ::espn::Sky sky;
+    FlRouteSlot routes[::espn::kFlRouteCache];
+    uint8_t route_next{0};
+  };
+  FlData &fl_data_{psram_object<FlData>()};
+  bool fl_on_{false};      // the Flights page is up on a lit screen
+  uint32_t fl_on_ms_{0};   // when it came up, for the card's and the list's turns
+  uint32_t fl_tick_ms_{0};
+  uint32_t fl_read_ms_{0};  // millis() of the last good read of the planes, 0 = none
+  uint32_t fl_rx_ms_{0};    // millis() of the last try of the receiver, 0 = none
+  uint32_t fl_lol_ms_{0};   // and of adsb.lol
+  uint8_t fl_rx_fails_{0};  // the receiver's failed reads in a row
+  ::espn::FlErr fl_err_{::espn::FlErr::NONE};  // the last read's
+  uint32_t fl_fail_ms_{0};     // millis() of adsb.lol's last failure, 0 = none since it answered
+  uint32_t fl_backoff_ms_{0};  // the wait that failure started
+  ::espn::Backoff fl_fail_;
+  char fl_card_[8]{};  // the card's plane, by its address; "" for none
+  uint32_t fl_route_ms_{0};       // millis() of the last route lookup, 0 = none
+  uint32_t fl_route_fail_ms_{0};  // and of the last that failed, 0 = none since one answered
+  uint32_t fl_route_backoff_ms_{0};
+  ::espn::Backoff fl_route_fail_;
+  std::atomic<uint64_t> fl_bytes_{0};
+  void fl_tick_();      // from loop(): whether the page is up, and its turn
+  uint8_t fl_due_();    // the Job's need_fl for a read due now, 0 for none
+  void start_fl_job_(uint8_t kind);
+  void run_fl_job_();
+  void apply_fl_job_();
+  bool fl_metric_() const { return !this->wx_fahrenheit_(); }
+  float fl_radius_km_() const { return ::espn::fl_radius_km(this->fl_.rad, this->fl_metric_()); }
+  void fl_radius_text_(char *out, size_t n) const;
+  bool fl_receiver_() const { return this->fl_.rx[0] != '\0' && this->fl_rx_fails_ < ::espn::kFlReceiverFails; }
+  uint32_t fl_wait_s_() const;  // left on adsb.lol's wait, 0 for none
+  int fl_card_index_() const;   // the card's plane in fl_data_.sky, -1 for none
+  const FlRouteSlot *fl_route_slot_(const char *call) const;  // a cached answer still good, or nullptr
   // Playlists (playlists.h): a name and a mask over the favorites each. Its
   // size is fixed for the same reason as Prefs7's.
   struct Prefs9 {
@@ -1047,6 +1166,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t sport;
     uint8_t spare[1];
   } __attribute__((packed));
+  static_assert(sizeof(Prefs9) == 292,
+                "Prefs9 is saved: a new size needs a new preference key or a migration, not a new number");
 
   // Each playlist's options (playlists.h ListOpt) and the schedule's state,
   // in their own fixed-size blob: opt[n] belongs to playlist n + 1 and is
@@ -1062,7 +1183,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t sched_sport;  // the sport row playing before, 1 + Sport; 0 = none
     uint8_t spare[4];
   } __attribute__((packed));
-  static_assert(sizeof(Prefs10) == 104, "Prefs10 is a fixed-size blob");
+  static_assert(sizeof(Prefs10) == 104,
+                "Prefs10 is saved: a new size needs a new preference key or a migration, not a new number");
   ESPPreferenceObject pref10_;
   Prefs10 prefs10_{};
   // The options of playlist n (1..count); every other list has none.
@@ -1086,7 +1208,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t held;
     uint8_t spare[1];
   } __attribute__((packed));
-  static_assert(sizeof(Prefs11) == 96, "Prefs11 is a fixed-size blob");
+  static_assert(sizeof(Prefs11) == 96,
+                "Prefs11 is saved: a new size needs a new preference key or a migration, not a new number");
   ESPPreferenceObject pref11_;
   Prefs11 prefs11_{};
   bool fav_solo_(uint8_t i) const { return i < 16 && ((this->prefs11_.solo >> i) & 1u) != 0; }
@@ -1110,7 +1233,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   struct Prefs12 {
     uint8_t mark[::espn::kListMax];
   } __attribute__((packed));
-  static_assert(sizeof(Prefs12) == 16, "Prefs12 is a fixed-size blob");
+  static_assert(sizeof(Prefs12) == 16,
+                "Prefs12 is saved: a new size needs a new preference key or a migration, not a new number");
   ESPPreferenceObject pref12_;
   Prefs12 prefs12_{};
 
@@ -1124,7 +1248,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint16_t leagues[::espn::kListMax];
     uint32_t names;
   };  // no padding to pack, and a pointer to the masks stays aligned
-  static_assert(sizeof(Prefs13) == 36, "Prefs13 is a fixed-size blob");
+  static_assert(sizeof(Prefs13) == 36,
+                "Prefs13 is saved: a new size needs a new preference key or a migration, not a new number");
   ESPPreferenceObject pref13_;
   Prefs13 prefs13_{};
   // The playing playlist's sports, 0 when Favorite teams plays its teams as
@@ -1178,9 +1303,28 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // What Showing has up (showing.h). showing_ is what loop() last acted on;
   // showing_now_() reads the page select itself.
   const bool *sb_pinned_{nullptr};
+  const bool *fl_pinned_{nullptr};
+  const bool *wxp_pinned_{nullptr};
+  // The Weather page (weather_page.h): wxp_on_ while it is up on a lit
+  // screen, so the forecast is read for it even with the card off or a game
+  // live. Picked under Showing it also reads the owner's games for its
+  // bottom row (wxp_watch_(), weather_watch_every_ms).
+  bool wxp_on_{false};
+  uint32_t wxp_tick_ms_{0};
+  void wxp_tick_();  // from loop()
+  bool wxp_watch_() const { return this->showing_ == ::espn::Showing::PICKED && this->wxp_on_; }
   ::espn::Showing showing_{::espn::Showing::BOARD};
   ::espn::Showing showing_now_() const;
   void showing_tick_();  // from loop(): a picked page stops the reads, the Scoreboard brings them back
+  // A dark screen (screen_dark()): no card turns, no side reads, nothing to
+  // Home Assistant, and only the game reads that could light it again
+  // (standby_read_due_()). standby_ms_ is millis() of the last of those.
+  bool standby_{false};
+  uint32_t standby_ms_{0};
+  uint32_t standby_tick_ms_{0};
+  uint32_t game_read_ms_{0};  // millis() of the last board or favorite game read applied
+  void standby_tick_();
+  bool standby_read_due_() const;
   // Somebody picked a team, a mode or the favorites: the effect between
   // games ends until after the next game's final, as a remote press does.
   void fx_between_end_(const char *why);
@@ -1366,6 +1510,20 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     bool wx_ok{false};
     int wx_status{0};  // HTTP status, 0 for no answer
     uint32_t wx_retry_after_ms{0};
+    // The Flights page (flights.h): 1 reads the planes near home from the
+    // owner's receiver, 2 from adsb.lol, 3 looks the card's plane's route up
+    // on adsbdb, on this task like the weather.
+    uint8_t need_fl{0};
+    std::string fl_url;
+    std::string fl_key;  // the owner's adsb.lol key, "" for none
+    float fl_lat{0}, fl_lon{0};
+    float fl_radius_km{0};
+    ::espn::Sky fl_sky;
+    char fl_call[9]{};  // the callsign a route lookup is for
+    ::espn::Route fl_route;
+    bool fl_ok{false};
+    int fl_status{0};        // HTTP status, 0 for no answer
+    uint32_t fl_wait_ms{0};  // a refusal's Retry-After, else its x-ratelimit-reset; 0 for none
   };
   void start_job_();
   void start_worker_();
@@ -1492,8 +1650,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   ::espn::CountdownCard countdown_card_(int64_t now) const;
   void countdown_fields_(UpdateFields &f);
   void countdown_tick_();
-  // The custom countdown's day: when it starts, local time; 0 with none set.
+  // The custom countdown's day: the local midnights it starts and ends at.
+  // Only with a day set (countdown_.ymd not 0).
   int64_t custom_start_() const;
+  int64_t custom_end_() const;
   ::espn::CountdownCard countdown_shown_{::espn::CountdownCard::NONE};
   uint32_t countdown_tick_ms_{0};
   // A new local day redraws the board, whose kickoff labels ("Tomorrow 1:30
@@ -1563,6 +1723,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t pregame;
     uint8_t spare[3];
   } __attribute__((packed));
+  static_assert(sizeof(PrefsHook) == 165,
+                "PrefsHook is saved: a new size needs a new preference key or a migration, not a new number");
   ESPPreferenceObject hook_pref_;
   std::string hook_url_;
   uint8_t pregame_min_{(uint8_t) ::espn::kPregameDefault};
@@ -1596,14 +1758,19 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // The board game's scores as they went by, for the halftime and final
   // tickers (score_log.h): about 1 KB of internal RAM for two games.
   ::espn::ScoreLog score_log_;
-  // The board game's last basket, held until the next (row_text.h), and
-  // the row's news so far: the page jumps to the lead line when it changes.
+  // The board game's last play worth reading (row_text.h), and the row's
+  // news so far: the page jumps to the news when it changes.
   ::espn::RowHold row_hold_;
+  // What is happening in each basketball game on the board or among the
+  // favorites (story.h), in PSRAM.
+  ::espn::StoryBook stories_;
   // When the board game's win chance shows (row_text.h WinSwing): after a
   // score, a turnover or a big move, not on every turn of the row.
   ::espn::WinSwing win_swing_;
   std::string row_news_;
   uint32_t row_news_n_{0};
+  uint32_t row_story_n_{0}, row_play_n_{0};
+  uint8_t row_jump_{0};
   // Hockey's latest goal per game, for the row under the clock: four games,
   // about 200 bytes (sport_hockey.cpp).
   ::espn::GoalHolds goal_holds_;
@@ -1700,7 +1867,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // through a restart. wake_clock_ is the clock between games, on the board
   // now (clock_fields_); wake_smart_ the Smart board between games, which
   // pages/smart_board.yaml puts up on the "smartboard" action; wake_fx_ an
-  // effect between games, which fx_between_tick_ puts up.
+  // effect between games, which fx_between_tick_ puts up; wake_fl_ the
+  // Flights page between games, which pages/flights.yaml puts up on the
+  // "flights" action; wake_wxp_ the Weather page between games, which
+  // pages/weather.yaml puts up on the "weather" action.
   ESPPreferenceObject wake_pref_;
   ::espn::WakePrefs wake_{};
   ::espn::WakeState wake_state_{};
@@ -1708,6 +1878,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool wake_clock_{false};
   bool wake_smart_{false};
   bool wake_fx_{false};
+  bool wake_fl_{false};
+  bool wake_wxp_{false};
   bool power_on_{true};
   // Live games with Favorites take over: the next start of a favorite's
   // game from the last scan, 0 for none.
@@ -1841,14 +2013,13 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t recap_step_ms_{0};  // when the card on the board went up, 0 = none yet
   std::string recap_message_, recap_ticker_;
   int64_t recap_scan_next_{0};  // the last scan's next kickoff today, 0 for none
-  static_assert(::espn::leagues_fill_indexes(), "League values must run 0 to kLeagueCount - 1");
-  // Per league, indexed by League: the walks back and forward (recap.h,
+  // Per league, at its game_league_slot: the walks back and forward (recap.h,
   // RecapWalk), the kickoff the forward walk found (0 for none) and its
   // fwd_match: "BOS at NYR", the first game on that day.
-  ::espn::RecapWalk recap_back_[::espn::kLeagueCount];
-  ::espn::RecapWalk recap_fwd_[::espn::kLeagueCount];
-  int64_t recap_fwd_next_[::espn::kLeagueCount]{};
-  std::string recap_fwd_match_[::espn::kLeagueCount];
+  ::espn::RecapWalk recap_back_[::espn::kGameLeagueCount];
+  ::espn::RecapWalk recap_fwd_[::espn::kGameLeagueCount];
+  int64_t recap_fwd_next_[::espn::kGameLeagueCount]{};
+  std::string recap_fwd_match_[::espn::kGameLeagueCount];
   bool recap_job_(Job &j, int64_t tnow);  // fills j with the next walk step, if any
   void apply_recap_job_();
   void recap_absorb_(const Job &j, int64_t tnow);  // a scan's finals, games to come and next kickoff
@@ -1900,6 +2071,8 @@ class GamedayComponent : public Component, public AsyncWebHandler {
     uint8_t madeup;                       // 1 = made-up teams, no logos
     uint8_t running;                      // the demo playing at power off, 0 = none
   } __attribute__((packed));
+  static_assert(sizeof(DemoPrefs) == 18,
+                "DemoPrefs is saved: a new size needs a new preference key or a migration, not a new number");
   ESPPreferenceObject demo_pref_;
   DemoPrefs demo_prefs_{};
   uint8_t demo_kind_{0};    // what is playing, 0 = off

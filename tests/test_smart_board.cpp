@@ -144,21 +144,39 @@ static void test_font() {
 // What Showing has up (showing.h): the Scoreboard follows games, a page
 // somebody picked reads nothing, a page After the game put up keeps its reads.
 static void test_showing() {
-  CHECK(showing_now("Scoreboard", false, false) == Showing::BOARD);
-  CHECK(showing_now(nullptr, false, false) == Showing::BOARD);  // before the first page
-  CHECK(showing_now("", true, true) == Showing::BOARD);
-  CHECK(showing_now("Clock", false, false) == Showing::PICKED);
-  CHECK(showing_now("Clock", true, true) == Showing::PICKED);
-  CHECK(showing_now("Effects", false, false) == Showing::PICKED);
-  CHECK(showing_now("Effects", true, false) == Showing::AUTO);
-  CHECK(showing_now("Smart board", false, true) == Showing::PICKED);
-  CHECK(showing_now("Smart board", false, false) == Showing::AUTO);
-  CHECK(showing_now("Smart board", true, true) == Showing::PICKED);
+  CHECK(showing_now("Scoreboard", false, false, true) == Showing::BOARD);
+  CHECK(showing_now(nullptr, false, false, true) == Showing::BOARD);  // before the first page
+  CHECK(showing_now("", true, true, true) == Showing::BOARD);
+  CHECK(showing_now("Clock", false, false, true) == Showing::PICKED);
+  CHECK(showing_now("Clock", true, true, true) == Showing::PICKED);
+  CHECK(showing_now("Effects", false, false, true) == Showing::PICKED);
+  CHECK(showing_now("Effects", true, false, true) == Showing::AUTO);
+  CHECK(showing_now("Smart board", false, true, true) == Showing::PICKED);
+  CHECK(showing_now("Smart board", false, false, true) == Showing::AUTO);
+  CHECK(showing_now("Smart board", true, true, true) == Showing::PICKED);
+  CHECK(showing_now("Flights", false, false, true) == Showing::PICKED);
+  CHECK(showing_now("Flights", false, true, false) == Showing::AUTO);
   CHECK(looking_for(true, "NFL ", "Dallas Cowboys") == "live NFL games");
   CHECK(looking_for(true, "", nullptr) == "live games");
   CHECK(looking_for(false, "", "Dallas Cowboys") == "Dallas Cowboys");
   CHECK(looking_for(false, "", nullptr) == "your teams");
   CHECK(looking_for(false, "", "") == "your teams");
+}
+
+// How often a dark screen reads (showing.h): never with nothing to light it,
+// a minute near the owner's start, an hour on a game day, else 6 hours.
+static void test_standby_every() {
+  const int64_t now = 1'800'000'000;
+  CHECK(standby_every_ms(false, false, now, now + 600, 15) == 0);  // off by hand, Wake off
+  CHECK(standby_every_ms(true, false, now, 0, 15) == 6u * 3600u * 1000u);  // night, no game known
+  CHECK(standby_every_ms(false, true, now, now + 3 * 86400, 15) == 6u * 3600u * 1000u);
+  CHECK(standby_every_ms(false, true, now, now + 5 * 3600, 15) == 3600u * 1000u);  // game day
+  CHECK(standby_every_ms(false, true, now, now + 21 * 60, 15) == 3600u * 1000u);  // just before the window
+  CHECK(standby_every_ms(false, true, now, now + 20 * 60, 15) == 60u * 1000u);  // lead + 5 min
+  CHECK(standby_every_ms(true, false, now, now - 600, 15) == 60u * 1000u);  // past the start, not live yet
+  CHECK(standby_every_ms(false, true, now, now + 40 * 60, 30) == 3600u * 1000u);
+  CHECK(standby_every_ms(false, true, now, now + 35 * 60, 30) == 60u * 1000u);  // a longer lead
+  CHECK(standby_every_ms(false, true, now, now + 20 * 60, 5) == 60u * 1000u);  // never under 15
 }
 
 int main() {
@@ -170,6 +188,7 @@ int main() {
   test_layout();
   test_font();
   test_showing();
+  test_standby_every();
   printf("%d checks, %d failures\n", checks, failures);
   return failures ? 1 : 0;
 }

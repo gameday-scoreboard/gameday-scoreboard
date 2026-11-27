@@ -1,0 +1,317 @@
+# Weather: the forecast for the owner's town as a page of its own under
+# "Showing", after Flights, and a choice under After the game
+# (components/gameday/wake.h, After::WEATHER). The between-games weather card
+# stays as it is; this page reads the same Open-Meteo forecast (weather.h),
+# whose read carries the next hours and the sunrise and sunset too.
+#
+# Two panels: the weather now on the left (icon, temperature, words, today's
+# high and low) and the next 6 hours on the right, three columns two hours
+# apart (time, icon, temperature, chance of rain). One panel shows the two in
+# turns, about 10 s each. A bottom row under both never moves: a live game
+# of the owner's (two take turns), else rain or storms coming in the next
+# 12 hours, else late in the evening tomorrow's high and low, else the next
+# sunrise or sunset. What each label says is components/gameday/
+# weather_page.h's.
+#
+# Picked under Showing, Weather stays up through restarts and power cuts
+# (gd_wxp_pinned) until somebody picks something else there, as Flights
+# does; it also reads the owner's games, as seldom as a dark screen does and
+# every minute while one is live, for the bottom row's score (showing.h).
+# Picked under After the game, it goes up between games while Showing is on
+# Scoreboard, and the scoreboard comes back when the next game is near. The
+# screens that tell the owner something (Wi-Fi, a banner, the night
+# schedule) are on LVGL's top layer and show over it.
+
+globals:
+  # Showing is on Weather because somebody picked it there, so it comes back
+  # after a restart
+  - id: gd_wxp_pinned
+    type: bool
+    restore_value: yes
+    initial_value: 'false'
+
+esphome:
+  on_boot:
+    # After the page manager has published its default page (Scoreboard)
+    - priority: -200.0
+      then:
+        - lambda: |-
+            // What Showing has up decides what the panel reads (showing.h)
+            id(gameday_ctl).set_wxp_pinned_ref(&id(gd_wxp_pinned));
+            id(page_manager).add_on_state_callback([](size_t index) {
+              const char *page = id(page_manager).option_at(index);
+              const bool wx = page != nullptr && strcmp(page, "Weather") == 0;
+              if (::espn::wxp_flags().own_change) {
+                ::espn::wxp_flags().own_change = false;
+                return;
+              }
+              if (wx != id(gd_wxp_pinned)) {
+                id(gd_wxp_pinned) = wx;
+                id(gd_wxp_pin_sync).execute();
+                ESP_LOGI("weather", wx ? "Showing Weather until somebody picks something else"
+                                       : "Weather no longer picked under Showing");
+              }
+            });
+            if (id(gd_wxp_pinned)) {
+              ESP_LOGI("weather", "Back on Weather, as Showing was before the restart");
+              ::espn::wxp_flags().own_change = true;
+              id(page_manager).show_page("gd_wxp_page");
+            }
+
+script:
+  # Into flash at once, as gd_sb_pin_sync does for the Smart board.
+  - id: gd_wxp_pin_sync
+    mode: restart
+    then:
+      - delay: 1100ms
+      - lambda: 'id(gameday_ctl).sync_soon();'
+  - id: gd_wxp_draw
+    mode: single
+    then:
+      - lambda: |-
+          const int32_t W = lv_display_get_horizontal_resolution(lv_display_get_default());
+          const bool wide = W >= 128;
+          ::espn::WxPageView v;
+          id(gameday_ctl).weather_view(v, wide);
+          const lv_font_t *f8 = id(spleen_8)->get_lv_font();
+          const lv_font_t *f12 = id(spleen_12)->get_lv_font();
+          const lv_font_t *f16 = id(spleen_16)->get_lv_font();
+          image::Image *icons[8] = {id(gd_wx16_cloud), id(gd_wx16_sun),  id(gd_wx16_moon), id(gd_wx16_part),
+                                    id(gd_wx16_fog),   id(gd_wx16_rain), id(gd_wx16_snow), id(gd_wx16_storm)};
+          // Only a label whose text changed is redrawn.
+          auto put = [](lv_obj_t *l, const char *t) {
+            if (strcmp(lv_label_get_text(l), t) != 0)
+              lv_label_set_text(l, t);
+          };
+          // Nor an icon that stays the same: 0 to 7, 255 for none drawn yet
+          static uint8_t drawn[1 + ::espn::kWxCols] = {255, 255, 255, 255};
+          lv_obj_t *icon_obj[1 + ::espn::kWxCols] = {id(gd_wxp_icon), id(gd_wxp_c1_icon), id(gd_wxp_c2_icon),
+                                                      id(gd_wxp_c3_icon)};
+          auto icon = [&](size_t i, uint8_t which) {
+            which %= 8;
+            if (drawn[i] != which) {
+              drawn[i] = which;
+              lv_image_set_src(icon_obj[i], icons[which]);
+            }
+          };
+          lv_obj_t *col_time[::espn::kWxCols] = {id(gd_wxp_c1_time), id(gd_wxp_c2_time), id(gd_wxp_c3_time)};
+          lv_obj_t *col_temp[::espn::kWxCols] = {id(gd_wxp_c1_temp), id(gd_wxp_c2_temp), id(gd_wxp_c3_temp)};
+          lv_obj_t *col_pop[::espn::kWxCols] = {id(gd_wxp_c1_pop), id(gd_wxp_c2_pop), id(gd_wxp_c3_pop)};
+
+          // The layout for the panel's width, once and again when it changes.
+          // The widgets below leave their place, width and font to this.
+          static int32_t laid = 0;
+          if (laid != W) {
+            laid = W;
+            const int32_t x0 = (W - (wide ? 128 : 64)) / 2;  // a longer chain centers the page
+            lv_obj_set_size(id(gd_wxp_msg), W, 54);
+            lv_obj_set_pos(id(gd_wxp_now), x0, 0);
+            lv_obj_set_pos(id(gd_wxp_next), x0 + (wide ? 64 : 0), 0);
+            lv_obj_set_pos(id(gd_wxp_rule), x0 + 63, 3);
+            lv_obj_set_hidden(id(gd_wxp_rule), !wide);
+            lv_obj_set_pos(id(gd_wxp_bottom), 0, 55);
+            lv_obj_set_width(id(gd_wxp_bottom), W);
+          }
+
+          const bool msg = v.screen == ::espn::WxPageScreen::MESSAGE;
+          const bool now = v.screen == ::espn::WxPageScreen::NOW || v.screen == ::espn::WxPageScreen::BOTH;
+          const bool next = v.screen == ::espn::WxPageScreen::NEXT || v.screen == ::espn::WxPageScreen::BOTH;
+          lv_obj_set_hidden(id(gd_wxp_msg), !msg);
+          lv_obj_set_hidden(id(gd_wxp_now), msg || !now);
+          lv_obj_set_hidden(id(gd_wxp_next), msg || !next);
+          lv_obj_set_hidden(id(gd_wxp_rule), msg || !wide);
+
+          if (msg) {
+            // The title in the biggest font it fits in on one line
+            const lv_font_t *tf = wide ? f16 : f12;
+            lv_obj_set_style_text_font(id(gd_wxp_title), tf, 0);
+            lv_obj_set_width(id(gd_wxp_title), W);
+            lv_obj_set_pos(id(gd_wxp_title), 0, 6);
+            lv_obj_set_style_text_font(id(gd_wxp_sub), wide ? f12 : f8, 0);
+            lv_obj_set_width(id(gd_wxp_sub), W);
+            lv_obj_set_pos(id(gd_wxp_sub), 0, 6 + lv_font_get_line_height(tf) + 5);
+            put(id(gd_wxp_title), v.title);
+            put(id(gd_wxp_sub), v.sub);
+          }
+          if (!msg && now) {
+            icon(0, v.icon);
+            put(id(gd_wxp_temp), v.temp);
+            put(id(gd_wxp_words), v.words);
+            put(id(gd_wxp_hilo), v.hilo);
+          }
+          if (!msg && next) {
+            for (size_t i = 0; i < ::espn::kWxCols; i++) {
+              const ::espn::WxCol &c = v.col[i];
+              put(col_time[i], c.time);
+              lv_obj_set_hidden(icon_obj[1 + i], !c.on);
+              if (c.on)
+                icon(1 + i, c.icon);
+              put(col_temp[i], c.on ? c.temp : "--");
+              put(col_pop[i], c.on ? c.pop : "");
+            }
+          }
+          put(id(gd_wxp_bottom), v.bottom);
+          lv_obj_set_style_text_color(id(gd_wxp_bottom), lv_color_hex(v.bottom_rgb), 0);
+
+interval:
+  # Once a second while the page is up: a single panel's turns, the bottom
+  # row's live games, and a new forecast or game read
+  - interval: 1s
+    then:
+      - lambda: |-
+          // current_option() is empty, with a null c_str(), before the first page
+          const auto cur = id(page_manager).current_option();
+          if (!cur.empty() && strcmp(cur.c_str(), "Weather") == 0)
+            id(gd_wxp_draw).execute();
+
+lvgl:
+  pages:
+    - id: gd_wxp_page
+      bg_color: 0x000000
+      scrollbar_mode: "OFF"
+      on_load:
+        then:
+          - script.execute: gd_wxp_draw
+      widgets:
+        # A message: the title and the line under it
+        - obj:
+            id: gd_wxp_msg
+            x: 0
+            y: 0
+            width: 128
+            height: 54
+            pad_all: 0
+            border_width: 0
+            bg_opa: TRANSP
+            scrollbar_mode: "OFF"
+            widgets:
+              - label:
+                  id: gd_wxp_title
+                  text_align: CENTER
+                  long_mode: CLIP
+                  text: "Weather"
+                  text_color: 0xFFFFFF
+              - label:
+                  id: gd_wxp_sub
+                  text_align: CENTER
+                  long_mode: WRAP
+                  text: "Getting the forecast"
+                  text_color: 0x909090
+        # The weather now: the left half on two panels
+        - obj:
+            id: gd_wxp_now
+            width: 64
+            height: 54
+            pad_all: 0
+            border_width: 0
+            bg_opa: TRANSP
+            scrollbar_mode: "OFF"
+            hidden: true
+            widgets:
+              - image:
+                  id: gd_wxp_icon
+                  src: gd_wx16_cloud
+                  x: 3
+                  y: 3
+              - label:
+                  id: gd_wxp_temp
+                  x: 22
+                  y: 3
+                  width: 42
+                  long_mode: CLIP
+                  text: ""
+                  text_font: spleen_16
+                  text_color: 0xFFFFFF
+              - label:
+                  id: gd_wxp_words
+                  x: 0
+                  y: 24
+                  width: 64
+                  text_align: CENTER
+                  long_mode: CLIP
+                  text: ""
+                  text_font: spleen_8
+                  text_color: 0xC0C0C0
+              - label:
+                  id: gd_wxp_hilo
+                  x: 0
+                  y: 35
+                  width: 64
+                  text_align: CENTER
+                  long_mode: CLIP
+                  text: ""
+                  text_font: spleen_8
+                  text_color: 0xFFFFFF
+        # A thin line between the two halves on two panels
+        - obj:
+            id: gd_wxp_rule
+            width: 1
+            height: 46
+            pad_all: 0
+            border_width: 0
+            radius: 0
+            bg_color: 0x282828
+            bg_opa: COVER
+            hidden: true
+        # The next 6 hours: three columns two hours apart
+        - obj:
+            id: gd_wxp_next
+            width: 64
+            height: 54
+            pad_all: 0
+            border_width: 0
+            bg_opa: TRANSP
+            scrollbar_mode: "OFF"
+            hidden: true
+            widgets:
+              - label: {id: gd_wxp_c1_time, x: 0, y: 1, width: 21, text_align: CENTER, long_mode: CLIP, text: "", text_font: spleen_8, text_color: 0xA0A0A0}
+              - label: {id: gd_wxp_c2_time, x: 21, y: 1, width: 21, text_align: CENTER, long_mode: CLIP, text: "", text_font: spleen_8, text_color: 0xA0A0A0}
+              - label: {id: gd_wxp_c3_time, x: 42, y: 1, width: 22, text_align: CENTER, long_mode: CLIP, text: "", text_font: spleen_8, text_color: 0xA0A0A0}
+              - image: {id: gd_wxp_c1_icon, src: gd_wx16_cloud, x: 2, y: 11}
+              - image: {id: gd_wxp_c2_icon, src: gd_wx16_cloud, x: 23, y: 11}
+              - image: {id: gd_wxp_c3_icon, src: gd_wx16_cloud, x: 45, y: 11}
+              - label: {id: gd_wxp_c1_temp, x: 0, y: 29, width: 21, text_align: CENTER, long_mode: CLIP, text: "", text_font: spleen_8, text_color: 0xFFFFFF}
+              - label: {id: gd_wxp_c2_temp, x: 21, y: 29, width: 21, text_align: CENTER, long_mode: CLIP, text: "", text_font: spleen_8, text_color: 0xFFFFFF}
+              - label: {id: gd_wxp_c3_temp, x: 42, y: 29, width: 22, text_align: CENTER, long_mode: CLIP, text: "", text_font: spleen_8, text_color: 0xFFFFFF}
+              - label: {id: gd_wxp_c1_pop, x: 0, y: 39, width: 21, text_align: CENTER, long_mode: CLIP, text: "", text_font: spleen_8, text_color: 0x50A8FF}
+              - label: {id: gd_wxp_c2_pop, x: 21, y: 39, width: 21, text_align: CENTER, long_mode: CLIP, text: "", text_font: spleen_8, text_color: 0x50A8FF}
+              - label: {id: gd_wxp_c3_pop, x: 42, y: 39, width: 22, text_align: CENTER, long_mode: CLIP, text: "", text_font: spleen_8, text_color: 0x50A8FF}
+        # The bottom row, on every screen
+        - label:
+            id: gd_wxp_bottom
+            text_align: CENTER
+            long_mode: CLIP
+            text: ""
+            text_font: spleen_8
+            text_color: 0xFFFFFF
+
+lvgl_page_manager:
+  pages:
+    - page: gd_wxp_page
+      friendly_name: "Weather"
+      order: 40
+
+gameday:
+  on_action:
+    # After the game is Weather: up between games, but only over the
+    # scoreboard (an owner who picked another page keeps it), and down when
+    # the next game is near unless somebody picked it under Showing
+    - if:
+        condition:
+          lambda: 'return x == "weather";'
+        then:
+          - lambda: |-
+              // current_option() is empty, with a null c_str(), before the first page
+              const auto cur = id(page_manager).current_option();
+              const char *page = cur.empty() ? "" : cur.c_str();
+              const bool on_wx = strcmp(page, "Weather") == 0;
+              const bool on_board = strcmp(page, "Scoreboard") == 0;
+              if (id(gameday_ctl).weather_between()) {
+                if (on_board) {
+                  ::espn::wxp_flags().own_change = true;
+                  id(page_manager).show_page("gd_wxp_page");
+                }
+              } else if (on_wx && !id(gd_wxp_pinned)) {
+                ::espn::wxp_flags().own_change = true;
+                id(page_manager).show_page("gameday_live");
+              }

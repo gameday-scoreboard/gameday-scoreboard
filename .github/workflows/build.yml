@@ -339,6 +339,13 @@ jobs:
           mkdir -p out
           cp -r "${{ steps.esphome.outputs.name }}" out/${{ matrix.variant }}
           ls -R out
+      # An ESPHome pin bump can put ESPHome's own page at / with a green build.
+      # This reads the page out of the image and fails when it isn't ours.
+      - name: The panel's address opens our device page
+        if: needs.changes.outputs.firmware == 'true'
+        env:
+          VARIANT: ${{ matrix.variant }}
+        run: python3 scripts/device_page_check.py "out/$VARIANT/gameday-esp32s3.ota.bin"
       # The installer would say "Installing Game Day.Scoreboard".
       - name: Product name in the manifest
         if: needs.changes.outputs.firmware == 'true'
@@ -552,6 +559,8 @@ jobs:
     strategy:
       matrix:
         include:
+          - variant: waveshare
+            yaml: firmware/gameday-waveshare-demo.yaml
           - variant: moonhub75
             yaml: firmware/gameday-demo.yaml
           - variant: scoreboard75
@@ -672,9 +681,13 @@ jobs:
           python3 scripts/changelog_check.py --selftest
           python3 scripts/promote.py --selftest
           python3 scripts/restore_sync_lint.py --selftest
+          python3 scripts/saved_size_lint.py --selftest
           python3 scripts/sdkconfig_check.py --selftest
+          python3 scripts/device_page_check.py --selftest
       - name: Restored YAML values reach flash at once
         run: python3 scripts/restore_sync_lint.py .
+      - name: Saved structs have their size asserted
+        run: python3 scripts/saved_size_lint.py .
       - name: Site pages have their search and sharing tags
         run: python3 scripts/site_seo.py check docs/site
       - name: Device page mock matches the firmware's set table

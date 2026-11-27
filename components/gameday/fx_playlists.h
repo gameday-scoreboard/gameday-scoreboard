@@ -70,9 +70,9 @@ struct FxStore {
   FxList list[kFxListMax];
   uint8_t spare[4];
 } __attribute__((packed));
+static_assert(sizeof(FxStore) == 850,
+              "FxStore is saved: a new size needs a new preference key or a migration, not a new number");
 static_assert(sizeof(FxEntry) == 24, "FxEntry is part of a saved blob");
-static_assert(sizeof(FxStore) == 2 + kFxListMax * (kListNameMax + 3 + kFxEntryMax * 24) + 4,
-              "FxStore is a saved blob");
 constexpr uint8_t kFxStoreVersion = 1;
 
 // The step nearest a number of seconds, ties to the shorter one; past the

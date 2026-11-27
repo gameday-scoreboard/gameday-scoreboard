@@ -1,11 +1,11 @@
 ---
 title: "Basketball: NBA, WNBA and college"
-description: "What the panel shows for an NBA, WNBA or men's college basketball game: the period and clock, the playoff series and the victory splash."
+description: "What the panel shows for an NBA, WNBA or college basketball game: the period and clock, the playoff series and the victory splash."
 sidebar:
   order: 7
 ---
 
-NBA, WNBA and men's college basketball games share one board. This page describes a 128x64 display and notes where a single 64x64 panel differs. See [Panel sizes and layouts](/using/panel-sizes/).
+NBA, WNBA and men's and women's college basketball games share one board. This page describes a 128x64 display and notes where a single 64x64 panel differs. See [Panel sizes and layouts](/using/panel-sizes/).
 
 ## Before the game
 
@@ -21,20 +21,30 @@ Basketball teams have no Up next list on the device page: their season schedules
 
 ## During the game
 
-- **The clock and period** under the scores, like "1:04 4th", or "45.3 4th" in the last minute, when ESPN drops the minutes. Overtime reads "OT", then "2OT" and so on. College games play halves, so the clock reads "12:34 1st" or "12:34 2nd".
+- **The clock and period** under the scores, like "1:04 4th", or "45.3 4th" in the last minute, when ESPN drops the minutes. Overtime reads "OT", then "2OT" and so on. Men's college games play halves, so the clock reads "12:34 1st" or "12:34 2nd"; women's college games play quarters, like the WNBA.
 - **Breaks**: "Halftime", or "End" and the period, like "End 3rd".
-- **The ticker** with the last play. During a break it shows the series, or the records outside the playoffs.
 
-On a 128-wide board the row under the clock shows words, one line at a time, about 4 seconds each, using the full width of the board:
+On a 128-wide board the two bottom rows say one thing at a time, about 5 seconds each. The upper one, under the clock, names a team in its color and says what's happening; the lower one gives the detail behind it:
 
-- **The last basket**, like "McDaniels 3", or "Nesmith FT" for a free throw. It stays until the next basket, and a new one shows right away. It follows **Last play**.
-- **Each team's points leader** in this game, like "Edwards 24".
-- **The playoff series**, like "NY lead 2-1" or "Series 2-2", in a playoff game.
+- **A run**: "USA on a 16-2 run" over "7 of 13 shooting". The longest stretch that still counts as one, like 8-0, 12-2 or 16-4, while its team has the last basket, and who ended it: "FAMU Williford ends run". When the shooting isn't known for certain the lower row says who scored it, like "Langsy 8 of the 10", or what it did to the score, like "Was down 6, now up 4".
+- **A drought**: "FAMU scoreless 4:24" over "0 of 6, 0 of 5 on 3s", from two minutes on the game clock. Otherwise over "Outscored 9-0" or the last basket, like "Last: Williford layup".
+- **The score's story**: "USA takes the lead" over the basket that did it, "USA biggest lead, 22" over "22-8 since it was tied", "FAMU was down 14" over "21-12 since then", "FAMU has never led" over "Down as many as 19", and in the last three minutes of a one-possession game how long the lead has lasted, "USA ahead since 4:10" over "Were down 6".
+- **A period**: "USA 24-11 this half" over "10 of 14 shooting", when a team is 8 or more ahead of the other in the half or quarter, from the second period on.
+- **A hot hand**: "USA Langsy has 8" over "of their last 10 points".
+- **The last play**: "FAMU three" over "Baker Jr. from 25 feet". Baskets, free throws, steals, blocks and turnovers, for up to 45 seconds or until another basket. Misses, rebounds, fouls and players checking in aren't shown. A new one shows right away. It follows **Last play**.
+- **Each team's points leader**: "USA Langsy 21 pts" over the team's rebounds or assists leader, like "Roman 9 reb", or the team's shooting before anyone has three of either, or "Team high".
 - **The win chance**, like "MIN 56% to win", for the team ESPN favors, when the game first comes up and when ESPN's number moves 10 points or more since it last showed, no more than once every 3 minutes. **Win chance** under **Live pictures** on the device page's Display tab turns it off.
+- **The playoff series**, like "NY 2  CLE 1" over "Playoff series", in a playoff game.
+- **Where the game is**: "USA vs FAMU" over the arena in the first minutes, before anything has happened.
+- **The team stats**: both teams' shooting, threes and rebounds, each number after its team's name, like "USA 47%  FAMU 29%" over "Shooting". First in a timeout and between periods, and when nothing else is going on, including the end of a blowout.
 
-Every line is in white. At halftime only the series stays, and the line score and leaders cards take their turns.
+The panel works all of it out from the scores, plays and team stats it reads, and shows only what those prove. Shooting in a run, a drought or a period waits until ESPN's team stats have caught up with the score, and the lower row says something the score itself shows until then. A line about the whole game, like "has never led", needs the panel to have watched from the start. A team color too dark to read is brightened for the name.
 
-Basketball has no game situation line, so there is no ticker switch for one. **Last play** under **Ticker** on the device page's Display tab turns the last play on or off. See [The ticker](/using/ticker/).
+At halftime the rows go back to the playoff series and the ticker, and the line score and leaders cards take their turns. When the panel has something to tell you, like "no update for 5 min", the ticker takes the bottom row until it's over.
+
+On a single 64x64 panel the **ticker** has the last play worth reading, and during a break the series, or outside the playoffs both teams' shooting and rebounds, like "FG USA 47%, FAMU 29% | 3PT USA 3/14, FAMU 5/25 | Rebounds USA 38, FAMU 22".
+
+Basketball has no game situation line, so there is no ticker switch for one. **Last play** under **Ticker** on the device page's Display tab turns the last play on or off, on both board sizes. See [The ticker](/using/ticker/).
 
 On a single 64x64 panel the clock takes the abbreviations' place during play. There is no room for the row under the clock or the records.
 

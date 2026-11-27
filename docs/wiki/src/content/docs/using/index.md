@@ -18,11 +18,13 @@ You control the panel from three places. The **Game Day app** sets it up and cha
 - [Schedule and season recap](/using/schedule/): your team's next three games, and its season once it's over.
 - [Weather](/using/weather/): your town's forecast between games, and the forecast for kickoff on the next game's board.
 - [Pictures](/using/pictures/): your own picture or animated GIF between games.
+- [Game Day card](/using/gameday-card/): a QR code for gameday-scoreboard.com between games, for a panel other people see.
 - [Football: NFL and college](/using/football/)
 - [Baseball: MLB](/using/baseball/)
 - [Basketball: NBA, WNBA and college](/using/basketball/)
 - [Hockey: NHL](/using/hockey/)
 - [Soccer: MLS and the Premier League](/using/soccer/)
+- [Volleyball: women's college](/using/volleyball/)
 - [The ticker](/using/ticker/): the scrolling line along the bottom.
 - [Panel sizes and layouts](/using/panel-sizes/): one 64x64 panel, or a 128x64 display.
 - [WizMote remote](/using/remote/): pairing and what each button does.

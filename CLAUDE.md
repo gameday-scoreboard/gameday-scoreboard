@@ -1,17 +1,11 @@
 # Game Day Scoreboard firmware
 
-ESPHome firmware for a standalone sports scoreboard (NFL, college football,
-MLB, NBA, WNBA, men's college basketball, NHL, MLS and the Premier League) on
-an ESP32-S3 HUB75 controller. One top-level YAML per pinout:
-gameday-waveshare.yaml (the Waveshare ESP32-S3-RGB-Matrix, the board
-ready-made scoreboards ship on), gameday.yaml (MoonHub75, the DIY pinout and
-also the pinout of our own on-hold controller board) and
-gameday-scoreboard75.yaml (four early test boards, not a product); each picks
-its pin map from firmware/controllers/ and shares everything else via
-gameday-common.yaml.
+@AGENTS.md
+
+AGENTS.md, imported above, has the layout, build and test commands, the C++
+memory and testing rules, and the PR, docs and CHANGELOG rules shared with
+outside contributors. This file adds what only maintainers need.
 Sibling repo: the iOS companion app at ~/development/gameday-scoreboard-ios (github.com/gameday-scoreboard/gameday-scoreboard-ios).
-AGENTS.md has the layout, build and test commands shared with outside
-contributors; read it too.
 
 ## Hard rules
 
@@ -22,27 +16,6 @@ contributors; read it too.
   notes, specs, plans or reviews here: only product code, CHANGELOG, README
   and the site. Maintainer notes are kept privately and loaded through a
   gitignored CLAUDE.local.md.
-- The docs site (docs/wiki, Astro + Starlight; the gameday-scoreboard/docs
-  repo publishes `main` to docs.gameday-scoreboard.com on GitHub Pages
-  every 15 minutes) is part of every change. A PR
-  that changes what an owner or DIY builder sees or does updates or adds
-  the page for it under docs/wiki/src/content/docs/ in the same PR; CI
-  ("Docs updated") fails a PR into `dev` that touches firmware/ or
-  components/ without a docs change unless the PR description has a line
-  `No owner-visible change, no docs: <why>`, which the reviewer checks.
-  The label `docs: not needed` still passes, as a fallback for older PRs.
-  Docs describe the firmware on the branch they sit on, in the present
-  tense, written for the owner, no internal names, cards or notes. The
-  docs site publishes only from `main`, so a page goes live with the
-  release that brings its behavior; no "Coming in the next release"
-  notes (CI refuses a PR that adds one). A phone app feature that waits
-  for an app update uses `:::note[Coming in the next app update]`.
-  `cd docs/wiki && npm run build` must pass.
-- PR descriptions say what changed and how it was tested, nothing else: no
-  links to private repos or trackers, no card numbers or `Closes` lines
-  for them, no private notes. No AI attribution or Claude-headed
-  comments in PR text, comments or reviews. Reviews and progress notes go
-  on the private card.
 - Every parallel agent works in its own git worktree.
 - Branch from `dev` and open PRs against `dev` (the default branch), never
   `beta` or `main`. Changes move `dev` to `beta` to `main` by promotion PRs
@@ -58,7 +31,7 @@ contributors; read it too.
   `version` in firmware/gameday-common.yaml, then opens the `dev` to
   `beta` PR. Nothing is written at promotion time: every PR into `dev`
   leaves CHANGELOG.md and the docs in their released shape (see the
-  CHANGELOG rule below). So shipping is one `beta` to `main` PR: its
+  CHANGELOG rule in AGENTS.md). So shipping is one `beta` to `main` PR: its
   merge runs tag.yml, which tags `main`'s version and starts the release.
   Promotions to `beta` happen when the repo owner says so; `beta` to
   `main` only on the repo owner's "ship it". PRs into `dev` may
@@ -76,25 +49,9 @@ contributors; read it too.
 - Decisions not to reopen without the repo owner: OTA with no password, `api:` with
   no key, the device web page open ("panel trusts the home network"). Do not
   raise LAN hardening again. Prioritize customer-visible failures.
-- A PR an owner would notice adds its bullet under `## Unreleased` in
-  CHANGELOG.md, under `### ⚠️ Heads up`, `### ✨ New` or `### 🐛 Fixes`:
-  one short line, starting with an emoji that fits it, the detail on the
-  docs page (CHANGELOG.md's own top note has the format). The section
-  stays release-ready as each PR lands: it starts with a plain summary
-  line under 240 characters, which a PR rewrites when its change is the
-  bigger news; a bullet about the same feature as one already there is
-  folded into that line, not added beside it; a fix to something that
-  hasn't shipped changes no line, or that feature's line. CI ("Changelog
-  ready to release", scripts/changelog_check.py) fails a PR into `dev`
-  that touches firmware/ or components/ without changing Unreleased,
-  unless the description has `No owner-visible change, no docs: <why>`
-  or `No changelog line: <why>` (a change too small or rare for the
-  notes), and fails any PR that edits a released section or leaves
-  Unreleased out of shape. A tag without a matching section fails CI.
-- Name branches after the change (`espn-gzip`); CI's Branch rules job
-  refuses a PR from a `card-<number>` branch.
 - ESPHome venv at ~/development/tools/esphome-venv flashes over USB and
-  streams logs; the repo owner's panel is gameday-2f6a70.local. Use `esphome
-  compile`, not `esphome config`, to catch C++ errors. Host tests: `make -C
-  tests`. Rebuild the web bundle with the venv's python (bare python3 on
-  this Mac is 3.9.6, too old) after editing firmware/web/app.js.
+  streams logs. Rebuild the web bundle with the venv's python (bare python3
+  on the Mac is 3.9.6, too old) after editing firmware/web/app.js.
+- The docs site: the gameday-scoreboard/docs repo publishes `main` every 15
+  minutes. The label `docs: not needed` still passes "Docs updated", as a
+  fallback for older PRs.

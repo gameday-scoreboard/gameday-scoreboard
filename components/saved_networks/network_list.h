@@ -32,6 +32,8 @@ struct NetworkList {
   uint8_t count;
   Network nets[MAX_NETWORKS];
 };
+static_assert(sizeof(NetworkList) == 496,
+              "NetworkList is saved: a new size needs a new preference key or a migration, not a new number");
 
 // FNV-1a over the name, a zero byte and the password. Never 0, which
 // stands for "nothing taken from the slot yet".

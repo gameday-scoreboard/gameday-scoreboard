@@ -205,8 +205,9 @@ inline int action_margin(Sport sport) {
 }
 
 // The moment a fan would want to see: football in the red zone, the bases
-// loaded, or a close game in its last two minutes (or overtime). Baseball
-// has no clock, so only the bases count there.
+// loaded, a volleyball match's fifth set or match point, or a close game in
+// its last two minutes (or overtime). Baseball and volleyball have no clock,
+// so nothing else counts there.
 inline bool in_action(const GameSnapshot &g, League league) {
   if (!g.valid || g.state != GameState::IN || at_break(g))
     return false;
@@ -215,6 +216,8 @@ inline bool in_action(const GameSnapshot &g, League league) {
     const uint8_t loaded = Baseball::FIRST | Baseball::SECOND | Baseball::THIRD;
     return (g.mlb.half == Half::TOP || g.mlb.half == Half::BOTTOM) && (g.mlb.bases & loaded) == loaded;
   }
+  if (sport == Sport::VOLLEYBALL)
+    return g.period >= 5 || volleyball_match_point(g);
   if (sport == Sport::FOOTBALL && g.is_red_zone)
     return true;
   if (abs(g.team_score - g.opp_score) > action_margin(sport))
@@ -272,6 +275,9 @@ inline std::string fav_score_banner(const GameSnapshot &prev, const GameSnapshot
     case Sport::HOCKEY:
     case Sport::SOCCER:
       word = "GOAL";
+      break;
+    case Sport::VOLLEYBALL:
+      word = "SET";
       break;
     case Sport::BASKETBALL:
       break;

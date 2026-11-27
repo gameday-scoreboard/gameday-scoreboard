@@ -28,7 +28,7 @@ The countdown is on for every panel. Turn it off with **Countdown to the next ga
 
 ## Your own countdown
 
-Under **Date countdown** on the device page's Customize tab, give a countdown a **Name**, like "Christmas" or "Opening day", and a **Day**. The panel counts down to the start of that day in the panel's timezone, and on the day itself it reads **Today**. The day after, it stops showing; set a new day for the next one. **Clear the countdown** removes it.
+Under **Date countdown** on the device page's Customize tab, give a countdown a **Name**, like "Christmas" or "Opening day", and a **Day**. The panel counts down to the start of that day in the panel's timezone, and on the day itself it reads **Today** from midnight to midnight, also on the days the clocks change. After that it stops showing; set a new day for the next one. **Clear the countdown** removes it.
 
 It takes the last 10 seconds of every minute, whenever no game is on, in every mode: over the next game's board, the off-season clock, the Favorite teams playlist, and the Later today and final scores in Live games. A game in progress, or a favorite's game that has taken the panel, is never covered.
 

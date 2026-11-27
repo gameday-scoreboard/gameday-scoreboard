@@ -55,6 +55,27 @@ inline std::string countdown_card_text(int64_t at, int64_t end, int64_t now) {
   return now < end ? "Today" : "";
 }
 
+// The first moment of a day (YYYYMMDD) in the panel's timezone, and of the
+// day after it: a custom countdown's start and end. The day is 23 or 25
+// hours long when the clocks change. `offset` gives the panel's UTC offset,
+// in seconds, at an epoch. No zone in timezones.h changes its clocks at
+// midnight or in the hour before it, so the second guess has midnight's own
+// offset.
+using CountdownUtcOffset = int32_t (*)(int64_t epoch);
+inline int64_t countdown_midnight(int32_t day, CountdownUtcOffset offset) {
+  const int64_t utc = (int64_t) day * kDayS;
+  return utc - offset(utc - offset(utc));
+}
+inline int32_t countdown_day_number(uint32_t ymd) {
+  return wx_days_from_civil((int) (ymd / 10000), ymd / 100 % 100, ymd % 100);
+}
+inline int64_t countdown_day_start(uint32_t ymd, CountdownUtcOffset offset) {
+  return countdown_midnight(countdown_day_number(ymd), offset);
+}
+inline int64_t countdown_day_end(uint32_t ymd, CountdownUtcOffset offset) {
+  return countdown_midnight(countdown_day_number(ymd) + 1, offset);
+}
+
 // The line under the digits: "DAL vs PHI" at home, "DAL at PHI" away.
 inline std::string matchup_line(const std::string &ours, const std::string &opp, bool home) {
   if (opp.empty())

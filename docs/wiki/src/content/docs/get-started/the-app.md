@@ -64,10 +64,20 @@ Under **Night mode until**, **Turn on for tonight** puts the panel back at its n
 
 - **Favorites**, in priority order. **Add a favorite** opens the team chooser. Each team can move up or down or come out of the list. See [Favorite teams](/using/favorites/).
 
+:::note[Coming in the next app update]
+On Android, the chooser has an **NCAAW** tab for women's college basketball and an **NCAAVB** tab for women's college volleyball, with every Division I team. Both leagues are also among the **Live games** leagues, a playlist's **Sports** and the **Remote buttons** pickers. They show once the panel runs firmware with them.
+
+On Android, during a volleyball match the Board shows the points in the set being played, with the set and the sets won under them, like **Set 3 1-1**. The final shows the sets, like 3-1.
+:::
+
 In the chooser's **On now** tab, a search that matches none of today's games lists the matching teams under a **Teams** heading instead, so a team that isn't playing today still turns up.
 
 :::note[Coming in the next app update]
 Each league tab in the chooser starts with that league's games today, under the same headings as **On now**, with all of the league's teams after them under a **Teams** heading. Tap a side to add that team. **Final** and **Postponed or canceled** start folded, with a count, like **Final (3)**; tap the heading to open one. A league with no games today shows just its teams. A search still lists teams from every league, with no games.
+:::
+
+:::note[Coming in the next app update]
+On iPhone, the chooser has an **NCAAW** tab for women's college basketball and an **NCAAVB** tab for women's college volleyball, with every Division I team in each, once the panel runs firmware with them. Both leagues are in **Live games**, a playlist's **Sports** and the remote buttons' lists too. During a volleyball match the Board shows the points in the set being played, with the set and the sets won under them, like "Set 3 1-1". At the final it shows the sets, like 3-1.
 :::
 
 - **Playing** and **Playlists**, for groups of your favorites. See [Playlists](/using/favorites/#playlists).
@@ -161,6 +171,10 @@ On iPhone and Android, **After the game** also has **Show effects**: the effect 
 :::
 
 On iPhone and Android, **Customize** has **Pictures** after the message card, like the device page: the pictures on your panel, each with **Delete**, and **Add a picture**, which picks from your phone's photos. A photo is shrunk to fit the panel and a GIF up to 128 by 64 pixels goes as it is (see [Pictures](/using/pictures/)). It shows once the panel runs firmware with pictures.
+
+:::note[Coming in the next app update]
+On Android, **Customize** has a **Flights** card after **Date countdown**, like the device page's: **Within**, **Facing**, **ADS-B receiver** and **adsb.lol key**, and the status line, like **8 planes nearby, from adsb.lol, read 20 s ago** (see [Setting it up](/using/flights/#setting-it-up)). Once a key is saved, the card shows **Key saved** with **Clear**, never the key. With **Showing** on the Board set to **Flights**, the same status line shows under it, with **Flights settings under Customize**. The card shows once the panel runs firmware with the Flights page.
+:::
 
 On Android, **Device** has a **Remote buttons** card after **Remote**. On iPhone, **Device > Advanced** has **Buttons 1 to 4** under **Remote**. Both have the device page's picker for each of buttons 1 to 4: **Its own favorite**, a favorite team, a sport, a playlist, **All favorites** or **Nothing**. A button on its own favorite says which favorite that is, and one whose team, playlist or sport is gone says which favorite it plays for now. While a WizMote is paired, your favorites and playlists show the buttons set to them. See [The numbered buttons](/using/remote/#the-numbered-buttons). They show once the panel runs firmware with the pickers.
 

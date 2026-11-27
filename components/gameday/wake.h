@@ -24,11 +24,12 @@ static const int64_t kWakeLateS = 3 * 3600;
 
 // What the panel does between games. SCOREBOARD is 0 so a saved spare byte
 // keeps today's behavior; the page and the apps list only the ones this
-// firmware has. SMART is the Smart board page (firmware/pages/smart_board.yaml)
-// and EFFECTS the Effects page (firmware/pages/effects.yaml) until the next
-// game is near.
-enum class After : uint8_t { SCOREBOARD = 0, OFF = 1, CLOCK = 2, SMART = 3, EFFECTS = 4 };
-static const uint8_t kAfterCount = 5;
+// firmware has. SMART is the Smart board page (firmware/pages/smart_board.yaml),
+// EFFECTS the Effects page (firmware/pages/effects.yaml) and FLIGHTS the
+// Flights page (firmware/pages/flights.yaml) and WEATHER the Weather page
+// (firmware/pages/weather.yaml) until the next game is near.
+enum class After : uint8_t { SCOREBOARD = 0, OFF = 1, CLOCK = 2, SMART = 3, EFFECTS = 4, FLIGHTS = 5, WEATHER = 6 };
+static const uint8_t kAfterCount = 7;
 
 inline const char *after_word(uint8_t a) {
   switch ((After) a) {
@@ -40,6 +41,10 @@ inline const char *after_word(uint8_t a) {
       return "smartboard";
     case After::EFFECTS:
       return "effects";
+    case After::FLIGHTS:
+      return "flights";
+    case After::WEATHER:
+      return "weather";
     default:
       return "scoreboard";
   }
@@ -65,6 +70,8 @@ struct WakePrefs {
   uint8_t after;  // After
   uint8_t spare[5];
 } __attribute__((packed));
+static_assert(sizeof(WakePrefs) == 8,
+              "WakePrefs is saved: a new size needs a new preference key or a migration, not a new number");
 
 inline WakePrefs wake_defaults() {
   WakePrefs p{};
@@ -184,12 +191,30 @@ inline bool wake_effects(const WakePrefs &p, const WakeState &s, const WakeInput
   return p.after == (uint8_t) After::EFFECTS && wake_page_between(p, s, in);
 }
 
+// After the game is Flights and it is between games.
+inline bool wake_flights(const WakePrefs &p, const WakeState &s, const WakeInputs &in) {
+  return p.after == (uint8_t) After::FLIGHTS && wake_page_between(p, s, in);
+}
+
+// After the game is Weather and it is between games.
+inline bool wake_weather(const WakePrefs &p, const WakeState &s, const WakeInputs &in) {
+  return p.after == (uint8_t) After::WEATHER && wake_page_between(p, s, in);
+}
+
 // For the state document's wake_now and the log: "asleep" (After the game
 // turned the panel off), "clock" (the clock between games), "smartboard"
 // (the Smart board between games), "effects" (an effect between games),
-// else "".
-inline const char *wake_word(bool asleep, bool clock, bool smart = false, bool effects = false) {
-  return asleep ? "asleep" : clock ? "clock" : smart ? "smartboard" : effects ? "effects" : "";
+// "flights" (the Flights page between games), "weather" (the Weather page
+// between games), else "".
+inline const char *wake_word(bool asleep, bool clock, bool smart = false, bool effects = false,
+                             bool flights = false, bool weather = false) {
+  return asleep    ? "asleep"
+         : clock   ? "clock"
+         : smart   ? "smartboard"
+         : effects ? "effects"
+         : flights ? "flights"
+         : weather ? "weather"
+                   : "";
 }
 
 // Effects between games: whether the effect should be up now. Each of these

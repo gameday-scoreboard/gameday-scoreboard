@@ -50,6 +50,7 @@ script:
             - hub75.set_brightness:
                 id: matrix
                 brightness: 0
+      - script.execute: gd_dark_check
       - lambda: |-
           const uint8_t mark = id(gameday_ctl).guard_mark();
           const int W = lv_disp_get_hor_res(lv_disp_get_default());
@@ -96,6 +97,50 @@ script:
             - delay: 15s
             - lambda: 'lv_obj_set_hidden(id(gd_guard_line), true);'
             - delay: 105s
+
+  # A dark screen draws nothing: LVGL pauses while Power is off or the night
+  # schedule has the screen off (screen_dark() in components/gameday, which
+  # fires "screen" when that changes), and comes back with the whole screen
+  # redrawn. QC and the FCC screen light a dark panel, so they keep LVGL
+  # running; an effect has paused it already and resumes it itself.
+  - id: gd_dark_check
+    then:
+      - if:
+          condition:
+            lambda: 'return id(gameday_ctl).screen_dark() && !id(qc_active) && !id(reg_active) && !id(gd_fx_on);'
+          then:
+            - if:
+                condition:
+                  not:
+                    lvgl.is_paused:
+                then:
+                  - logger.log:
+                      level: INFO
+                      tag: guard
+                      format: "Screen dark: drawing paused"
+                  - lvgl.pause:
+          else:
+            - if:
+                condition:
+                  and:
+                    - lvgl.is_paused:
+                    - lambda: 'return !id(gd_fx_on);'
+                then:
+                  - logger.log:
+                      level: INFO
+                      tag: guard
+                      format: "Screen lit: drawing again"
+                  - lvgl.resume:
+                  # LVGL marked nothing dirty while paused
+                  - script.execute: gd_repaint
+
+gameday:
+  on_action:
+    - if:
+        condition:
+          lambda: 'return x == "screen";'
+        then:
+          - script.execute: gd_dark_check
 
 image:
   - platform: file

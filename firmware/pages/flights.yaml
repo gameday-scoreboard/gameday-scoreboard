@@ -1,0 +1,301 @@
+# Flights: the planes near the owner's home, as a page under "Showing" after
+# the Smart board and a choice under After the game (components/gameday/wake.h,
+# After::FLIGHTS). Home is the weather town. The planes come from the owner's
+# own ADS-B receiver when one is set, else from adsb.lol, and a plane's route
+# from adsbdb; the component reads them only while this page is up on a lit
+# screen (components/gameday/gameday.cpp, fl_due_).
+#
+# The card shows one plane: the nearest, or the nearest in view of the
+# owner's window when it faces a way, kept until another is clearly nearer.
+# With more than one plane the list of the nearest four takes turns with it.
+# Between reads the planes move on by dead reckoning once a second. What each
+# screen says is components/gameday/flights_page.h's.
+#
+# Picked under Showing, Flights stays up through restarts and power cuts
+# (gd_fl_pinned) until somebody picks something else there, as the Smart
+# board does. Picked under After the game, it goes up between games while
+# Showing is on Scoreboard, and the scoreboard comes back when the next game
+# is near. The screens that tell the owner something (Wi-Fi, a banner, the
+# night schedule) are on LVGL's top layer and show over it.
+
+globals:
+  # Showing is on Flights because somebody picked it there, so it comes back
+  # after a restart
+  - id: gd_fl_pinned
+    type: bool
+    restore_value: yes
+    initial_value: 'false'
+
+esphome:
+  on_boot:
+    # After the page manager has published its default page (Scoreboard)
+    - priority: -200.0
+      then:
+        - lambda: |-
+            // What Showing has up decides what the panel reads (showing.h)
+            id(gameday_ctl).set_fl_pinned_ref(&id(gd_fl_pinned));
+            id(page_manager).add_on_state_callback([](size_t index) {
+              const char *page = id(page_manager).option_at(index);
+              const bool fl = page != nullptr && strcmp(page, "Flights") == 0;
+              if (::espn::fl_flags().own_change) {
+                ::espn::fl_flags().own_change = false;
+                return;
+              }
+              if (fl != id(gd_fl_pinned)) {
+                id(gd_fl_pinned) = fl;
+                id(gd_fl_pin_sync).execute();
+                ESP_LOGI("flights", fl ? "Showing Flights until somebody picks something else"
+                                       : "Flights no longer picked under Showing");
+              }
+            });
+            if (id(gd_fl_pinned)) {
+              ESP_LOGI("flights", "Back on Flights, as Showing was before the restart");
+              ::espn::fl_flags().own_change = true;
+              id(page_manager).show_page("gd_fl_page");
+            }
+
+script:
+  # Into flash at once, as gd_sb_pin_sync does for the Smart board.
+  - id: gd_fl_pin_sync
+    mode: restart
+    then:
+      - delay: 1100ms
+      - lambda: 'id(gameday_ctl).sync_soon();'
+  - id: gd_fl_draw
+    mode: single
+    then:
+      - lambda: |-
+          const int32_t W = lv_display_get_horizontal_resolution(lv_display_get_default());
+          const bool wide = W >= 128;
+          ::espn::FlView v;
+          id(gameday_ctl).flights_view(v, wide);
+          const lv_font_t *f8 = id(spleen_8)->get_lv_font();
+          const lv_font_t *f12 = id(spleen_12)->get_lv_font();
+          const lv_font_t *f16 = id(spleen_16)->get_lv_font();
+          // Only a label whose text changed is redrawn.
+          auto put = [](lv_obj_t *l, const char *t) {
+            if (strcmp(lv_label_get_text(l), t) != 0)
+              lv_label_set_text(l, t);
+          };
+          auto ink = [](lv_obj_t *l, uint32_t rgb) { lv_obj_set_style_text_color(l, lv_color_hex(rgb), 0); };
+          auto place = [W](lv_obj_t *l, const lv_font_t *f, int32_t y) {
+            lv_obj_set_style_text_font(l, f, 0);
+            lv_obj_set_width(l, W);
+            lv_obj_set_pos(l, 0, y);
+          };
+          lv_obj_t *rows[::espn::kFlListRows] = {id(gd_fl_r1), id(gd_fl_r2), id(gd_fl_r3), id(gd_fl_r4)};
+
+          // The layout for the panel's width, once and again when it changes.
+          // The widgets below leave their place, width and font to this.
+          static int32_t laid = 0;
+          if (laid != W) {
+            laid = W;
+            for (lv_obj_t *c : {id(gd_fl_msg), id(gd_fl_card), id(gd_fl_list)})
+              lv_obj_set_size(c, W, 64);
+            // The card's lines: the font (0 spleen_8, 1 spleen_12, 2
+            // spleen_16) and y of each, two panels then one
+            lv_obj_t *card[] = {id(gd_fl_call), id(gd_fl_airline), id(gd_fl_l2), id(gd_fl_l3),
+                                id(gd_fl_l4),   id(gd_fl_l5),      id(gd_fl_l6)};
+            static const uint8_t kAt[2][7][2] = {
+                {{2, 0}, {0, 5}, {1, 16}, {1, 28}, {1, 40}, {1, 52}, {0, 0}},
+                {{1, 0}, {0, 0}, {1, 13}, {0, 27}, {0, 36}, {0, 55}, {0, 45}}};
+            const lv_font_t *fonts[] = {f8, f12, f16};
+            for (size_t i = 0; i < 7; i++)
+              place(card[i], fonts[kAt[wide ? 0 : 1][i][0]], kAt[wide ? 0 : 1][i][1]);
+            lv_obj_set_hidden(id(gd_fl_airline), !wide);
+            lv_obj_set_hidden(id(gd_fl_l6), wide);
+            // One panel puts a row's second line, in grey, under it
+            for (size_t i = 0; i < ::espn::kFlListRows; i++) {
+              place(rows[i], wide ? f12 : f8, wide ? 2 + 16 * (int32_t) i : 16 * (int32_t) i);
+              lv_label_set_recolor(rows[i], !wide);
+            }
+          }
+
+          lv_obj_set_hidden(id(gd_fl_msg), v.screen != ::espn::FlScreen::MESSAGE);
+          lv_obj_set_hidden(id(gd_fl_card), v.screen != ::espn::FlScreen::CARD);
+          lv_obj_set_hidden(id(gd_fl_list), v.screen != ::espn::FlScreen::LIST);
+
+          if (v.screen == ::espn::FlScreen::MESSAGE) {
+            // The title in the biggest font it fits in on one line
+            const int32_t big = wide ? 8 : 6;
+            const bool fits = (int32_t) strlen(v.title) * big <= W;
+            const lv_font_t *tf = wide ? (fits ? f16 : f12) : (fits ? f12 : f8);
+            place(id(gd_fl_title), tf, 6);
+            place(id(gd_fl_sub), wide ? f12 : f8, 6 + lv_font_get_line_height(tf) + 6);
+            put(id(gd_fl_title), v.title);
+            put(id(gd_fl_sub), v.sub);
+          } else if (v.screen == ::espn::FlScreen::CARD) {
+            put(id(gd_fl_call), v.call);
+            ink(id(gd_fl_call), v.emergency ? 0xFF2020 : 0xFFFFFF);
+            put(id(gd_fl_airline), v.airline);
+            put(id(gd_fl_l2), v.line2);
+            ink(id(gd_fl_l2), v.route ? 0xFFB000 : 0xA0A0A0);
+            put(id(gd_fl_l3), v.type);
+            put(id(gd_fl_l4), v.alt);
+            put(id(gd_fl_l6), v.speed);
+            put(id(gd_fl_l5), v.where);
+            ink(id(gd_fl_l5), v.overhead ? 0x40E0FF : 0xFFFFFF);
+            // The climb or descend arrow after the distance and direction
+            lv_obj_t *l5 = id(gd_fl_l5);
+            const lv_font_t *f5 = wide ? f12 : f8;
+            lv_point_t sz;
+            lv_text_get_size(&sz, v.where, f5, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+            lv_obj_t *cv = id(gd_fl_arrow);
+            lv_obj_set_pos(cv, sz.x + 3, lv_obj_get_y(l5) + (lv_font_get_line_height(f5) - 7) / 2);
+            lv_obj_set_hidden(cv, v.vdir == 0);
+            // Drawn again only when it turns: 5 by 7 pixels, a row a byte
+            // with bit 4 the left pixel, green up, orange down
+            static int8_t drawn = 0;
+            if (v.vdir != 0 && v.vdir != drawn) {
+              drawn = v.vdir;
+              static const uint8_t kUp[7] = {0x04, 0x0E, 0x15, 0x04, 0x04, 0x04, 0x04};
+              const lv_color_t c = lv_color_hex(v.vdir > 0 ? 0x40D040 : 0xFF8040);
+              lv_canvas_fill_bg(cv, lv_color_black(), LV_OPA_COVER);
+              for (int32_t y = 0; y < 7; y++)
+                for (int32_t x = 0; x < 5; x++)
+                  if (kUp[v.vdir > 0 ? y : 6 - y] & (0x10 >> x))
+                    lv_canvas_set_px(cv, x, y, c, LV_OPA_COVER);
+            }
+          } else {
+            for (size_t i = 0; i < ::espn::kFlListRows; i++) {
+              const bool on = i < v.rows;
+              char t[48] = "";
+              if (on)
+                snprintf(t, sizeof(t), wide ? "%s" : "%s\n#909090 %s#", v.row[i], v.row2[i]);
+              put(rows[i], t);
+              ink(rows[i], on && v.row_emergency[i] ? 0xFF2020 : 0xFFFFFF);
+            }
+          }
+
+interval:
+  # Once a second while the page is up: the planes move on between reads,
+  # and the card and the list take their turns
+  - interval: 1s
+    then:
+      - lambda: |-
+          // current_option() is empty, with a null c_str(), before the first page
+          const auto cur = id(page_manager).current_option();
+          if (!cur.empty() && strcmp(cur.c_str(), "Flights") == 0)
+            id(gd_fl_draw).execute();
+
+lvgl:
+  pages:
+    - id: gd_fl_page
+      bg_color: 0x000000
+      scrollbar_mode: "OFF"
+      on_load:
+        then:
+          - script.execute: gd_fl_draw
+      widgets:
+        # A message: the title and the line under it
+        - obj:
+            id: gd_fl_msg
+            pad_all: 0
+            border_width: 0
+            bg_opa: TRANSP
+            scrollbar_mode: "OFF"
+            widgets:
+              - label:
+                  id: gd_fl_title
+                  text_align: CENTER
+                  long_mode: CLIP
+                  text: "Flights"
+                  text_color: 0xFFFFFF
+              - label:
+                  id: gd_fl_sub
+                  text_align: CENTER
+                  long_mode: WRAP
+                  text: "Looking for planes"
+                  text_color: 0x909090
+        # The card for one plane
+        - obj:
+            id: gd_fl_card
+            pad_all: 0
+            border_width: 0
+            bg_opa: TRANSP
+            scrollbar_mode: "OFF"
+            hidden: true
+            widgets:
+              - label:
+                  id: gd_fl_call
+                  long_mode: CLIP
+                  text: ""
+              - label:
+                  id: gd_fl_airline
+                  text_align: RIGHT
+                  long_mode: CLIP
+                  text: ""
+                  text_color: 0x909090
+              - label:
+                  id: gd_fl_l2
+                  long_mode: CLIP
+                  text: ""
+              - label:
+                  id: gd_fl_l3
+                  long_mode: CLIP
+                  text: ""
+                  text_color: 0xC0C0C0
+              - label:
+                  id: gd_fl_l4
+                  long_mode: CLIP
+                  text: ""
+                  text_color: 0xFFFFFF
+              - label:
+                  id: gd_fl_l6
+                  long_mode: CLIP
+                  text: ""
+                  text_color: 0xFFFFFF
+              - label:
+                  id: gd_fl_l5
+                  long_mode: CLIP
+                  text: ""
+              # Climbing or descending, drawn by gd_fl_draw
+              - canvas:
+                  id: gd_fl_arrow
+                  width: 5
+                  height: 7
+                  hidden: true
+        # The nearest four
+        - obj:
+            id: gd_fl_list
+            pad_all: 0
+            border_width: 0
+            bg_opa: TRANSP
+            scrollbar_mode: "OFF"
+            hidden: true
+            widgets:
+              - label: {id: gd_fl_r1, long_mode: CLIP, text: ""}
+              - label: {id: gd_fl_r2, long_mode: CLIP, text: ""}
+              - label: {id: gd_fl_r3, long_mode: CLIP, text: ""}
+              - label: {id: gd_fl_r4, long_mode: CLIP, text: ""}
+
+lvgl_page_manager:
+  pages:
+    - page: gd_fl_page
+      friendly_name: "Flights"
+      order: 30
+
+gameday:
+  on_action:
+    # After the game is Flights: up between games, but only over the
+    # scoreboard (an owner who picked another page keeps it), and down when
+    # the next game is near unless somebody picked it under Showing
+    - if:
+        condition:
+          lambda: 'return x == "flights";'
+        then:
+          - lambda: |-
+              // current_option() is empty, with a null c_str(), before the first page
+              const auto cur = id(page_manager).current_option();
+              const char *page = cur.empty() ? "" : cur.c_str();
+              const bool on_fl = strcmp(page, "Flights") == 0;
+              const bool on_board = strcmp(page, "Scoreboard") == 0;
+              if (id(gameday_ctl).flights_between()) {
+                if (on_board) {
+                  ::espn::fl_flags().own_change = true;
+                  id(page_manager).show_page("gd_fl_page");
+                }
+              } else if (on_fl && !id(gd_fl_pinned)) {
+                ::espn::fl_flags().own_change = true;
+                id(page_manager).show_page("gameday_live");
+              }

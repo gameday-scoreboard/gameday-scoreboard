@@ -14,6 +14,7 @@
 
 #include "fx_names_stub.h"
 #include "fx_playlists.h"
+#include "gameday_card.h"
 #include "playlists.h"
 #include "set_request.h"
 
@@ -83,6 +84,10 @@ struct Settings {
   std::string town;
   bool wxon{false};
   int wxunit{0};
+  // The Flights page (flights.h): its distance step, facing, receiver and
+  // adsb.lol key, which the state gives back only as flkey_set.
+  int flrad{kFlRadiusDefault}, flface{0};
+  std::string flrx, flkey;
   int msgevery{kMsgEveryDefault};
   int pregame{kPregameDefault};
   NightPrefs night{night_defaults()};
@@ -120,16 +125,14 @@ bool *own_switch(Settings &s, Card c) {
 
 bool card_on(const Settings &s, Card c) {
   const bool *own = own_switch(const_cast<Settings &>(s), c);
-  return own != nullptr ? *own : (s.cards_off & card_bit(c)) == 0;
+  return own != nullptr ? *own : card_saved_on(c, s.cards_off);
 }
 
 void set_card(Settings &s, Card c, bool on) {
   if (bool *own = own_switch(s, c))
     *own = on;
-  else if (on)
-    s.cards_off &= (uint16_t) ~card_bit(c);
   else
-    s.cards_off |= card_bit(c);
+    s.cards_off = card_saved(c, s.cards_off, on);
 }
 
 void load(Settings &s, JsonObjectConst o) {
@@ -198,6 +201,13 @@ void load(Settings &s, JsonObjectConst o) {
   num("msgevery", s.msgevery);
   num("pregame", s.pregame);
   num("wxunit", s.wxunit);
+  num("flrad", s.flrad);
+  num("flface", s.flface);
+  if (o["flrx"].is<const char *>())
+    s.flrx = o["flrx"].as<const char *>();
+  // A case starts with a key set by its own value; the state has only flkey_set.
+  if (o["flkey"].is<const char *>())
+    s.flkey = o["flkey"].as<const char *>();
   if (o["hook"].is<const char *>())
     s.hook = o["hook"].as<const char *>();
   if (o["msg"].is<const char *>())
@@ -471,6 +481,10 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
       break;
     case SetKind::WXON: s.wxon = op.on; break;
     case SetKind::WXUNIT: s.wxunit = op.value; break;
+    case SetKind::FL_RADIUS: s.flrad = op.value; break;
+    case SetKind::FL_FACE: s.flface = op.value; break;
+    case SetKind::FL_RX: s.flrx = op.text; break;
+    case SetKind::FL_KEY: s.flkey = op.text; break;
     case SetKind::NIGHT: s.night.on = op.on ? 1 : 0; break;
     case SetKind::NIGHT_START: s.night.start = (uint16_t) op.value; break;
     case SetKind::NIGHT_END: s.night.end = (uint16_t) op.value; break;
@@ -612,6 +626,10 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["town"] = s.town;
   doc["wxon"] = s.wxon;
   doc["wxunit"] = s.wxunit;
+  doc["flrad"] = s.flrad;
+  doc["flface"] = s.flface;
+  doc["flrx"] = s.flrx;
+  doc["flkey_set"] = !s.flkey.empty();
   doc["night"] = s.night.on != 0;
   doc["nightstart"] = night_time_text(s.night.start);
   doc["nightend"] = night_time_text(s.night.end);
@@ -682,8 +700,31 @@ void test_cards() {
     // news keep their own bytes.
     bool own = r.card == Card::COUNTDOWN || r.card == Card::NEWS || r.card == Card::WEATHER;
     SCHECK(((kCardsOffBits & card_bit(r.card)) != 0) == !own, "card %s: cards_off keeps its bit", r.id);
-    // A saved 0 is the default for a card in cards_off, so every one is on by default.
-    SCHECK(own || r.on, "card %s: on by default", r.id);
+    // A saved 0 is the default for a card in cards_off: on, but the Game Day
+    // card's, which is its build's.
+    if (!own)
+      SCHECK(r.on == card_saved_on(r.card, 0), "card %s: a saved 0 is its default", r.id);
+  }
+  // The Game Day card: off on a home panel, and its bit turns it on.
+  SCHECK(card_row("gamedaycard") != nullptr && !card_row("gamedaycard")->on, "the Game Day card is off by default");
+  SCHECK(!card_saved_on(Card::GAMEDAY, 0) && card_saved_on(Card::GAMEDAY, card_bit(Card::GAMEDAY)),
+         "the Game Day card: its bit means on");
+  SCHECK(card_saved(Card::GAMEDAY, 0, true) == card_bit(Card::GAMEDAY) &&
+             card_saved(Card::GAMEDAY, card_bit(Card::GAMEDAY), false) == 0,
+         "the Game Day card: on sets its bit, off clears it");
+  SCHECK(card_saved(Card::CLOCK, 0, false) == card_bit(Card::CLOCK) && card_saved_on(Card::CLOCK, 0),
+         "the other cards: their bit means off");
+  // Its words: every wording fits the card's lines and its 64 px.
+  for (int w = 0; w < kGamedayCardWordings; w++) {
+    int n = 0;
+    const GamedayCardLine *l = gameday_card_lines(w, n);
+    SCHECK(n > 0 && n <= kGamedayCardLinesMax, "wording %d: %d lines", w, n);
+    for (int i = 0; i < n; i++) {
+      // spleen_8, _12 and _16 are 5, 6 and 8 px a letter.
+      const size_t em = l[i].px >= 16 ? 8 : l[i].px >= 12 ? 6 : 5;
+      SCHECK(strlen(l[i].s) * em <= 64, "wording %d line %d fits 64 px", w, i);
+      SCHECK(l[i].y + l[i].px <= 64, "wording %d line %d fits the panel's height", w, i);
+    }
   }
   // Bits the cards had before the list (game leaders 0, Top 25 5) keep their meaning.
   SCHECK(card_bit(Card::LEADERS) == 1u << 0 && card_bit(Card::TOP25) == 1u << 5, "saved bits kept");
@@ -842,8 +883,8 @@ void test_scan_leagues() {
 
 // A panel in Favorites with none set runs Live games over every league.
 void test_no_team() {
-  SCHECK(keys(no_team_leagues()) == "nfl,ncaa,mlb,mls,epl,nba,wnba,mcbb,nhl", "every league, kLeagues order");
-  SCHECK(no_team_leagues().size() == kLeagueCount, "one entry per league");
+  SCHECK(keys(no_team_leagues()) == "nfl,ncaa,mlb,mls,epl,nba,wnba,mcbb,wcbb,nhl,wcvb", "every league, kLeagues order");
+  SCHECK(no_team_leagues().size() == kGameLeagueCount, "one entry per league");
   SCHECK(keys(scan_leagues((uint8_t) Mode::LIVE, no_team_leagues())) == keys(no_team_leagues()),
          "the no-team default's scan reads every league");
   const uint8_t favs = (uint8_t) Mode::FAVORITES;
@@ -919,7 +960,7 @@ void test_playlists() {
   SCHECK(list_has(0b10, true, 1) && !list_has(0b10, true, 0), "a playlist: its own favorites");
 
   // Sport rows.
-  SCHECK(sport_row_from_key("football") == 1 && sport_row_from_key("soccer") == 5 && sport_row_from_key("") == 0 &&
+  SCHECK(sport_row_from_key("football") == 1 && sport_row_from_key("soccer") == 5 && sport_row_from_key("volleyball") == 6 && sport_row_from_key("") == 0 &&
              sport_row_from_key("Football") == 0 && sport_row_from_key("racing") == 0,
          "sport keys to rows");
   SCHECK(sport_bit((uint8_t) League::NCAA) == sport_bit((uint8_t) League::NFL) &&
@@ -929,7 +970,7 @@ void test_playlists() {
   SCHECK(sport_rows(0) == 0 && sport_rows(football) == 0, "one sport or none: no rows");
   SCHECK(sport_rows(football | hoops) == (football | hoops), "two sports: a row each");
   SCHECK(sport_row_has(football | hoops, 1) && sport_row_has(football | hoops, 3) &&
-             !sport_row_has(football | hoops, 2) && !sport_row_has(0xff, 0) && !sport_row_has(0xff, 6),
+             !sport_row_has(football | hoops, 2) && !sport_row_has(0xff, 0) && !sport_row_has(0xff, 7),
          "rows by number");
   for (int s = 0; s < kSportCount; s++)
     SCHECK(std::string(kSportRowNames[s]).size() <= kListNameMax, "%s is longer than a playlist name", kSportRowNames[s]);

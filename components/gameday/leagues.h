@@ -13,15 +13,29 @@
 
 namespace espn {
 
-// Saved in prefs and the boot cache: append, never renumber.
-enum class League : uint8_t { NFL = 0, NCAA = 1, NBA = 2, NHL = 3, MLB = 4, WNBA = 5, MLS = 6, EPL = 7, MCBB = 8 };
+// Saved in prefs and the boot cache: append, never renumber. 10 to 12 are
+// set aside for golf's tours.
+enum class League : uint8_t {
+  NFL = 0,
+  NCAA = 1,
+  NBA = 2,
+  NHL = 3,
+  MLB = 4,
+  WNBA = 5,
+  MLS = 6,
+  EPL = 7,
+  MCBB = 8,
+  WCBB = 9,
+  WCVB = 13
+};
 
-enum class Sport : uint8_t { FOOTBALL = 0, BASEBALL = 1, BASKETBALL = 2, HOCKEY = 3, SOCCER = 4 };
+enum class Sport : uint8_t { FOOTBALL = 0, BASEBALL = 1, BASKETBALL = 2, HOCKEY = 3, SOCCER = 4, VOLLEYBALL = 5 };
 
 // The state document's and /gameday/set's word for each, in Sport order.
-constexpr int kSportCount = 5;
-constexpr const char *kSportKeys[kSportCount] = {"football", "baseball", "basketball", "hockey", "soccer"};
-static_assert((int) Sport::SOCCER + 1 == kSportCount, "a key per Sport");
+constexpr int kSportCount = 6;
+constexpr const char *kSportKeys[kSportCount] = {"football", "baseball", "basketball",
+                                                 "hockey",   "soccer",   "volleyball"};
+static_assert((int) Sport::VOLLEYBALL + 1 == kSportCount, "a key per Sport");
 
 // A sport row in Playing (playlists.h) is numbered 1 + its Sport; 0 is none.
 // "football" -> 1, and 0 for a word that names no sport.
@@ -60,23 +74,53 @@ constexpr LeagueInfo kLeagues[] = {
     // A college season schedule is ~570 KB. Its teams are left out of Home
     // Assistant's team select (__init__.py).
     {League::MCBB, "mcbb", "basketball/mens-college-basketball", "NCAAM", "ncaa", Sport::BASKETBALL, false, true, 30},
+    // Women's college basketball: the same Division I list shape as the
+    // men's (build_teams.py reads it the same way), and a season schedule
+    // runs to a few hundred KB, so no Up next list either.
+    {League::WCBB, "wcbb", "basketball/womens-college-basketball", "NCAAW", "ncaa", Sport::BASKETBALL, false, true, 30},
     // A team's season schedule is ~1.1 MB, so no Up next list
     {League::NHL, "nhl", "hockey/nhl", "NHL", "nhl", Sport::HOCKEY, false, false, 30},
+    // Women's college volleyball. A team's season schedule is ~300 KB, the
+    // size of football's.
+    {League::WCVB, "wcvb", "volleyball/womens-college-volleyball", "NCAAVB", "ncaa", Sport::VOLLEYBALL, true, true, 30},
 };
 
-constexpr size_t kLeagueCount = sizeof(kLeagues) / sizeof(kLeagues[0]);
+// The leagues the firmware has.
+constexpr size_t kGameLeagueCount = sizeof(kLeagues) / sizeof(kLeagues[0]);
 
-// Arrays indexed by League are kLeagueCount long: each row's value is below
-// it and no two rows share one.
-constexpr bool leagues_fill_indexes() {
-  for (size_t i = 0; i < kLeagueCount; i++) {
-    if ((size_t) kLeagues[i].league >= kLeagueCount)
-      return false;
+// One past the highest League value, for a small array or a loop over every
+// value. A value no row has reads as an unknown league.
+constexpr size_t league_value_count() {
+  size_t n = 0;
+  for (const auto &l : kLeagues)
+    n = (size_t) l.league >= n ? (size_t) l.league + 1 : n;
+  return n;
+}
+constexpr size_t kLeagueCount = league_value_count();
+
+// No two rows share a League value.
+constexpr bool leagues_unique() {
+  for (size_t i = 0; i < kGameLeagueCount; i++)
     for (size_t k = 0; k < i; k++)
       if (kLeagues[k].league == kLeagues[i].league)
         return false;
-  }
   return true;
+}
+static_assert(leagues_unique(), "two kLeagues rows share a League value");
+
+// A league's place in an array that keeps something per league for good
+// (kGameLeagueCount long): its rank among the rows by League value, so a
+// value no row has costs no RAM. kGameLeagueCount for such a value.
+constexpr size_t game_league_slot(uint8_t league) {
+  size_t below = 0;
+  bool known = false;
+  for (const auto &l : kLeagues) {
+    if ((uint8_t) l.league == league)
+      known = true;
+    else if ((uint8_t) l.league < league)
+      below++;
+  }
+  return known ? below : kGameLeagueCount;
 }
 
 inline const LeagueInfo *league_info(League league) {
@@ -94,6 +138,10 @@ inline std::string league_live_name(League league) {
     return "college football";
   if (league == League::MCBB)
     return "men's college basketball";
+  if (league == League::WCBB)
+    return "women's college basketball";
+  if (league == League::WCVB)
+    return "women's college volleyball";
   if (league == League::EPL)
     return "Premier League";
   const LeagueInfo *l = league_info(league);

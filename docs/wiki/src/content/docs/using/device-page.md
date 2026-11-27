@@ -42,7 +42,7 @@ A strip along the bottom edge of the board has:
 - **Brightness**, shown as a percent
 - **Refresh scores**, which reads your teams from ESPN again right away. Use it when the board looks wrong, for example after a game moved.
 
-Under it, **Showing** picks the page the panel shows: **Scoreboard**, **Clock**, **Effects** or **Smart board**. The Game Day app and Home Assistant have the same controls. See [Brightness and the clock](/using/brightness-and-clock/).
+Under it, **Showing** picks the page the panel shows: **Scoreboard**, **Clock**, **Effects**, **Smart board**, **Flights** or **Weather**. The Game Day app and Home Assistant have the same controls. See [Brightness and the clock](/using/brightness-and-clock/).
 
 **Effects** is new: one of 52 moving patterns fills the panel in place of the scoreboard, and **Effect**, **Palette**, **Speed** and **Intensity** controls appear under **Showing** while it is the page showing. The board comes back when you pick the Scoreboard again, or when the panel has something to tell you. Once you have an effect playlist, an **Effect playlist** picker there starts or stops one; you make them on the Customize tab under **Effect playlists**. See [Effects](/using/effects/).
 
@@ -100,7 +100,7 @@ Groups your favorites into named playlists you can switch between. **New playlis
 
 ### Choosing teams
 
-**Add a favorite** opens the team chooser. It has a search box and a tab per league: **NFL**, **NCAAF** (college football), **MLB**, **MLS**, **EPL** (Premier League), **NBA**, **WNBA**, **NCAAM** (men's college basketball) and **NHL**. Search looks through every league at once. The chooser stays open so you can add several: a tap adds a team to the end of your list, a tap on a checked team takes it out, and **Done** closes it.
+**Add a favorite** opens the team chooser. It has a search box and a tab per league: **NFL**, **NCAAF** (college football), **MLB**, **MLS**, **EPL** (Premier League), **NBA**, **WNBA**, **NCAAM** (men's college basketball), **NCAAW** (women's college basketball), **NHL** and **NCAAVB** (women's college volleyball). Search looks through every league at once. The chooser stays open so you can add several: a tap adds a team to the end of your list, a tap on a checked team takes it out, and **Done** closes it.
 
 The first tab, **On now**, lists today's games in every league, under **Live now**, **Later today**, **Final** and **Postponed or canceled**. Tap a side to add that team. The chooser opens on **On now** when a game is live, and on your first favorite's league otherwise.
 
@@ -119,7 +119,7 @@ The chooser is for favorites only.
 | **Ticker speed** | How fast the ticker scrolls, 1 to 10. See [The ticker](/using/ticker/). |
 | **Night schedule** | Off to start. Dims the panel, or turns the screen off, between **Starts at** and **Ends at**. **Screen at night** On keeps it lit at **Night brightness**, Off turns it dark. A live game of your team or a favorite keeps it at normal brightness. The remote, a team pick or **Panel on** turns it off for the rest of the night. See [Night schedule](/using/brightness-and-clock/#night-schedule). |
 | **Game-day wake** | Off to start. Turns a panel you switched off back on before a game of your team or a favorite, **Turns on** 5 minutes to 2 hours before (15 to start). See [Game-day wake and after the game](/using/brightness-and-clock/#game-day-wake-and-after-the-game). |
-| **After the game** | What the panel does once the final has been up a while: **Stay on the scoreboard** (to start), **Turn off**, **Show the clock**, **Show the Smart board** or **Show effects** until your next game is close. |
+| **After the game** | What the panel does once the final has been up a while: **Stay on the scoreboard** (to start), **Turn off**, **Show the clock**, **Show the Smart board**, **Show effects**, **Show flights** or **Show the weather** until your next game is close. |
 
 ### Ticker
 
@@ -131,14 +131,14 @@ What scrolls along the bottom of the panel during a game. All of them start on. 
 | **Count and at-bat** | Baseball: the count, outs, pitcher and batter. |
 | **Match stats** | Soccer: goals, cards, possession and shots. |
 | **Last play** | ESPN's latest play in every sport. In soccer, the latest goal or card. |
-| **Odds, TV and win chance** | The line, over/under and TV channel before the start, when ESPN has them, and in football who is favored to win during the game. |
+| **Odds, TV and win chance** | The line, over/under and TV channel before the start, when ESPN has them, in football who is favored to win during the game, and in volleyball the TV channel during the match. |
 | **Pre-game season leaders** | Before the game, each team's season leader: the passing leader with yards and touchdowns in football, home runs in baseball, points per game in basketball and points in hockey. |
 
 Only the switches for sports your panel follows are shown. Hockey and basketball have no game situation line, so they have no switch of their own.
 
 ### Live pictures
 
-Drawn in the row under the clock during a game, on a 128-wide board (not on a single 64x64 panel). Both start on. The card is hidden when the panel only follows sports with nothing to turn off here (hockey, baseball, soccer).
+Drawn in the row under the clock during a game, on a 128-wide board (not on a single 64x64 panel). Both start on. The card is hidden when the panel only follows sports with nothing to turn off here (hockey, baseball, soccer, volleyball).
 
 | Setting | What it does |
 | --- | --- |
@@ -147,11 +147,11 @@ Drawn in the row under the clock during a game, on a 128-wide board (not on a si
 
 ### Celebrations
 
-The panel fills the screen with a splash when someone scores, in the scoring team's color. On a white or pale team color the words are dark so they stay readable. Your team's always show. **Opponent scores too** turns the other side's on or off in football, baseball, hockey and soccer. Basketball only celebrates the win, so the switch makes no difference there.
+The panel fills the screen with a splash when someone scores, in the scoring team's color. On a white or pale team color the words are dark so they stay readable. Your team's always show. **Opponent scores too** turns the other side's on or off in football, baseball, hockey, soccer and volleyball, where a set won is the score that splashes. Basketball only celebrates the win, so the switch makes no difference there.
 
 A **Celebrations** choice sets how big the show is:
 
-- **Full** (the default): fireworks over goalposts for a touchdown, a light sweep for a field goal or a run, the ball arcing out of the park for a home run, a rippling net for a soccer goal, the spinning red goal lamp for a hockey goal, a three dropping through the hoop in basketball, and when your team wins, a victory screen with the final score under its name and confetti in its colors for 10 seconds.
+- **Full** (the default): fireworks over goalposts for a touchdown, a light sweep for a field goal, a run or a volleyball set, the ball arcing out of the park for a home run, a rippling net for a soccer goal, the spinning red goal lamp for a hockey goal, a three dropping through the hoop in basketball, and when your team wins, a victory screen with the final score under its name and confetti in its colors for 10 seconds.
 - **Subtle**: a quick flash in the team's color with white words, for every score and the win.
 - **Off**: no full-screen splash at all. The scores on the board still change, and Home Assistant still gets its events.
 
@@ -179,8 +179,9 @@ What the panel shows when no game is on. **Countdown to the next game**, on unle
 | **Schedule** | A favorite's next three games, for teams in every league but MLB. See [Schedule and season recap](/using/schedule/). |
 | **Season recap** | A favorite's record and playoff result between seasons, for teams in every league but MLB. |
 | **Weather** | The forecast for your town. See [Weather](/using/weather/). |
+| **Game Day card** | A QR code for gameday-scoreboard.com every 20 minutes, for a panel other people see. See [Game Day card](/using/gameday-card/). |
 
-Every card is on to start except News headlines and Weather (on once you set a town), so a panel does what it did before the update. A card with nothing to show yet says what it needs under its name: a day for the date countdown, text or a list for the message card, a picture for Pictures, a college football or basketball team for College Top 25, a team outside MLB in Favorite teams for Schedule and Season recap, a town for Weather. You can still turn it off before then. The list is part of the [settings backup](/using/backup/).
+Every card is on to start except News headlines, the Game Day card and Weather (on once you set a town), so a panel does what it did before the update. A card with nothing to show yet says what it needs under its name: a day for the date countdown, text or a list for the message card, a picture for Pictures, a college football or basketball team for College Top 25, a team outside MLB in Favorite teams for Schedule and Season recap, a town for Weather. You can still turn it off before then. The list is part of the [settings backup](/using/backup/).
 
 The **Weather** card holds a **Town or ZIP code** box with **Look up**, the place the panel found, and when the forecast was last read and what it said. Setting a town turns the card on. **Degrees** picks °F, °C or Auto for the card and the kickoff forecast.
 
@@ -193,6 +194,7 @@ Your own words, pictures and dates on the panel.
 - **Pictures**: up to 4 of your own pictures or GIFs for the panel to show between games. **Add a picture**, and **Delete** next to each one. See [Pictures](/using/pictures/).
 - **Date countdown**: a **Name** and a **Day** to count down to, like Christmas, with **Clear the countdown** to remove it. See [Countdowns](/using/countdowns/#your-own-countdown).
 - **Effect playlists**: up to 4 named lists of effects the panel steps through on its Effects page, each effect with its own palette, speed, intensity and time on screen, and a **Shuffle** switch. **Play** starts one. See [Effects](/using/effects/#effect-playlists).
+- **Flights**: **Within**, **Facing**, an optional **ADS-B receiver** and an optional **adsb.lol key** for the Flights page, with a line saying what it's reading. See [Flights](/using/flights/).
 
 The Message card, Pictures and Date countdown each have a **Show between games** switch at the top, the same switch as that card's row in [Between games](#between-games).
 

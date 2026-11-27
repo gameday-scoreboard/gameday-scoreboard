@@ -89,6 +89,17 @@ struct Basketball {
   // Each side's points leader in this game, "Edwards 24", while it is on;
   // "" before anyone scores or when ESPN lists none.
   std::string team_scorer, opp_scorer;
+  // Each side's team stats in this game; `has` only when ESPN sent them all.
+  struct Box {
+    bool has{false};
+    bool has_ft{false};  // the free throws too
+    uint8_t fg_made{0}, fg_tried{0}, three_made{0}, three_tried{0}, rebounds{0}, ft_made{0}, ft_tried{0};
+  };
+  Box team_box, opp_box;
+  // Each side's rebounds or assists leader, whichever is more of a night,
+  // "Roman 9 reb"; "" under 3 of each. Arrays, not strings, as hockey's goal
+  // is.
+  char team_extra[24]{}, opp_extra[24]{};
 };
 
 // Hockey's extras. ESPN's period 5 is the shootout in a regular-season or
@@ -376,6 +387,12 @@ struct TickerOptions {
   bool win_due{true};
   bool row_down{false};
   bool row_timeout{false};
+  bool row_sets{false};  // volleyball's finished sets
+  // The last play worth reading, shown while ESPN's last play is a
+  // substitution (row_text.h RowHold); nullptr for none. Basketball.
+  const char *held_play{nullptr};
+  // The held play came before a timeout that goes on through it. Basketball.
+  bool held_break{false};
   // Both records before the start, for a board too narrow to show them
   // under the logos (one 64-wide panel, pages/gameday-live.yaml).
   bool records{false};
@@ -462,6 +479,18 @@ std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std
 std::string win_chance(const GameSnapshot &s);
 // ESPN's last play is a timeout ("Official TV Timeout", "Full timeout").
 bool timeout_play(const std::string &text);
+// Basketball: a last play that is no news: a player checking in or out, or
+// ESPN's dead ball rebound.
+bool basketball_junk_play(const GameSnapshot &s);
+// ESPN's play text, tidied: single spaces, one full stop, and "team turnover"
+// with the team's abbreviation in place of "team".
+std::string basketball_tidy_play(const GameSnapshot &s, const std::string &play);
+// Basketball's team stats while a game is on, "FG USA 47%, FAMU 29% | 3PT
+// USA 3/14, FAMU 5/25 | Rebounds USA 38, FAMU 22". "" when ESPN has none.
+std::string basketball_box_line(const GameSnapshot &s);
+// ESPN's play text, tidied: single spaces, one full stop, and "team turnover"
+// with the team's abbreviation in place of "team".
+std::string basketball_tidy_play(const GameSnapshot &s, const std::string &play);
 // Whether ESPN has said the board has no game, for no_game_text. In Favorites
 // (favs > 0) only once every favorite's team read has answered (`read` of
 // them): one answered favorite says nothing of the others.
@@ -595,6 +624,23 @@ Splash basketball_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool
 // The playoff series in at most 12 characters for the situation row
 // ("NY lead 2-1", "Series 2-2"), else "".
 std::string basketball_series(const GameSnapshot &s);
+
+// Volleyball (sport_volleyball.cpp).
+std::string volleyball_status_text(const GameSnapshot &s, const TickerOptions &o, const std::string &kickoff_local);
+std::string volleyball_clock_text(const GameSnapshot &s);
+Splash volleyball_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool opponent_splashes, bool neutral);
+// The board's two big numbers: each side's score, except while a volleyball
+// match is on, when they are the points in the set under way (its score is
+// sets won, which the clock row says).
+int board_team_score(const GameSnapshot &s);
+int board_opp_score(const GameSnapshot &s);
+// Between sets: the set ESPN names is decided and the next hasn't started.
+bool volleyball_set_over(const GameSnapshot &s);
+// A side can win the match on the next point.
+bool volleyball_match_point(const GameSnapshot &s);
+// The finished sets' points, ours first: "25-19 17-25". "" before the first
+// one ends, and before the match.
+std::string volleyball_sets(const GameSnapshot &s, const char *sep = " ");
 
 namespace detail {
 // Ticker helpers shared by the sport files.

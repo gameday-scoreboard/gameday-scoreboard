@@ -49,8 +49,8 @@ Panels set up before Favorite teams could alternate keep **Stick with the higher
 
 **When two favorites are playing.** While one favorite's game is on the board, the panel also checks your other favorites' games in progress, each about every 30 seconds. Two switches under **Favorites** on the Teams tab use those checks:
 
-- **Jump to the action** moves the panel to another favorite's game at its big moment, then back to the game it left once that moment has passed for a minute. A big moment is football in the red zone, the bases loaded, or a game within one score in its last two minutes or overtime (from the 88th minute in soccer). It's off on every panel until you turn it on. A game you picked with a remote button stays up.
-- **Score banner** shows another favorite's score along the bottom of the board for five seconds, like **KC TD, 21-17**, the favorite's score first. It covers touchdowns, field goals, runs, home runs and goals, not basketball, where teams score on most trips down the floor. A banner comes within about 30 seconds of the score. It's on until you turn it off.
+- **Jump to the action** moves the panel to another favorite's game at its big moment, then back to the game it left once that moment has passed for a minute. A big moment is football in the red zone, the bases loaded, a volleyball match's fifth set or match point, or a game within one score in its last two minutes or overtime (from the 88th minute in soccer). It's off on every panel until you turn it on. A game you picked with a remote button stays up.
+- **Score banner** shows another favorite's score along the bottom of the board for five seconds, like **KC TD, 21-17**, the favorite's score first. It covers touchdowns, field goals, runs, home runs, goals and volleyball sets, not basketball, where teams score on most trips down the floor. A banner comes within about 30 seconds of the score. It's on until you turn it off.
 
 The checks behind Jump to the action and Score banner no longer affect the game on the board. If one of your other favorites' games can't be read, the panel checks it again after a few minutes, then less often, up to once an hour, instead of every 30 seconds. The board's game keeps updating on time, and a board whose own score stops updating says **Can't reach ESPN** as it should. The same goes for the panel's look every few hours at each favorite's next game: one that fails no longer delays the board's next update.
 
@@ -64,7 +64,7 @@ A playlist is a group of your favorites with a name, like your football teams or
 
 ### Sports in a playlist
 
-Under each playlist's teams, **Sports** lists every league the panel follows: NFL, College football, MLB, MLS, Premier League, NBA, WNBA, Men's college basketball and NHL. Tap one to put it in the playlist, and tap it again to take it out. A playlist can hold sports, teams or both, and needs no favorites to hold only sports.
+Under each playlist's teams, **Sports** lists every league the panel follows: NFL, College football, MLB, MLS, Premier League, NBA, WNBA, Men's college basketball, Women's college basketball, NHL and Women's college volleyball. Tap one to put it in the playlist, and tap it again to take it out. A playlist can hold sports, teams or both, and needs no favorites to hold only sports.
 
 A playlist with a sport in it plays like Live games over its sports:
 
@@ -84,7 +84,7 @@ The Game Day app, on iPhone and Android, shows a playlist's sports under its tea
 
 When your favorites cover more than one sport, **Playing** has a row for each of them after **All favorites**, then your own playlists:
 
-- **All football**, **All baseball**, **All basketball**, **All hockey** and **All soccer**, for the sports you have favorites in. With favorites in one sport only there are none, since **All favorites** already is that sport.
+- **All football**, **All baseball**, **All basketball**, **All hockey**, **All soccer** and **All volleyball**, for the sports you have favorites in. With favorites in one sport only there are none, since **All favorites** already is that sport.
 - Picking one plays every favorite in that sport, with the same rules as a playlist: **Only today's games**, **Take over** and the rest.
 - You don't make or edit these rows. Add a basketball favorite and **All basketball** is there and has the new team in it; take out your last hockey team and **All hockey** goes. If it was playing, the panel goes back to **All favorites**.
 - They aren't playlists: they don't show under **Playlists**, don't count toward the 16, and a remote button plays one only when you set it to (see [The numbered buttons](/using/remote/#the-numbered-buttons)). A playlist of your own named Football sits beside **All football**.
