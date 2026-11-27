@@ -1322,6 +1322,7 @@ void GamedayComponent::fx_theme_tick_() {
     want = ::espn::fx_wled_slots();
   }
   if (want != this->fx_slots_) {
+    ESP_LOGD(TAG, "Effects colors: %06X %06X %06X", (unsigned) want.c[0], (unsigned) want.c[1], (unsigned) want.c[2]);
     h.slots(want.c);
     this->fx_slots_ = want;
   }
