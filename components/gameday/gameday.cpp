@@ -1105,6 +1105,12 @@ void GamedayComponent::set_fx_controls(select::Select *effect, select::Select *p
   // hand (the device page, the app, Home Assistant), unless the player is
   // writing them itself (the guard flag, fx_playlists.h fx_hand_pick).
   auto hand = [this]() {
+    // The panel's own team palette and holiday writes aren't a pick.
+    if (this->fx_theme_writing_)
+      return;
+    if (::espn::holiday_hand_pick(this->fx_hol_))
+      ESP_LOGI(TAG, "Holiday effect off: an effect setting was picked by hand, so it stays until the next stretch "
+                    "between games");
     if (::espn::fx_hand_pick(this->fx_player_)) {
       ESP_LOGI(TAG, "Effect playlist off: an effect setting was picked by hand");
       this->fx_changed_();
@@ -1164,6 +1170,13 @@ void GamedayComponent::fx_between_tick_() {
   if (now - this->fx_between_ms_ < 250)
     return;
   this->fx_between_ms_ = now;
+  this->fx_between_check_(now);
+  // After the check, so a holiday is on an effect the panel just put up
+  // before its first frame.
+  this->fx_theme_tick_();
+}
+
+void GamedayComponent::fx_between_check_(uint32_t now) {
   const FxState *f = this->fx_state_;
   if (f == nullptr || f->page == nullptr || !this->clock_set_())
     return;  // before pages/effects.yaml set up, or no clock to say what is between games
@@ -1207,6 +1220,111 @@ void GamedayComponent::fx_between_tick_() {
     this->fx_set_page_("Scoreboard");
   }
   this->fx_ours_ = false;
+}
+
+// ---- Team colors and holiday effects (fx_theme.h) ---------------------------------
+
+// Writes the Effects page's own entities, so Home Assistant and the device
+// page follow, inside the guard that keeps them from counting as a pick.
+void GamedayComponent::fx_theme_write_(const char *effect, const char *palette, int palette_index, int speed,
+                                       int intensity) {
+  FxState &f = this->fx_();
+  this->fx_theme_writing_ = true;
+  if (effect != nullptr && f.effect != nullptr && f.effect->has_option(effect))
+    f.effect->make_call().set_option(effect).perform();
+  if (f.palette != nullptr) {
+    if (palette != nullptr && f.palette->has_option(palette))
+      f.palette->make_call().set_option(palette).perform();
+    else if (palette_index >= 0 && (size_t) palette_index < f.palette->size())
+      f.palette->make_call().set_index(palette_index).perform();
+  }
+  if (speed >= 0 && f.speed != nullptr)
+    f.speed->make_call().set_value(speed).perform();
+  if (intensity >= 0 && f.intensity != nullptr)
+    f.intensity->make_call().set_value(intensity).perform();
+  this->fx_theme_writing_ = false;
+}
+
+void GamedayComponent::fx_theme_tick_() {
+  const FxState *f = this->fx_state_;
+  const ::espn::FxHooks &h = ::espn::fx_hooks();
+  if (f == nullptr || f->effect == nullptr || f->palette == nullptr || h.slots == nullptr)
+    return;  // before pages/effects.yaml set up, or a build without effects
+  // The holiday: only on the Effects page After the game put up between games.
+  int today = -1;
+  if (this->clock_set_()) {
+    ESPTime t = this->time_->now();
+    if (t.is_valid())
+      today = ::espn::holiday_on(t.month, t.day_of_month);
+  }
+  int to = -1;
+  const bool ours = this->fx_ours_ && this->fx_page_is_("Effects");
+  switch (::espn::holiday_step(this->fx_hol_, this->wake_.noholiday == 0, ours, today, to)) {
+    case ::espn::HolStep::START: {
+      // What the owner had, to put back after
+      auto e = f->effect->active_index(), p = f->palette->active_index();
+      this->fx_saved_effect_ = e.has_value() ? f->effect->option_at(*e) : "";
+      this->fx_saved_palette_ = p.has_value() ? (int) *p : -1;
+      this->fx_saved_speed_ = f->speed != nullptr && f->speed->has_state() ? (int) f->speed->state : -1;
+      this->fx_saved_intensity_ =
+          f->intensity != nullptr && f->intensity->has_state() ? (int) f->intensity->state : -1;
+    }
+      // fall through
+    case ::espn::HolStep::SWITCH: {
+      const ::espn::Holiday &hd = ::espn::kHolidays[to];
+      ESP_LOGI(TAG, "Holiday effect: %s, %s", hd.name, hd.effect);
+      this->fx_theme_write_(hd.effect, hd.palette, -1, hd.speed, hd.intensity);
+      break;
+    }
+    case ::espn::HolStep::END:
+      ESP_LOGI(TAG, "Holiday effect off: %s", ours ? "the day is over or Holiday effects was turned off"
+                                                   : "the effect between games is down");
+      this->fx_theme_write_(this->fx_saved_effect_.empty() ? nullptr : this->fx_saved_effect_.c_str(), nullptr,
+                            this->fx_saved_palette_, this->fx_saved_speed_, this->fx_saved_intensity_);
+      break;
+    default:
+      break;
+  }
+  const bool team = this->fallback_team_() != nullptr;
+  // The team palette, until somebody picks another (it then stays theirs).
+  if (this->fx_pal_auto_ && this->fx_hol_.up < 0) {
+    auto p = f->palette->active_index();
+    const char *now = p.has_value() ? f->palette->option_at(*p) : "";
+    if (this->fx_pal_set_ && strcmp(now, ::espn::kFxTeamPalette) != 0) {
+      ESP_LOGI(TAG, "Effects: palette %s picked, so the team palette no longer comes back on its own", now);
+      this->fx_pal_auto_ = false;
+    } else if (team && !this->fx_pal_set_ && this->fx_player_.list == 0) {
+      ESP_LOGI(TAG, "Effects: the team's colors, on the %s palette", ::espn::kFxTeamPalette);
+      this->fx_theme_write_(nullptr, ::espn::kFxTeamPalette, -1, -1, -1);
+      this->fx_pal_set_ = true;
+    } else if (!team && this->fx_pal_set_) {
+      // The team was taken away: the effects' own palettes again.
+      if (h.palette_unpin != nullptr) {
+        this->fx_theme_writing_ = true;
+        h.palette_unpin();
+        this->fx_theme_writing_ = false;
+      }
+      this->fx_pal_set_ = false;
+    }
+  }
+  // The color slots: the holiday's, the team's, or WLED's own with no team.
+  ::espn::FxSlots want;
+  if (this->fx_hol_.up >= 0) {
+    for (int i = 0; i < 3; i++)
+      want.c[i] = ::espn::kHolidays[this->fx_hol_.up].c[i];
+  } else if (team) {
+    const GameSnapshot &g = this->game_;
+    const bool live = g.valid && g.state == GameState::IN;
+    const std::string &color = g.valid ? g.team_color : this->schedule_.team_color;
+    want = ::espn::fx_team_slots(::espn::parse_color(color), live, ::espn::parse_color(g.opp_color),
+                                 h.bg_slot != nullptr && h.bg_slot());
+  } else {
+    want = ::espn::fx_wled_slots();
+  }
+  if (want != this->fx_slots_) {
+    h.slots(want.c);
+    this->fx_slots_ = want;
+  }
 }
 
 void GamedayComponent::fx_between_end_(const char *why) {
@@ -3174,8 +3292,8 @@ void GamedayComponent::set_wake_(const ::espn::WakePrefs &p) {
   this->wake_ = p;
   this->wake_pref_.save(&this->wake_);
   this->sync_prefs_();
-  ESP_LOGI(TAG, "Game-day wake: %s, %u min before the start; after the game: %s", p.on ? "on" : "off",
-           (unsigned) p.lead, ::espn::after_word(p.after));
+  ESP_LOGI(TAG, "Game-day wake: %s, %u min before the start; after the game: %s; holiday effects %s",
+           p.on ? "on" : "off", (unsigned) p.lead, ::espn::after_word(p.after), p.noholiday ? "off" : "on");
   this->wake_tick_();
   this->rebuild_state_(&this->last_fields_);
 }
@@ -7138,6 +7256,7 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   doc["wake"] = this->wake_.on != 0;
   doc["wakelead"] = this->wake_.lead;
   doc["after"] = ::espn::after_word(this->wake_.after);
+  doc["holidayfx"] = this->wake_.noholiday == 0;
   doc["wake_now"] =
       ::espn::wake_word(this->wake_state_.asleep, this->wake_clock_, this->wake_smart_, this->wake_fx_, this->wake_fl_,
                         this->wake_wxp_);
@@ -9293,6 +9412,9 @@ void GamedayComponent::apply_ops_(const std::vector<::espn::SetOp> &ops, bool an
         break;
       case ::espn::SetKind::AFTER:
         wake.after = (uint8_t) op.value;
+        break;
+      case ::espn::SetKind::HOLIDAYFX:
+        wake.noholiday = op.on ? 0 : 1;
         break;
       case ::espn::SetKind::FL_RADIUS:
         fl.rad = (uint8_t) op.value;

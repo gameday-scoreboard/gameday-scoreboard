@@ -14,7 +14,7 @@
     "autoupd": false, "beta": false, "panels": 1, "countdown": true, "top25": true, "schedule": true, "seasonrecap": true, "news": false, "cdname": "", "cddate": "", "msg": "", "msgurl": "", "msgevery": 2, "nick": "", "hook": "", "pregame": 15, "town": "", "wxon": false, "wxunit": 0,
     "flrad": 1, "flface": 0, "flrx": "",
     "night": false, "nightstart": "23:00", "nightend": "07:00", "nightscreen": true, "nightlevel": 16,
-    "wake": false, "wakelead": 15, "after": "scoreboard"
+    "wake": false, "wakelead": 15, "after": "scoreboard", "holidayfx": true
   },
   "cases": [
     {"name": "mode 5 is Live games", "set": [["mode", "5"]], "expect": {"mode": 5}},
@@ -231,6 +231,8 @@
     {"name": "wake lead that isn't a whole number is refused", "set": [["wakelead", "15m"]], "expect": {"wakelead": 15}},
     {"name": "the clock after the game", "start": {"after": "off"}, "set": [["after", "clock"]], "expect": {"after": "clock"}},
     {"name": "effects after the game", "start": {"after": "clock"}, "set": [["after", "effects"]], "expect": {"after": "effects"}},
+    {"name": "holiday effects off", "start": {"after": "effects"}, "set": [["holidayfx", "0"]], "expect": {"holidayfx": false, "after": "effects"}},
+    {"name": "holiday effects back on", "set": [["holidayfx", "0"], ["holidayfx", "1"]], "expect": {"holidayfx": true}},
     {"name": "flights after the game", "start": {"after": "clock"}, "set": [["after", "flights"]], "expect": {"after": "flights"}},
     {"name": "weather after the game", "start": {"after": "flights"}, "set": [["after", "weather"]], "expect": {"after": "weather"}},
     {"name": "an after-the-game choice this firmware doesn't have is refused", "start": {"after": "clock"}, "set": [["after", "fireworks"]],

@@ -14,12 +14,20 @@ Nothing plays an effect unless you pick it. Every time the panel starts it shows
 On the [device page](/using/device-page/)'s Home tab, under the board:
 
 1. Set **Showing** to **Effects**. A panel that was switched off lights up for it.
-2. Pick an **Effect** and a **Palette** from the controls that appear under it. **Default** is the palette the effect was designed with.
+2. Pick an **Effect** and a **Palette** from the controls that appear under it. On a panel with a team, the palette starts on **\* Colors Only**, your team's colors (see [Your team's colors](#your-teams-colors)). **Default** is the palette the effect was designed with.
 3. Set **Speed** and **Intensity**, 0 to 255. What intensity does depends on the effect: how many drops in **Rain**, how big the blobs in **Metaballs**, how many fireworks go up.
 
 Set **Showing** back to **Scoreboard** (or **Clock**) to get the board back. **Brightness**, **Panel on** and the [night schedule](/using/brightness-and-clock/#night-schedule) work on an effect the same as on the board.
 
 In [Home Assistant](/using/home-assistant/), **Select Page** has the same **Effects** option, **Page Next** and **Page Previous** step through it, and **Effect**, **Effect Palette**, **Effect Speed** and **Effect Intensity** set the pattern, so an automation can put a pattern up for a party and the Scoreboard back at bedtime. In the [Game Day app](/get-started/the-app/), the same controls show under **Showing** when it is on **Effects**.
+
+## Your team's colors
+
+On a panel with a team (or favorites), effects play in your team's colors. The panel gives the effect two colors: your team's, and during a live game your opponent's (between games, white, or gold for a team whose color is close to white). A team color too dark to see on the panel, like navy or black, is brightened, the same as on the board.
+
+The palette starts on **\* Colors Only**, which uses only those two colors, so a pattern like **Plasma Ball** or **Metaballs** glows in your team's colors and nothing in between. The other palettes that start with **\*** use them too: **\* Color 1** is your team's color alone, **\* Colors 1&2** and **\* Color Gradient** blend between them. Patterns with a background, like **Fireworks**, **Rain** and **Snow Fall**, keep it black.
+
+Pick any other palette and the effect keeps it until the panel restarts. Every restart starts on your team's colors again. With no team or favorite picked, effects play in their own colors, as they were designed.
 
 ## Between games
 
@@ -38,6 +46,18 @@ While it's between games, the effect steps aside for a few seconds, then comes b
 Anything on the [list below](#what-the-panel-does-while-an-effect-runs) still takes the screen. After a banner, the night schedule's screen-off, **Panel on** off, the heat or power mark, or a Wi-Fi or internet problem, the effect comes back once it's over. Starting the effect by itself never turns night mode off or lights a panel that's off.
 
 It only takes over while **Showing** is on **Scoreboard**: with the Clock, the Smart board or Effects picked under **Showing**, the panel stays on that page. In Live games, a game on the board that isn't your team's keeps the board.
+
+### Holiday effects
+
+With **After the game** on **Show effects**, the effect between games changes for three holidays:
+
+- **July 4**: fireworks in red, white and blue (**PS Fireworks**).
+- **Halloween**, October 31: orange glowing eyes (**Halloween Eyes**).
+- **Christmas**, December 24 to 26: falling snow (**Snow Fall**).
+
+The holiday's effect plays all day, from midnight to midnight on the panel's own clock. The next day, or once your next game is near, your own effect, palette, speed and intensity come back as you had them. If you pick an effect, palette, speed or intensity during a holiday, the panel keeps yours, and the holiday's effect comes back the next time the panel plays effects between games.
+
+**Holiday effects** is on by default. It shows under **After the game** on the device page's Display tab when **Show effects** is picked; turn it off to keep your own effect on holidays too. Holiday effects never play unless **After the game** is on **Show effects**, and an effect you put up yourself under **Showing** is never changed for a holiday.
 
 ## Effect playlists
 

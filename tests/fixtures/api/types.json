@@ -1,6 +1,7 @@
 {
   "state": {
     "after": "string",
+    "holidayfx": "bool",
     "ages": "object",
     "ages.fl_read_s": "int",
     "ages.fl_wait_s": "int",
@@ -324,6 +325,7 @@
   },
   "settings": {
     "after": "string",
+    "holidayfx": "bool",
     "autoupd": "bool",
     "banner": "bool",
     "best": "bool",

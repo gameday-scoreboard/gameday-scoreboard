@@ -35,6 +35,15 @@ change, a panel that won't start) starts its summary line with
 says "Important update ready" instead of "Update ready", and the app is told
 through `update_important` in the panel's state.
 
+## Unreleased
+
+Effects play in your team's colors, and holiday effects come on by themselves for July 4, Halloween and Christmas.
+
+### ✨ New
+
+- 🎨 Effects start on your team's colors, with your opponent's during a live game
+- 🎄 **Holiday effects** under **After the game**: fireworks on July 4, glowing eyes on Halloween and snow December 24 to 26 when **Show effects** is picked
+
 ## v2026.11.6
 
 A new Flights page shows the planes over your home, women's college basketball and volleyball join in, it can play an effect whenever no game of yours is on, a Game Day card shows a QR code between games, and Add network lists nearby Wi-Fi.
