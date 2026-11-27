@@ -88,11 +88,12 @@ static constexpr int SAME_COLOR = 1500;
 
 // Shrinks in three steps, so a caller on the main loop can spread the work
 // over three passes: sorting the solid pixels, then the palette and each
-// block's coverage, then the vote. Each step is a few to 20 ms for a 128 px
-// logo on the ESP32-S3.
+// block's coverage, then the vote. All three at once took 28 to 38 ms for a
+// 128 px logo on the ESP32-S3.
 //
-// src is n x n pixels of 4 bytes, blue, green, red, alpha (ESPHome's RGB image
-// with an alpha channel), n a multiple of 32. scratch holds scratch_words(n).
+// src is n x n pixels of 4 bytes, blue, green, red, alpha: ESPHome 2026.11's
+// RuntimeImage::draw_pixel() writes an IMAGE_TYPE_RGB image with an alpha
+// channel in that order. n is a multiple of 32. scratch holds scratch_words(n).
 // out gets 32 x 32 pixels as 0xAARRGGBB: opaque, or clear where black won
 // over a block that is mostly see-through. All three stay the caller's and
 // must outlive the steps.
@@ -147,11 +148,13 @@ class RareVote {
     this->pal_[0] = argb(255, 0, 0, 0);
     this->k_ = 1;
     // Only a color covering 0.8% of the solid pixels can join, so only those
-    // runs are kept, most used first.
+    // runs are kept, most used first. They borrow out, which the vote fills
+    // last, rather than 1 KB of the main loop's stack.
     struct Run {
       uint32_t count, color;
     };
-    std::array<Run, MAX_CANDIDATES> runs{};
+    static_assert(sizeof(Run) * MAX_CANDIDATES <= sizeof(uint32_t) * OUT * OUT, "runs fit in out");
+    Run *runs = reinterpret_cast<Run *>(this->out_);
     int nruns = 0;
     for (size_t i = 0; i < solid;) {
       size_t j = i;
@@ -161,7 +164,7 @@ class RareVote {
         runs[nruns++] = {(uint32_t) (j - i), sorted[i]};
       i = j;
     }
-    std::sort(runs.begin(), runs.begin() + nruns, [](const Run &a, const Run &b) {
+    std::sort(runs, runs + nruns, [](const Run &a, const Run &b) {
       return a.count != b.count ? a.count > b.count : a.color > b.color;
     });
     for (int r = 0; r < nruns && this->k_ < MAX_COLORS; r++) {

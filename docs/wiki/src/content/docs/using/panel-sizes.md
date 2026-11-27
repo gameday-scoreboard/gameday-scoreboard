@@ -17,7 +17,7 @@ The Game Day Scoreboard ships with one 128x64 panel, and its firmware starts on 
 
 ## What each layout shows
 
-Team logos are 32 LEDs square in every layout. The panel makes each one from ESPN's logo, giving every LED one of the logo's own colors, so thin outlines and letters stay whole and white lines stay white instead of turning gray.
+Team logos on the game board are 32 LEDs square. The panel makes each one from ESPN's logo, giving every LED one of the logo's own colors, so thin outlines and letters stay whole and white lines stay white instead of turning gray.
 
 ### Wide: 128x64
 

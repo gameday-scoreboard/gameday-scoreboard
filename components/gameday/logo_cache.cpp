@@ -311,6 +311,7 @@ LogoCache::Shrink::~Shrink() {
 // Starts shrinking a logo the shrink takes (logo_shrink.h, fits()), taking its
 // body. False, with the body left alone, for any other logo, or when PSRAM has
 // no block for the full-size picture; the caller then decodes it straight.
+// Runs once per logo downloaded, not every pass, and allocates only in PSRAM.
 bool LogoCache::start_shrink_(Entry *job, Bytes &body) {
   int w = 0, h = 0;
   if (!::espn::shrink::png_size(body.data(), body.size(), w, h) || !::espn::shrink::fits(w, h))
