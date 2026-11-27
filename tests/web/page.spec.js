@@ -3560,6 +3560,34 @@ test("game-day wake: off by default, its lead and after the game post, hidden on
   await expect(page.locator("#wakeCtls")).toBeHidden();
 });
 
+test("holiday effects: shown only with Show effects, on by default, posts holidayfx, hidden on firmware without it", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  await tab(page, "display");
+  const sw = page.locator('.sw[data-set="holidayfx"]');
+  await expect(page.locator("#holidayRow")).toBeHidden();
+  await page.locator("#afterGame").selectOption("effects");
+  await expectSet(request, { after: "effects" });
+  await expect(page.locator("#holidayRow")).toBeVisible();
+  await expect(sw).toHaveClass(/\bon\b/);
+  await sw.click();
+  await expectSet(request, { holidayfx: "0" });
+  await expect(sw).not.toHaveClass(/\bon\b/);
+  await sw.click();
+  await expectSet(request, { holidayfx: "1" });
+  await page.locator("#afterGame").selectOption("clock");
+  await expectSet(request, { after: "clock" });
+  await expect(page.locator("#holidayRow")).toBeHidden();
+
+  // Firmware from before it sends no holidayfx: no switch, even with Show effects.
+  await reset(request, { after: "effects", holidayfx: null });
+  await page.reload();
+  await tab(page, "display");
+  await expect(page.locator("#afterGame")).toHaveValue("effects");
+  await expect(page.locator("#holidayRow")).toBeHidden();
+  await reset(request, { after: null, holidayfx: null });
+});
+
 test("night mode says it is on, until when, and when a live game holds it off", async ({ page, request }) => {
   await reset(request, { night: true, nightscreen: false, night_now: "off" });
   await page.goto("/");

@@ -37,6 +37,13 @@
 # The brightness, Brightness number and night dimming are the HUB75 driver's,
 # so they apply to an effect too.
 #
+# Team colors (components/gameday/fx_theme.h): on a panel with a team the
+# gameday component loads the team's color, and the opponent's during a
+# live game, into wled_fx's color slots, and starts the palette on
+# "* Colors Only" until somebody picks another. Holiday effects: on July 4,
+# Halloween and December 24 to 26 the effect After the game puts up between
+# games is the holiday's, and the owner's comes back after.
+#
 # Effect playlists (components/gameday/fx_playlists.h) step through saved
 # effects on this page: the gameday component writes the four effect
 # controls below for each step, and stops the playlist when one of them
@@ -159,6 +166,23 @@ esphome:
             };
             n.palette_name = [](uint8_t p) -> std::string {
               return p < esphome::wled_fx::palette_count() ? esphome::wled_fx::PALETTE_NAMES[p] : "";
+            };
+            // Team colors and holiday effects (components/gameday/fx_theme.h)
+            auto &h = ::espn::fx_hooks();
+            h.slots = [](const uint32_t c[3]) {
+              for (unsigned i = 0; i < 3; i++)
+                id(gd_fx).set_color_slot(i, c[i]);
+            };
+            h.bg_slot = []() -> bool {
+              const auto *e = id(gd_fx).engine().effect();
+              return e != nullptr && esphome::wled_fx::effect_labels(*e).color[1].used();
+            };
+            h.palette_unpin = []() {
+              auto &en = id(gd_fx).engine();
+              en.clear_override(esphome::wled_fx::OVERRIDE_PALETTE);
+              // Selecting the effect again puts its own palette back.
+              en.set_effect_index(en.effect_index());
+              id(gd_fx).notify_state_change();
             };
     # wled_fx sets up at LATE (-100). Park its loop so an idle panel never
     # renders a frame, then let the page scripts run.

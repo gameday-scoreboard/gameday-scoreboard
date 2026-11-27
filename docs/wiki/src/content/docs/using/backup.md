@@ -38,7 +38,7 @@ A backup from another panel leaves this panel's nickname and panel layout as the
 - **Celebrations** (Off, Subtle or Full), and **Big plays**
 - The timezone, and whether it follows your browser
 - The night schedule: its times, the screen and the night brightness
-- Game-day wake, its **Turns on** time and **After the game**
+- Game-day wake, its **Turns on** time, **After the game** and **Holiday effects**
 - The message card's text, list address and timing
 - The panel layout, **Brightness** and **Ticker speed**
 - **Show how to connect when the panel starts**, **Install updates automatically** and **Follow beta**

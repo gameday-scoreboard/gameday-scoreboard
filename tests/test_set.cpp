@@ -275,6 +275,9 @@ void load(Settings &s, JsonObjectConst o) {
   s.wake.lead = (uint8_t) lead;
   if (o["after"].is<const char *>())
     s.wake.after = (uint8_t) after_parse(o["after"].as<const char *>());
+  bool holidayfx = s.wake.noholiday == 0;
+  flag("holidayfx", holidayfx);
+  s.wake.noholiday = holidayfx ? 0 : 1;
   // Effect playlists as the state has them, through their set text.
   if (o["fxlists"].is<JsonArrayConst>()) {
     std::string text;
@@ -493,6 +496,7 @@ void apply(Settings &s, const SetOp &op, bool with_lists, int keep_list, bool sp
     case SetKind::WAKE: s.wake.on = op.on ? 1 : 0; break;
     case SetKind::WAKE_LEAD: s.wake.lead = (uint8_t) op.value; break;
     case SetKind::AFTER: s.wake.after = (uint8_t) op.value; break;
+    case SetKind::HOLIDAYFX: s.wake.noholiday = op.on ? 0 : 1; break;
     case SetKind::PANELS:
       if (op.value >= 1 && op.value <= kMaxCols)
         s.panels = op.value;
@@ -638,6 +642,7 @@ void state_doc(const Settings &s, JsonDocument &doc) {
   doc["wake"] = s.wake.on != 0;
   doc["wakelead"] = s.wake.lead;
   doc["after"] = after_word(s.wake.after);
+  doc["holidayfx"] = s.wake.noholiday == 0;
 }
 
 void test_fixture_cases() {
