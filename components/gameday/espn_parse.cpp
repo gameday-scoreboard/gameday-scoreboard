@@ -172,10 +172,9 @@ std::string scan_url(League league, int64_t now_epoch, bool top25) {
   return url;
 }
 
-// Dark-background variant, shrunk to 128px by ESPN's image resizer. A 500px
+// Dark-background variant, shrunk to 64px by ESPN's image resizer. A 500px
 // logo PNG is up to 95KB and takes the ESP32 almost two seconds to decode;
-// the 128px one is 3 to 10KB. The logo cache shrinks it to 32px itself
-// (logo_shrink.h): from 128px each LED has 16 source pixels to vote on.
+// the 64px one is about 3KB and decodes in a few milliseconds.
 std::string dark_logo(const std::string &url) {
   if (url.empty())
     return url;
@@ -186,7 +185,7 @@ std::string dark_logo(const std::string &url) {
   size_t path = out.find("/i/teamlogos/");
   if (path == std::string::npos)
     return out;
-  return "https://a.espncdn.com/combiner/i?img=" + out.substr(path) + "&w=128&h=128";
+  return "https://a.espncdn.com/combiner/i?img=" + out.substr(path) + "&w=64&h=64";
 }
 
 // The same URL the scoreboard gives this team, so the logo cache downloads it
