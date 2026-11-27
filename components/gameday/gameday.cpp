@@ -1959,7 +1959,7 @@ bool GamedayComponent::fav_choose_(int64_t now_epoch) {
   this->post_since_ms_ = 0;
   this->misses_ = 0;
   if (board >= 0)
-    ESP_LOGI(TAG, "Favorites: showing %s%s", this->fav_[board].team->abbr,
+    ESP_LOGD(TAG, "Favorites: showing %s%s", this->fav_[board].team->abbr,
              board != c.index ? " (for the action)" : c.locked ? " (locked)" : "");
   this->emit_({});
   if (this->fav_shown_ >= 0 && this->game_.valid)
@@ -4215,7 +4215,7 @@ bool GamedayComponent::fetch_game_(const ::espn::Team *team, const Schedule &sch
     this->job_.game_gone = true;
     return false;
   }
-  ESP_LOGI(TAG, "Game: %s %s %d - %s %d [%s] (%s)", ::espn::state_name(out.state), out.team_abbr.c_str(),
+  ESP_LOGD(TAG, "Game: %s %s %d - %s %d [%s] (%s)", ::espn::state_name(out.state), out.team_abbr.c_str(),
            out.team_score, out.opp_abbr.c_str(), out.opp_score, out.short_detail.c_str(), reader.stats());
   return true;
 }

@@ -266,8 +266,15 @@ panel_layout:
   default_cols: ${default_panel_cols}
   max_cols: 2
 
+# Built with DEBUG, run at INFO: the DEBUG lines (each ESPN read, each HTTP
+# header, each logo, each flash write) went to every log viewer all day for
+# nobody. "Log Level" in Home Assistant and under Diagnostics on the device
+# page raises it for troubleshooting, until the next restart. A bench script
+# that reads DEBUG lines sets it first (POST /select/Log%20Level/set?option=DEBUG).
 logger:
   baud_rate: 115200
+  level: DEBUG
+  initial_level: INFO
 
 # No Home Assistant required: never reboot for lack of an API client.
 api:
@@ -1006,6 +1013,9 @@ select:
     type: playlist
     name: "Playlist"
     icon: "mdi:playlist-star"
+  # The log's detail at runtime (logger above), back to INFO at every start
+  - platform: logger
+    name: "Log Level"
 
 # Power and Brightness in one light, so Home Assistant can put the panel in a
 # light group or an area, dim it with a remote, and fade it. The light's level
