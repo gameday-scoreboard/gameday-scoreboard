@@ -2,11 +2,14 @@
 // Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 #include "logo_cache.h"
 
+#include <cstring>
+
 #include "esphome/components/runtime_image/image_decoder.h"
 #include "esphome/core/hal.h"
 #include "esphome/core/helpers.h"
 #include "esphome/core/log.h"
 #include "logo_lru.h"
+#include "logo_shrink.h"
 
 namespace esphome::gameday {
 
@@ -262,27 +265,96 @@ bool LogoCache::download_(const std::string &url, Bytes &body, bool &throttled, 
   return true;
 }
 
-// Decodes into the entry itself, so the image object lives in PSRAM with it.
-// Safe without the lock: the entry is DOWNLOADED until the caller marks it
-// READY, so nothing draws it and nothing drops it.
-bool LogoCache::decode_(std::optional<Logo> &image, const Bytes &body) {
-  image.emplace(runtime_image::PNG, image::IMAGE_TYPE_RGB565, image::TRANSPARENCY_ALPHA_CHANNEL, nullptr, false,
-                LOGO_SIZE, LOGO_SIZE);
-  bool ok = image->begin_decode(body.size());
+// Feeds the whole PNG to a decoder already begun and ends the decode. False
+// on a decode error.
+template<class Body> static bool feed(runtime_image::RuntimeImage &image, const Body &body) {
   size_t offset = 0;
-  while (ok && offset < body.size()) {
+  while (offset < body.size()) {
     // feed_data takes a non-const pointer but only reads it.
-    int used = image->feed_data(const_cast<uint8_t *>(body.data()) + offset, body.size() - offset);
+    int used = image.feed_data(const_cast<uint8_t *>(body.data()) + offset, body.size() - offset);
     if (used < 0) {
       ESP_LOGW(TAG, "Logo decode error: %s", runtime_image::decode_error_to_string(used));
-      ok = false;
+      return false;
     }
-    if (used <= 0)
+    if (used == 0)
       break;
     offset += (size_t) used;
   }
+  return image.end_decode();
+}
+
+bool LogoCache::Logo::paint(const uint32_t *px) {
+  if (this->resize(LOGO_SIZE, LOGO_SIZE) <= 0 || this->get_buffer_width() != LOGO_SIZE ||
+      this->get_buffer_height() != LOGO_SIZE)
+    return false;
+  for (int y = 0; y < LOGO_SIZE; y++) {
+    for (int x = 0; x < LOGO_SIZE; x++) {
+      uint32_t p = px[y * LOGO_SIZE + x];
+      this->draw_pixel(x, y, Color((p >> 16) & 0xFF, (p >> 8) & 0xFF, p & 0xFF, p >> 24));
+    }
+  }
+  this->width_ = this->buffer_width_;
+  this->height_ = this->buffer_height_;
+  this->data_start_ = this->buffer_;
+  this->refresh_lvgl_();
+  return true;
+}
+
+// Decodes a size x size logo at full size into PSRAM and shrinks it with
+// logo_shrink.h, so thin lines survive. One PSRAM block holds the decoded
+// picture (64 KB for 128 px), the shrink's scratch (64 KB) and its result, and
+// is freed before this returns, as is the decoder. False when PSRAM has no
+// block that big or the PNG does not decode at the size its header gave.
+bool LogoCache::shrink_(Logo &logo, const Bytes &body, int size) {
+  runtime_image::RuntimeImage src(runtime_image::PNG, image::IMAGE_TYPE_RGB, image::TRANSPARENCY_ALPHA_CHANNEL);
+  const size_t pixels = src.get_buffer_size(size, size);
+  const size_t words = ::espn::shrink::scratch_words(size) + (size_t) LOGO_SIZE * LOGO_SIZE;
+  if (pixels != (size_t) size * size * 4)
+    return false;
+  auto *mem = static_cast<uint8_t *>(heap_caps_malloc(pixels + words * 4, MALLOC_CAP_SPIRAM));
+  if (mem == nullptr) {
+    ESP_LOGW(TAG, "No PSRAM to shrink a %d px logo (largest free block %u bytes)", size,
+             (unsigned) heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM));
+    return false;
+  }
+  const uint32_t start = millis();
+  memset(mem, 0, pixels);
+  auto *scratch = reinterpret_cast<uint32_t *>(mem + pixels);
+  uint32_t *out = scratch + ::espn::shrink::scratch_words(size);
+  bool ok = src.set_external_buffer(mem, size, size) && src.begin_decode(body.size()) && feed(src, body) &&
+            src.get_width() == size && src.get_height() == size;
+  if (ok) {
+    ::espn::shrink::rare_vote(src.get_data_start(), size, scratch, out);
+    ok = logo.paint(out);
+  }
+  // Lets go of the buffer and ends any decode before the buffer is freed.
+  src.release();
+  heap_caps_free(mem);
   if (ok)
-    ok = image->end_decode();
+    ESP_LOGD(TAG, "Shrank a %d px logo to %d px in %u ms", size, LOGO_SIZE, (unsigned) (millis() - start));
+  return ok;
+}
+
+// Decodes into the entry itself, so the image object lives in PSRAM with it.
+// Safe without the lock: the entry is DOWNLOADED until the caller marks it
+// READY, so nothing draws it and nothing drops it.
+//
+// A logo the shrink takes (logo_shrink.h, fits()) is shrunk by it. Any other,
+// or one it could not shrink, is decoded straight to 32 px, which keeps one
+// source pixel per LED.
+bool LogoCache::decode_(std::optional<Logo> &image, const Bytes &body) {
+  image.emplace(runtime_image::PNG, image::IMAGE_TYPE_RGB565, image::TRANSPARENCY_ALPHA_CHANNEL, nullptr, false,
+                LOGO_SIZE, LOGO_SIZE);
+  int w = 0, h = 0;
+  if (::espn::shrink::png_size(body.data(), body.size(), w, h) && ::espn::shrink::fits(w, h)) {
+    if (this->shrink_(*image, body, w))
+      return true;
+    ESP_LOGW(TAG, "Could not shrink a %dx%d logo; decoding it straight to %d px", w, h, LOGO_SIZE);
+    image.reset();
+    image.emplace(runtime_image::PNG, image::IMAGE_TYPE_RGB565, image::TRANSPARENCY_ALPHA_CHANNEL, nullptr, false,
+                  LOGO_SIZE, LOGO_SIZE);
+  }
+  bool ok = image->begin_decode(body.size()) && feed(*image, body);
   if (ok) {
     image->drop_decoder();
   } else {

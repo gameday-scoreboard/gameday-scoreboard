@@ -76,6 +76,10 @@ class LogoCache {
   struct Logo : runtime_image::RuntimeImage {
     using RuntimeImage::RuntimeImage;
     void drop_decoder() { this->decoder_.reset(); }
+    // Shows 32x32 pixels the cache shrank itself (0xAARRGGBB, row by row),
+    // the way end_decode() shows a decoded picture. False when the buffer
+    // could not be allocated.
+    bool paint(const uint32_t *px);
   };
 
   enum class State : uint8_t { QUEUED, LOADING, DOWNLOADED, READY, FAILED };
@@ -97,6 +101,7 @@ class LogoCache {
   void run_();
   bool download_(const std::string &url, Bytes &body, bool &throttled, uint32_t &retry_after_ms);
   bool decode_(std::optional<Logo> &image, const Bytes &body);
+  bool shrink_(Logo &logo, const Bytes &body, int size);
   void make_room_();
   void start_task_();
   bool pinned_url_(std::string_view url) const;
