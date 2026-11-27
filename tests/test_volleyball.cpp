@@ -105,7 +105,7 @@ static void test_league() {
   CHECK_EQ(team_day_url(League::WCVB, 54, parse_iso8601_z("2026-11-26T01:00Z")),
            base + "/scoreboard?groups=54&dates=20261125");
   CHECK_EQ(team_logo_url(League::WCVB, kNebraska, "NEB"),
-           std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/ncaa/500-dark/158.png&w=128&h=128"));
+           std::string("https://a.espncdn.com/combiner/i?img=/i/teamlogos/ncaa/500-dark/158.png&w=64&h=64"));
   int n = 0;
   bool neb = false;
   for (size_t i = 0; i < kTeamCount; i++) {

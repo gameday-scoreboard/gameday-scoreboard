@@ -72,7 +72,6 @@ A new Flights page shows the planes over your home, women's college basketball a
 
 ### 🐛 Fixes
 
-- 🎨 Team logos keep their thin outlines and letters: each LED takes one of the logo's own colors, where thin lines could break into specks
 - 🏀 Basketball's two bottom rows tell the story on a 128-wide board: the team in its color and what's happening ("USA on a 16-2 run", "FAMU scoreless 4:24", "FAMU three"), then the detail under it ("7 of 13 shooting", "Baker Jr. from 25 feet"). A timeout brings both teams' shooting, threes and rebounds, players checking in stay off the ticker, and a missed shot no longer shows as the last basket
 - 🏙️ A town typed for Weather while the Clock, Effects or the Smart board is up is looked up right away, instead of waiting for the Scoreboard
 - ⏱️ The device page's Weather card counts up the time since the last forecast read, where it could stay on the same number for minutes

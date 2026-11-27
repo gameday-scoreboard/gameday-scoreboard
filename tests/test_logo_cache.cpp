@@ -5,8 +5,6 @@
 // Build with `make` in tests/.
 #include <cstdio>
 #include <string>
-#include <utility>
-#include <vector>
 
 #include "esphome/core/hal.h"
 #include "esphome/core/log.h"
@@ -35,10 +33,6 @@ static void reset_fakes() {
   fake_rtos::psram_stack = false;
   fake_clock::now_ms = 0;
   fake_log::warnings = 0;
-  fake_heap::psram_full = false;
-  fake_heap::psram_blocks = 0;
-  runtime_image::fake_decoder::fill = 0;
-  runtime_image::fake_decoder::fail_size = false;
 }
 
 // The logo task's work, which the task does each time it is started or woken.
@@ -442,165 +436,6 @@ static void test_missing_dark_logo_uses_the_plain_one() {
   }
 }
 
-// The first bytes of a PNG of w x h: the signature and the header chunk.
-static std::string png_header(uint32_t w, uint32_t h) {
-  std::string s("\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR", 16);
-  for (uint32_t v : {w, h}) {
-    for (int sh = 24; sh >= 0; sh -= 8)
-      s += (char) ((v >> sh) & 0xFF);
-  }
-  s += std::string("\x08\x06\0\0\0", 5);
-  return s;
-}
-
-// The pixels a logo was painted with by the shrink, or none when the decoder
-// shrank it.
-static const std::vector<uint32_t> &painted(image::Image *img) {
-  return static_cast<runtime_image::RuntimeImage *>(img)->pixels;
-}
-
-static image::Image *load(TestLogoCache &c, http_request::HttpRequestComponent &http, const std::string &body) {
-  http.replies[url(1)] = {200, body};
-  c.set_http(&http);
-  c.setup();
-  c.get(url(1));
-  run_task(c);
-  // A shrink takes a pass for the decode and three for the vote.
-  for (int i = 0; i < 6; i++)
-    c.loop();
-  return c.get(url(1));
-}
-
-// A 128 px logo is decoded at full size and shrunk by logo_shrink.h. The
-// fake decodes every pixel to opaque white, so every LED is opaque white.
-static void test_128px_logo_is_shrunk() {
-  reset_fakes();
-  runtime_image::fake_decoder::fill = 0xFFFFFFFF;
-  http_request::HttpRequestComponent http;
-  TestLogoCache c;
-  image::Image *img = load(c, http, png_header(128, 128));
-  CHECK(img != nullptr);
-  CHECK(img != nullptr && img->get_width() == 32 && img->get_height() == 32);
-  CHECK(img != nullptr && painted(img).size() == 1024);
-  int white = 0;
-  if (img != nullptr) {
-    for (uint32_t p : painted(img))
-      white += p == 0xFFFFFFFF;
-  }
-  CHECK(white == 1024);
-  // The decoder and the PSRAM block for the full-size picture are gone.
-  CHECK(runtime_image::fake_decoder::live == 0);
-  CHECK(fake_heap::psram_blocks == 0);
-}
-
-// A fully see-through 64 px logo stays see-through.
-static void test_clear_logo_stays_clear() {
-  reset_fakes();
-  runtime_image::fake_decoder::fill = 0x00FFFFFF;
-  http_request::HttpRequestComponent http;
-  TestLogoCache c;
-  image::Image *img = load(c, http, png_header(64, 64));
-  CHECK(img != nullptr && painted(img).size() == 1024);
-  int clear = 0;
-  if (img != nullptr) {
-    for (uint32_t p : painted(img))
-      clear += (p >> 24) == 0;
-  }
-  CHECK(clear == 1024);
-}
-
-// With no PSRAM block for the full-size picture, the logo is still shown,
-// shrunk by the decoder, with one warning.
-static void test_no_psram_decodes_straight() {
-  reset_fakes();
-  fake_heap::psram_full = true;
-  http_request::HttpRequestComponent http;
-  TestLogoCache c;
-  image::Image *img = load(c, http, png_header(128, 128));
-  CHECK(img != nullptr);
-  CHECK(img != nullptr && painted(img).empty());
-  CHECK(fake_log::warnings == 1);
-  CHECK(runtime_image::fake_decoder::live == 0);
-}
-
-// A PNG that decodes at another size than its header says falls back too, and
-// frees what the shrink took.
-static void test_wrong_size_decodes_straight() {
-  reset_fakes();
-  runtime_image::fake_decoder::fail_size = true;
-  http_request::HttpRequestComponent http;
-  TestLogoCache c;
-  image::Image *img = load(c, http, png_header(128, 128));
-  CHECK(img != nullptr && painted(img).empty());
-  CHECK(fake_heap::psram_blocks == 0);
-  CHECK(runtime_image::fake_decoder::live == 0);
-}
-
-// Sizes the shrink does not take go straight to the decoder without a PSRAM
-// block: ESPN's full 500 px logo, an odd size, a logo that isn't square.
-static void test_other_sizes_decode_straight() {
-  for (auto wh : {std::pair<int, int>{500, 500}, {100, 100}, {128, 64}, {256, 256}, {32, 32}}) {
-    reset_fakes();
-    fake_heap::psram_full = true;  // any try at a PSRAM block would warn
-    http_request::HttpRequestComponent http;
-    TestLogoCache c;
-    image::Image *img = load(c, http, png_header(wh.first, wh.second));
-    CHECK(img != nullptr && painted(img).empty());
-    CHECK(fake_log::warnings == 0);
-  }
-}
-
-// The shrink spreads over loop() passes: the logo is not ready after the
-// pass that starts it, nor while the vote runs, and a pass that finishes it
-// says so. A second logo downloaded meanwhile waits its turn, and is shrunk
-// after. Nothing drops the logo being shrunk to make room.
-static void test_shrink_takes_passes() {
-  reset_fakes();
-  runtime_image::fake_decoder::fill = 0xFFFFFFFF;
-  http_request::HttpRequestComponent http;
-  http.replies[url(1)] = {200, png_header(128, 128)};
-  http.replies[url(2)] = {200, png_header(128, 128)};
-  TestLogoCache c;
-  c.set_http(&http);
-  c.setup();
-  c.get(url(1));
-  c.get(url(2));
-  run_task(c);
-  // Pass 1 starts the first shrink, pass 2 decodes, passes 3 to 5 vote.
-  int first_ready_at = 0, second_ready_at = 0;
-  for (int pass = 1; pass <= 12; pass++) {
-    bool ready = c.loop();
-    if (first_ready_at == 0 && c.get(url(1)) != nullptr) {
-      first_ready_at = pass;
-      CHECK(ready);
-    }
-    if (second_ready_at == 0 && c.get(url(2)) != nullptr)
-      second_ready_at = pass;
-    if (pass == 1)
-      CHECK(fake_heap::psram_blocks == 1);
-  }
-  CHECK(first_ready_at == 5);
-  CHECK(second_ready_at == 10);
-  CHECK(fake_heap::psram_blocks == 0);
-  CHECK(runtime_image::fake_decoder::live == 0);
-  CHECK(c.waiting(url(1)) == false);
-}
-
-// While a logo is being shrunk it is on its way: the board waits for it.
-static void test_shrinking_logo_is_waiting() {
-  reset_fakes();
-  http_request::HttpRequestComponent http;
-  http.replies[url(1)] = {200, png_header(64, 64)};
-  TestLogoCache c;
-  c.set_http(&http);
-  c.setup();
-  c.get(url(1));
-  run_task(c);
-  c.loop();
-  CHECK(c.get(url(1)) == nullptr);
-  CHECK(c.waiting(url(1)));
-}
-
 int main() {
   test_download_decode_drops_the_decoder();
   test_full_cache_holds_no_decoders();
@@ -614,13 +449,6 @@ int main() {
   test_failed_logo_waits_before_asking_again();
   test_prefetch_stops_at_a_full_cache();
   test_missing_dark_logo_uses_the_plain_one();
-  test_128px_logo_is_shrunk();
-  test_clear_logo_stays_clear();
-  test_no_psram_decodes_straight();
-  test_wrong_size_decodes_straight();
-  test_other_sizes_decode_straight();
-  test_shrink_takes_passes();
-  test_shrinking_logo_is_waiting();
   printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;
 }
