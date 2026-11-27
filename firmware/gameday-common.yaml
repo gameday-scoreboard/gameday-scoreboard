@@ -5,7 +5,7 @@ substitutions:
   # The MAC suffix keeps two panels on one network apart: gameday-2f6a70.local
   name: "gameday"
   friendly_name: "Game Day Scoreboard"
-  version: "2026.11.5"
+  version: "2026.11.6"
   # Set by each board's top-level file; names the manifest folder.
   variant: "moonhub75"
   # Where the panel looks for new releases. A bench build can point it at a
@@ -99,7 +99,7 @@ esphome:
   comment: "v${version}"
   build_path: build/gameday-${variant}
   project:
-    name: bharvey88.gameday-scoreboard
+    name: Game Day.Scoreboard
     version: "${version}"
   on_boot:
     # The Display light can restore its saved brightness before the HUB75
@@ -217,6 +217,10 @@ packages:
   effects: !include pages/effects.yaml
   # Rows of text from Home Assistant in place of the board (the Smart board page)
   smart_board: !include pages/smart_board.yaml
+  # The planes near home from adsb.lol or the owner's receiver (the Flights page)
+  flights: !include pages/flights.yaml
+  # The town's forecast now and for the next hours (the Weather page)
+  weather: !include pages/weather.yaml
   # Factory check (the flag factory_flash.py leaves, or POST /gameday/action?do=qc)
   qc: !include pages/qc.yaml
   # Dims a hot panel and caps one on a weak power brick, and says why
@@ -262,8 +266,15 @@ panel_layout:
   default_cols: ${default_panel_cols}
   max_cols: 2
 
+# Built with DEBUG, run at INFO: the DEBUG lines (each ESPN read, each HTTP
+# header, each logo, each flash write) went to every log viewer all day for
+# nobody. "Log Level" in Home Assistant and under Diagnostics on the device
+# page raises it for troubleshooting, until the next restart. A bench script
+# that reads DEBUG lines sets it first (POST /select/Log%20Level/set?option=DEBUG).
 logger:
   baud_rate: 115200
+  level: DEBUG
+  initial_level: INFO
 
 # No Home Assistant required: never reboot for lack of an API client.
 api:
@@ -318,6 +329,10 @@ crash_report:
 
 wifi:
   power_save_mode: none
+  # Allocate Wi-Fi and lwIP buffers in PSRAM first, so ESPN and update
+  # fetches leave more internal RAM for TLS and the loop. ESP-IDF falls back
+  # to internal RAM when PSRAM can't serve an allocation.
+  use_psram: true
   # Named per panel in on_boot.
   ap: {}
   # Bluetooth (improv_ble) is only needed to hand the panel Wi-Fi
@@ -605,6 +620,13 @@ web_server:
   # Custom page (firmware/web). Regenerate bundle.js with scripts/build_web.py.
   js_include: web/bundle.js
   css_include: web/app.css
+  # Our Wi-Fi config has only an ap: (the networks are saved on the panel), and
+  # for that ESPHome serves its own page at / unless local is false. js_url is
+  # empty because the default adds ESPHome's app from oi.esphome.io, which our
+  # page never used: it opened a second /events stream behind it. CI runs
+  # scripts/device_page_check.py on each build.
+  local: false
+  js_url: ""
 
 http_request:
   id: http_client
@@ -757,6 +779,12 @@ gameday:
           lambda: 'return x == "msg";'
         then:
           - script.execute: gd_msg_card
+    # The Game Day card (pages/gameday-live.yaml)
+    - if:
+        condition:
+          lambda: 'return x == "gameday_card";'
+        then:
+          - script.execute: gd_gameday_card
     # The college Top 25 card (pages/gameday-live.yaml)
     - if:
         condition:
@@ -860,48 +888,54 @@ gameday:
         then:
           - light.turn_on: gd_display
   on_update:
-    # Published on every update, though the value often repeats: Home
-    # Assistant only logs a change, and the device page takes each Game
-    # Status event as its cue to re-read /gameday/state.
-    - text_sensor.template.publish:
-        id: gd_status_sensor
-        state: !lambda 'return x.ha_status_text;'
-    # Home Assistant shows a state over 255 characters as unknown, so a long
-    # play is cut to 255 bytes, never inside a character.
-    - text_sensor.template.publish:
-        id: gd_last_play_sensor
-        state: !lambda |-
-          std::string s = x.ha_last_play;
-          if (s.size() > 255) {
-            size_t cut = 255;
-            while (cut > 0 && ((uint8_t) s[cut] & 0xC0) == 0x80)
-              cut--;
-            s.resize(cut);
-          }
-          return s;
-    # Only on a change, so the score sensors don't send the same number on
-    # every redraw. Unknown with no game and before kickoff.
-    - lambda: |-
-        id(gd_game_live).publish_state(x.ha_live);  // a binary sensor sends changes only
-        auto put = [](sensor::Sensor *s, int score) {
-          float v = score < 0 ? NAN : (float) score;
-          if (s->has_state() && (s->state == v || (std::isnan(v) && std::isnan(s->state))))
-            return;
-          s->publish_state(v);
-        };
-        put(id(gd_team_score), x.ha_team_score);
-        put(id(gd_opp_score), x.ha_opp_score);
-        // The sides, colors, period and clock, also only on a change.
-        auto say = [](text_sensor::TextSensor *t, const std::string &v) {
-          if (!t->has_state() || t->state != v)
-            t->publish_state(v);
-        };
-        say(id(gd_ha_team), x.ha_team);
-        say(id(gd_ha_opponent), x.ha_opponent);
-        say(id(gd_ha_team_rgb), x.ha_team_rgb);
-        say(id(gd_ha_opp_rgb), x.ha_opp_rgb);
-        say(id(gd_ha_period), x.ha_period);
-        say(id(gd_ha_clock), x.ha_clock);
+    # Off the Scoreboard (components/gameday/showing.h) Home Assistant hears
+    # nothing about games and keeps what it had.
+    - if:
+        condition:
+          lambda: 'return !x.ha_quiet;'
+        then:
+          # Published on every update, though the value often repeats: Home
+          # Assistant only logs a change, and the device page takes each Game
+          # Status event as its cue to re-read /gameday/state.
+          - text_sensor.template.publish:
+              id: gd_status_sensor
+              state: !lambda 'return x.ha_status_text;'
+          # Home Assistant shows a state over 255 characters as unknown, so a long
+          # play is cut to 255 bytes, never inside a character.
+          - text_sensor.template.publish:
+              id: gd_last_play_sensor
+              state: !lambda |-
+                std::string s = x.ha_last_play;
+                if (s.size() > 255) {
+                  size_t cut = 255;
+                  while (cut > 0 && ((uint8_t) s[cut] & 0xC0) == 0x80)
+                    cut--;
+                  s.resize(cut);
+                }
+                return s;
+          # Only on a change, so the score sensors don't send the same number on
+          # every redraw. Unknown with no game and before kickoff.
+          - lambda: |-
+              id(gd_game_live).publish_state(x.ha_live);  // a binary sensor sends changes only
+              auto put = [](sensor::Sensor *s, int score) {
+                float v = score < 0 ? NAN : (float) score;
+                if (s->has_state() && (s->state == v || (std::isnan(v) && std::isnan(s->state))))
+                  return;
+                s->publish_state(v);
+              };
+              put(id(gd_team_score), x.ha_team_score);
+              put(id(gd_opp_score), x.ha_opp_score);
+              // The sides, colors, period and clock, also only on a change.
+              auto say = [](text_sensor::TextSensor *t, const std::string &v) {
+                if (!t->has_state() || t->state != v)
+                  t->publish_state(v);
+              };
+              say(id(gd_ha_team), x.ha_team);
+              say(id(gd_ha_opponent), x.ha_opponent);
+              say(id(gd_ha_team_rgb), x.ha_team_rgb);
+              say(id(gd_ha_opp_rgb), x.ha_opp_rgb);
+              say(id(gd_ha_period), x.ha_period);
+              say(id(gd_ha_clock), x.ha_clock);
     - lambda: |-
         id(gd_countdown_at) = x.countdown_at;
         id(gd_countdown_end) = x.countdown_end;
@@ -979,6 +1013,9 @@ select:
     type: playlist
     name: "Playlist"
     icon: "mdi:playlist-star"
+  # The log's detail at runtime (logger above), back to INFO at every start
+  - platform: logger
+    name: "Log Level"
 
 # Power and Brightness in one light, so Home Assistant can put the panel in a
 # light group or an area, dim it with a remote, and fade it. The light's level

@@ -11,23 +11,28 @@ ifeq ($(OS),Windows_NT)
 LDFLAGS += -static
 endif
 
-all: build/test_parse build/test_networks build/test_api build/test_settings build/test_logo_cache build/test_logo_cache_asan build/test_picture build/test_celebrate build/test_celeb_football build/test_celeb_hockey build/test_celeb_baseball build/test_celeb_soccer build/test_smart_board
+all: build/test_parse build/test_networks build/test_api build/test_settings build/test_logo_cache build/test_logo_cache_asan build/test_logo_shrink build/test_picture build/test_celebrate build/test_celeb_football build/test_celeb_hockey build/test_celeb_baseball build/test_celeb_soccer build/test_volleyball build/test_smart_board build/test_flights build/test_weather_page build/test_clock
 	./build/test_parse
 	./build/test_networks
 	./build/test_api
 	./build/test_settings
 	./build/test_logo_cache
 	./build/test_logo_cache_asan
+	./build/test_logo_shrink
 	./build/test_picture
 	./build/test_celebrate
 	./build/test_celeb_football
 	./build/test_celeb_hockey
 	./build/test_celeb_baseball
 	./build/test_celeb_soccer
+	./build/test_volleyball
 	./build/test_smart_board
+	./build/test_flights
+	./build/test_weather_page
+	./build/test_clock
 
-SRCS = test_parse.cpp golden_football.cpp test_set.cpp test_fx_playlists.cpp ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp
-PARSER_ONLY = ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp
+SRCS = test_parse.cpp golden_football.cpp test_set.cpp test_fx_playlists.cpp ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp ../components/gameday/sport_volleyball.cpp
+PARSER_ONLY = ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp ../components/gameday/sport_volleyball.cpp
 
 build/test_parse: build/miniz.o $(SRCS) $(wildcard ../components/gameday/*.h) miniz.h
 	@mkdir -p build
@@ -67,6 +72,11 @@ build/test_celeb_soccer: test_celeb_soccer.cpp $(PARSER_ONLY) $(wildcard ../comp
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) test_celeb_soccer.cpp $(PARSER_ONLY) -o $@ $(LDFLAGS)
 
+# Women's college volleyball (sport_volleyball.cpp) on recorded ESPN documents.
+build/test_volleyball: test_volleyball.cpp $(PARSER_ONLY) $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_volleyball.cpp $(PARSER_ONLY) -o $@ $(LDFLAGS)
+
 # Not part of `all`: renders every celebration to raw RGB565 frames for
 # render_celebrations.py, which turns them into GIFs. `make celebrate-gifs`.
 build/render_celebrations: render_celebrations.cpp $(PARSER_ONLY) $(wildcard ../components/gameday/*.h)
@@ -80,6 +90,24 @@ celebrate-gifs: build/render_celebrations
 build/test_smart_board: test_smart_board.cpp ../components/gameday/smart_board.h ../components/gameday/panel_text.h
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) test_smart_board.cpp -o $@ $(LDFLAGS)
+
+# The Flights page's parsers, geometry, card pick and text (flights.h),
+# over recorded adsb.lol and adsbdb replies.
+build/test_flights: test_flights.cpp $(PARSER_ONLY) $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_flights.cpp $(PARSER_ONLY) -o $@ $(LDFLAGS)
+
+# The Weather page: the forecast's hours and suns (weather.h), what the page
+# says (weather_page.h) and its place under Showing and After the game.
+build/test_weather_page: test_weather_page.cpp $(PARSER_ONLY) $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_weather_page.cpp $(PARSER_ONLY) -o $@ $(LDFLAGS)
+
+# The clock sweep: the date and clock code over every quarter hour of 2026 to
+# 2028, in every time zone the panel offers.
+build/test_clock: test_clock.cpp $(PARSER_ONLY) $(wildcard ../components/gameday/*.h)
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) test_clock.cpp $(PARSER_ONLY) -o $@ $(LDFLAGS)
 
 build/test_networks: test_networks.cpp $(wildcard ../components/saved_networks/*.h)
 	@mkdir -p build
@@ -100,15 +128,20 @@ build/test_settings: test_settings.cpp $(wildcard ../components/gameday/*.h)
 
 # The logo cache's state machine, with FreeRTOS, http_request and RuntimeImage
 # replaced by the stand-ins in logo_stubs/.
-build/test_logo_cache: test_logo_cache.cpp ../components/gameday/logo_cache.cpp ../components/gameday/logo_cache.h ../components/gameday/logo_lru.h $(wildcard logo_stubs/*.h logo_stubs/*/*.h logo_stubs/*/*/*.h logo_stubs/*/*/*/*.h)
+build/test_logo_cache: test_logo_cache.cpp ../components/gameday/logo_cache.cpp ../components/gameday/logo_cache.h ../components/gameday/logo_lru.h ../components/gameday/logo_shrink.h $(wildcard logo_stubs/*.h logo_stubs/*/*.h logo_stubs/*/*/*.h logo_stubs/*/*/*/*.h)
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) -Ilogo_stubs test_logo_cache.cpp ../components/gameday/logo_cache.cpp -o $@ $(LDFLAGS)
 
 # The same with the address sanitizer, which stops on a logo freed while the
 # logo task still writes to it (test_full_cache_keeps_busy_logos).
-build/test_logo_cache_asan: test_logo_cache.cpp ../components/gameday/logo_cache.cpp ../components/gameday/logo_cache.h ../components/gameday/logo_lru.h $(wildcard logo_stubs/*.h logo_stubs/*/*.h logo_stubs/*/*/*.h logo_stubs/*/*/*/*.h)
+build/test_logo_cache_asan: test_logo_cache.cpp ../components/gameday/logo_cache.cpp ../components/gameday/logo_cache.h ../components/gameday/logo_lru.h ../components/gameday/logo_shrink.h $(wildcard logo_stubs/*.h logo_stubs/*/*.h logo_stubs/*/*/*.h logo_stubs/*/*/*/*.h)
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) -g -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=all -Ilogo_stubs test_logo_cache.cpp ../components/gameday/logo_cache.cpp -o $@
+
+# The logo shrink, from hand-made sources.
+build/test_logo_shrink: test_logo_shrink.cpp ../components/gameday/logo_shrink.h
+	@mkdir -p build
+	$(CXX) $(CXXFLAGS) -fsanitize=address,undefined test_logo_shrink.cpp -o $@
 
 # The picture card's GIF player and upload checks, against fixtures/pictures/.
 build/test_picture: test_picture.cpp $(wildcard ../components/gameday/*.h)

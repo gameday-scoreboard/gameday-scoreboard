@@ -70,9 +70,9 @@ struct FxStore {
   FxList list[kFxListMax];
   uint8_t spare[4];
 } __attribute__((packed));
+static_assert(sizeof(FxStore) == 850,
+              "FxStore is saved: a new size needs a new preference key or a migration, not a new number");
 static_assert(sizeof(FxEntry) == 24, "FxEntry is part of a saved blob");
-static_assert(sizeof(FxStore) == 2 + kFxListMax * (kListNameMax + 3 + kFxEntryMax * 24) + 4,
-              "FxStore is a saved blob");
 constexpr uint8_t kFxStoreVersion = 1;
 
 // The step nearest a number of seconds, ties to the shorter one; past the
@@ -304,13 +304,30 @@ inline bool fx_same_effects(const FxList &a, const FxList &b) {
   return a.count == b.count && a.flags == b.flags && memcmp(a.fx, b.fx, sizeof(a.fx)) == 0;
 }
 
+// Where the effect up now (before.fx[pos]) is in l: its own place when it
+// is still there, else the first place it moved to; -1 when it was changed
+// or taken out.
+inline int fx_find_entry(const FxList &before, const FxList &l, uint8_t pos) {
+  if (pos >= before.count)
+    return -1;
+  const FxEntry &e = before.fx[pos];
+  if (pos < l.count && memcmp(&l.fx[pos], &e, sizeof(e)) == 0)
+    return pos;
+  for (uint8_t i = 0; i < l.count && i < kFxEntryMax; i++)
+    if (memcmp(&l.fx[i], &e, sizeof(e)) == 0)
+      return i;
+  return -1;
+}
+
 // What the player does after the playlists were edited, given the one
-// playing before the edit (a copy): KEEP when a playlist of that name is
-// still there exactly as it was (it may have moved: p.list follows it), or
-// the one in its place has a new name and the same effects (a rename);
-// RESTART when it is there but changed (play it from the top); STOP when
-// it is gone or empty now.
-enum class FxEdit : uint8_t { NONE, KEEP, RESTART, STOP };
+// playing before the edit (a copy). It is found by its name (it may have
+// moved: p.list follows it), or in its place with a new name and the same
+// effects (a rename). It keeps its place rather than starting over: KEEP
+// when the effect up now is still in it as it was, wherever it moved (it
+// stays up for the rest of its time); SHOW when that effect was changed or
+// taken out (the caller puts up the one now at its place, fx_show). STOP
+// when the playlist is gone or empty now.
+enum class FxEdit : uint8_t { NONE, KEEP, SHOW, STOP };
 inline FxEdit fx_after_edit(const FxStore &st, FxPlayer &p, const FxList &before) {
   if (p.list == 0)
     return FxEdit::NONE;
@@ -321,7 +338,13 @@ inline FxEdit fx_after_edit(const FxStore &st, FxPlayer &p, const FxList &before
     if (l.count == 0)
       break;
     p.list = n;
-    return fx_same_effects(before, l) ? FxEdit::KEEP : FxEdit::RESTART;
+    if (fx_same_effects(before, l))
+      return FxEdit::KEEP;
+    int at = fx_find_entry(before, l, p.pos);
+    // Shuffle starts a new round from the effect up now.
+    p.pos = at >= 0 ? (uint8_t) at : p.pos < l.count ? p.pos : 0;
+    p.played = (uint8_t) (1u << p.pos);
+    return at >= 0 ? FxEdit::KEEP : FxEdit::SHOW;
   }
   // Its name is gone: renamed in its place, with the same effects?
   if (p.list <= st.count && st.list[p.list - 1].count > 0 && fx_same_effects(before, st.list[p.list - 1]))

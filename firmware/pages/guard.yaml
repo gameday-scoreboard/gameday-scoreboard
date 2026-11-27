@@ -14,7 +14,10 @@ sensor:
   - platform: internal_temperature
     name: "Chip Temperature"
     id: gd_chip_temp
-    entity_category: diagnostic
+    # The heat guard's own reading, not Home Assistant's: every 30 s all
+    # day was a recorder row each time. The device page shows it under
+    # Diagnostics (GET /gameday/health).
+    internal: true
     update_interval: 15s
     # The last minute's average, every 30 s, so one odd reading can't put
     # the thermometer up.
@@ -47,14 +50,15 @@ script:
             - hub75.set_brightness:
                 id: matrix
                 brightness: 0
+      - script.execute: gd_dark_check
       - lambda: |-
           const uint8_t mark = id(gameday_ctl).guard_mark();
           const int W = lv_disp_get_hor_res(lv_disp_get_default());
-          lv_obj_add_flag(id(gd_guard_line), LV_OBJ_FLAG_HIDDEN);
+          lv_obj_set_hidden(id(gd_guard_line), true);
           auto pulse = [](void *icon, int32_t v) { lv_obj_set_style_opa((lv_obj_t *) icon, (lv_opa_t) v, 0); };
           lv_anim_delete(id(gd_guard_icon), pulse);
           if (mark == 0) {
-            lv_obj_add_flag(id(gd_guard_icon), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(gd_guard_icon), true);
             return;
           }
           image::Image *icon = mark == 2 ? id(gd_guard_power_img) : id(gd_guard_heat_img);
@@ -73,7 +77,7 @@ script:
           lv_anim_start(&a);
           if (!id(qc_active))
             lv_obj_move_foreground(id(gd_guard_icon));
-          lv_obj_clear_flag(id(gd_guard_icon), LV_OBJ_FLAG_HIDDEN);
+          lv_obj_set_hidden(id(gd_guard_icon), false);
           const lv_color_t color = lv_color_hex(mark == 2 ? 0xFF2020 : 0xFF8000);
           lv_obj_set_width(id(gd_guard_line), W);
           lv_obj_set_width(id(gd_guard_lbl), W);
@@ -89,10 +93,54 @@ script:
                   return;
                 lv_obj_move_foreground(id(gd_guard_icon));
                 lv_obj_move_foreground(id(gd_guard_line));
-                lv_obj_clear_flag(id(gd_guard_line), LV_OBJ_FLAG_HIDDEN);
+                lv_obj_set_hidden(id(gd_guard_line), false);
             - delay: 15s
-            - lambda: 'lv_obj_add_flag(id(gd_guard_line), LV_OBJ_FLAG_HIDDEN);'
+            - lambda: 'lv_obj_set_hidden(id(gd_guard_line), true);'
             - delay: 105s
+
+  # A dark screen draws nothing: LVGL pauses while Power is off or the night
+  # schedule has the screen off (screen_dark() in components/gameday, which
+  # fires "screen" when that changes), and comes back with the whole screen
+  # redrawn. QC and the FCC screen light a dark panel, so they keep LVGL
+  # running; an effect has paused it already and resumes it itself.
+  - id: gd_dark_check
+    then:
+      - if:
+          condition:
+            lambda: 'return id(gameday_ctl).screen_dark() && !id(qc_active) && !id(reg_active) && !id(gd_fx_on);'
+          then:
+            - if:
+                condition:
+                  not:
+                    lvgl.is_paused:
+                then:
+                  - logger.log:
+                      level: INFO
+                      tag: guard
+                      format: "Screen dark: drawing paused"
+                  - lvgl.pause:
+          else:
+            - if:
+                condition:
+                  and:
+                    - lvgl.is_paused:
+                    - lambda: 'return !id(gd_fx_on);'
+                then:
+                  - logger.log:
+                      level: INFO
+                      tag: guard
+                      format: "Screen lit: drawing again"
+                  - lvgl.resume:
+                  # LVGL marked nothing dirty while paused
+                  - script.execute: gd_repaint
+
+gameday:
+  on_action:
+    - if:
+        condition:
+          lambda: 'return x == "screen";'
+        then:
+          - script.execute: gd_dark_check
 
 image:
   - platform: file

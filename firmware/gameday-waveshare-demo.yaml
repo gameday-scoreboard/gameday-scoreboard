@@ -1,0 +1,5 @@
+# Demo build for the Waveshare ESP32-S3-RGB-Matrix: gameday-waveshare.yaml
+# plus the demo (pages/demo.yaml). Test firmware only, never released.
+packages:
+  base: !include gameday-waveshare.yaml
+  demo: !include pages/demo.yaml

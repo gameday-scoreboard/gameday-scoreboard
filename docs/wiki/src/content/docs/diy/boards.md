@@ -1,11 +1,27 @@
 ---
 title: "Boards"
-description: "Which ESP32-S3 boards run the Game Day Scoreboard firmware, the MoonHub75 pinout, and the flash and PSRAM it needs."
+description: "Which ESP32-S3 boards run the Game Day Scoreboard firmware: the Waveshare ESP32-S3-RGB-Matrix, the MoonHub75 pinout, and the flash and PSRAM a board needs."
 sidebar:
   order: 2
 ---
 
-The prebuilt firmware for DIY builds targets two boards: the [MoonHub75](https://github.com/MoonModules/Hardware/tree/main/MOONHUB75) pinout, which any board wired to those pins runs, and the Waveshare ESP32-S3-RGB-Matrix, the board in a Game Day Scoreboard. A board with different pins needs its own build.
+The prebuilt firmware targets two boards: the Waveshare ESP32-S3-RGB-Matrix, the board in a Game Day Scoreboard, and the [MoonHub75](https://github.com/MoonModules/Hardware/tree/main/MOONHUB75) pinout, which any board wired to those pins runs. A board with different pins needs its own build.
+
+## Waveshare ESP32-S3-RGB-Matrix
+
+The [Waveshare ESP32-S3-RGB-Matrix](https://www.waveshare.com/esp32-s3-rgb-matrix.htm) is the board in a Game Day Scoreboard. It has a prebuilt firmware: pick **Waveshare ESP32-S3-RGB-Matrix** in the [installer](/diy/install/) and it takes updates over Wi-Fi like any other panel. It starts laid out for one 128x64 panel. On a single 64x64 panel, open **Matrix** on the device page's **Device** tab once it's on Wi-Fi and pick the one-panel picture.
+
+It has its own pin map, `firmware/controllers/waveshare.yaml`, and its own build, `firmware/gameday-waveshare.yaml`. The board has a HUB75 connector for the panel, so there are no pins to wire by hand. These are the GPIO numbers under the names ESPHome uses:
+
+| R1 | G1 | B1 | R2 | G2 | B2 | A | B | C | D | E | LAT | OE | CLK |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 4 | 5 | 6 | 7 | 15 | 16 | 18 | 8 | 3 | 42 | 9 | 40 | 2 | 41 |
+
+The board carries an ESP32-S3 with 32 MB of flash and 16 MB of octal PSRAM, and a BOOT button on GPIO0. A click turns the panel on or off, and holding it shows the panel's address and resets Wi-Fi, as on any other board. See [Buttons and resets](/using/buttons-and-resets/).
+
+:::caution
+The board has no fuse and no reverse-polarity protection. Check the power leads before you plug them in.
+:::
 
 ## MoonHub75
 
@@ -35,7 +51,7 @@ Many panels read the ESP32's 3.3 V signals fine. If yours flickers or shows the 
 
 ## Flash and PSRAM
 
-The board settings come from `firmware/controllers/moonhub75.yaml`:
+A board on the MoonHub75 pinout gets its settings from `firmware/controllers/moonhub75.yaml`:
 
 | Setting | Value |
 | --- | --- |
@@ -46,10 +62,6 @@ The board settings come from `firmware/controllers/moonhub75.yaml`:
 | Framework | ESP-IDF |
 
 The firmware leans on PSRAM. It runs code from PSRAM (`execute_from_psram`), and `firmware/gameday-common.yaml` moves the Bluetooth stack and the HTTPS buffers there to keep internal RAM free for the ESPN and update downloads. The build is set for octal PSRAM and 16 MB of flash, so pick a board that has both. An N16R8 module does.
-
-## Waveshare ESP32-S3 RGB Matrix
-
-The Waveshare ESP32-S3 RGB Matrix has its own pin map, `firmware/controllers/waveshare.yaml`, and its own build, `firmware/gameday-waveshare.yaml`. It's the board in a Game Day Scoreboard, and the installer offers it. It hasn't run on a panel yet, so tell us how it goes. The board has no fuse and no reverse-polarity protection, so check the power leads before you plug them in.
 
 ## Other boards
 

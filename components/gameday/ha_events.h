@@ -60,7 +60,7 @@ struct HaEvent {
   std::string play;  // a score: "touchdown", "field_goal", "run", "goal"...; "final" for a final
   int points{0};     // a score: the points between two reads
   int team_score{0}, opponent_score{0};
-  std::string sport;   // "football", "baseball", "basketball", "hockey", "soccer"
+  std::string sport;   // "football", "baseball", "basketball", "hockey", "soccer", "volleyball"
   std::string result;  // a final: "win", "loss" or "draw" for team
   std::string winner;  // a final: the winner's abbreviation, "" on a draw
   // A lead change: "took_lead" from a tie, "lead_change" from the other side,
@@ -84,6 +84,8 @@ inline const char *ha_sport(Sport s) {
       return "hockey";
     case Sport::SOCCER:
       return "soccer";
+    case Sport::VOLLEYBALL:
+      return "volleyball";
     default:
       return "football";
   }
@@ -102,6 +104,8 @@ inline const char *ha_play(const GameSnapshot &cur, int points) {
       return "goal";
     case Sport::BASKETBALL:
       return "score";
+    case Sport::VOLLEYBALL:
+      return "set";
     default:
       break;
   }
@@ -158,7 +162,7 @@ inline std::string ha_ordinal(int n) {
 }
 
 // The words for period p of the game: "1st quarter", "2nd half", "3rd
-// period", "5th inning", "overtime", "2nd overtime", "shootout", "1st half
+// period", "5th inning", "4th set", "overtime", "2nd overtime", "shootout", "1st half
 // of extra time", "penalties".
 inline std::string ha_period_name(const GameSnapshot &g, int p) {
   int regulation = 4;
@@ -166,6 +170,8 @@ inline std::string ha_period_name(const GameSnapshot &g, int p) {
   switch (g.sport) {
     case Sport::BASEBALL:
       return ha_ordinal(p) + " inning";
+    case Sport::VOLLEYBALL:
+      return ha_ordinal(p) + " set";
     case Sport::HOCKEY:
       // Period 5 is the shootout outside the playoffs (espn_parse.h, Hockey)
       if (p == 5 && !g.nhl.playoffs)
@@ -209,6 +215,8 @@ inline bool ha_at_break(const GameSnapshot &g) {
       return g.soc.status == "STATUS_HALFTIME" || g.soc.status == "STATUS_END_PERIOD";
     case Sport::HOCKEY:
       return !hockey_intermission_text(g).empty();
+    case Sport::VOLLEYBALL:
+      return volleyball_set_over(g);
     default:
       return g.short_detail.rfind("End of", 0) == 0 || g.short_detail.find("Halftime") != std::string::npos;
   }
@@ -245,15 +253,18 @@ inline std::string ha_period_text(const GameSnapshot &g) {
     return "Halftime";
   if (g.sport == Sport::HOCKEY && ha_at_break(g))
     return hockey_intermission_text(g);
+  if (g.sport == Sport::VOLLEYBALL && ha_at_break(g))
+    return "End of the " + ha_period_name(g, g.period);
   if (ha_at_break(g) && !g.short_detail.empty())
     return g.short_detail;
   return ha_period_name(g, g.period);
 }
 
 // The Game Clock sensor: ESPN's clock while the game is on ("4:32", soccer's
-// "67'"), "" between periods, in baseball and when it isn't live.
+// "67'"), "" between periods, in baseball and volleyball and when it isn't live.
 inline std::string ha_clock_text(const GameSnapshot &g) {
-  if (!g.valid || g.state != GameState::IN || g.sport == Sport::BASEBALL || ha_at_break(g))
+  if (!g.valid || g.state != GameState::IN || g.sport == Sport::BASEBALL || g.sport == Sport::VOLLEYBALL ||
+      ha_at_break(g))
     return "";
   return g.display_clock;
 }
@@ -471,6 +482,10 @@ class HaTracker {
     ctx.neutral = neutral;
     return this->update(cur, ctx);
   }
+
+  // Forgets every game, so the next read of each fires nothing: what
+  // happened while nobody was following (showing.h) stays unreported.
+  void clear() { this->seen_.clear(); }
 
  private:
   struct Seen {

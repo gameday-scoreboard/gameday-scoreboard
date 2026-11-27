@@ -31,7 +31,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: dev
+          # Run by hand on a branch, it builds that branch, to test a fix for
+          # the next ESPHome before it reaches dev.
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.ref || 'dev' }}
       - uses: esphome/build-action@v7
         with:
           yaml-file: ${{ matrix.yaml }}

@@ -9,6 +9,13 @@ is a GET. Each
 reading is a row in burnin/<start time>.csv. When --hours runs out, or on
 Ctrl+C, it prints one line per panel: PASS, or FAIL and why.
 
+It also keeps each panel's event stream open for its log and counts ESPHome's
+"took a long time for an operation" warnings per component, each one a row in
+burnin/<start time>-slow.csv. They don't fail a panel. ESPHome raises a
+component's limit each time it warns, so a component only warns again for a
+longer block: compare the longest time and the component list with the same
+run on another build, both from a fresh restart.
+
     python scripts/burnin_monitor.py gameday-2f6a70.local gameday-1a2b3c.local
     python scripts/burnin_monitor.py --hours 48 gameday-2f6a70.local
     python scripts/burnin_monitor.py --selftest
@@ -22,7 +29,9 @@ import csv
 import datetime
 import http.client
 import json
+import re
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -33,6 +42,13 @@ SENSORS = {
     "sensor/Free Heap (PSRAM)": "heap_psram_kib",
     "sensor/RSSI": "rssi_dbm",
 }
+SLOW_FIELDS = ["time", "host", "component", "ms", "limit_ms"]
+# ESPHome's loop warning, with or without color codes around it:
+# [W][component:446]: lvgl took a long time for an operation (54 ms), max is 50 ms
+SLOW = re.compile(r"\]: +(.+?) took a long time for an operation \((\d+) ms\), max is (\d+) ms")
+SLOW_LIMIT_MS = 50  # the limit every component starts a boot with
+# The panel pings an open event stream every 10 s, so this long without a line means it is gone
+STREAM_QUIET_S = 35
 # Readings more than this far short of the expected uptime mean a restart
 REBOOT_SLACK_S = 30
 MAX_MISSED = 0.02
@@ -69,6 +85,91 @@ def parse_events(lines, wanted):
             if wanted <= reading.keys():
                 break
     return reading
+
+
+def parse_slow(text):
+    """(component, ms, limit in ms) from a slow loop warning, or None."""
+    m = SLOW.search(text)
+    return (m.group(1), int(m.group(2)), int(m.group(3))) if m else None
+
+
+def log_lines(lines):
+    """The log messages in a stream of Server-Sent Events lines."""
+    event, data = "", []
+    for raw in lines:
+        line = raw.rstrip("\r\n")
+        if line.startswith("event:"):
+            event = line[6:].strip()
+        elif line.startswith("data:"):
+            data.append(line[5:])
+        elif line == "":
+            if event == "log" and data:
+                yield "\n".join(data)
+            event, data = "", []
+
+
+class SlowLog(threading.Thread):
+    """Reads one panel's log for as long as the run lasts and keeps its slow
+    loop warnings. `read_s` is how long the stream was open, up to the last
+    line it sent."""
+
+    def __init__(self, host, on_warning):
+        super().__init__(daemon=True)
+        self.host, self.on_warning = host, on_warning
+        self.read_s = 0.0
+        self.stopping = threading.Event()
+
+    def run(self):
+        while not self.stopping.is_set():
+            try:
+                self.follow()
+            except (OSError, http.client.HTTPException):
+                pass  # restarting or off the network; the readings say which
+            self.stopping.wait(2)
+
+    def follow(self):
+        conn = http.client.HTTPConnection(self.host, 80, timeout=STREAM_QUIET_S)
+        try:
+            conn.request("GET", "/events", headers={"Accept": "text/event-stream"})
+            resp = conn.getresponse()
+            if resp.status != 200:
+                return
+            for message in log_lines(self.received(resp)):
+                found = parse_slow(message)
+                if found:
+                    self.on_warning(self.host, found)
+        finally:
+            conn.close()
+
+    def received(self, resp):
+        last = time.monotonic()
+        while not self.stopping.is_set():
+            line = resp.readline()
+            if not line:
+                return
+            now = time.monotonic()
+            self.read_s += now - last
+            last = now
+            yield line.decode("utf-8", "replace")
+
+
+def slow_facts(warnings, read_s, run_s):
+    """One line on a panel's slow loop warnings: each component's count and
+    longest block, the slowest first."""
+    by = {}
+    for component, ms, limit in warnings:
+        c = by.setdefault(component, {"n": 0, "ms": 0, "first_limit": limit})
+        c["n"] += 1
+        c["ms"] = max(c["ms"], ms)
+    parts = []
+    for name, c in sorted(by.items(), key=lambda kv: -kv[1]["ms"]):
+        part = f"{name} {c['n']}x, longest {c['ms']} ms"
+        if c["first_limit"] > SLOW_LIMIT_MS:
+            # An earlier warning, before the log was read, raised the limit this far
+            part += f" (its limit was already {c['first_limit']} ms)"
+        parts.append(part)
+    read = f"log read {min(1.0, read_s / run_s):.0%} of the run" if run_s else "log not read"
+    return f"slow loop: {'; '.join(parts) or 'none'} ({read})"
 
 
 def stream_lines(host, timeout):
@@ -234,6 +335,23 @@ def selftest():
     assert verdict["c"] == (False, ["restarted 1x"])
     assert verdict["d"] == (False, ["internal heap fell to 35 KiB"])
     assert verdict["e"][0] is False and "never answered" in verdict["e"][1]
+
+    warn = "\x1b[0;33m[W][component:446]: lvgl took a long time for an operation (54 ms), max is 50 ms\x1b[0m"
+    assert parse_slow(warn) == ("lvgl", 54, 50)
+    assert parse_slow("[10:01:02][W][component:446]: a scheduled task took a long time for an operation "
+                      "(130 ms), max is 50 ms") == ("a scheduled task", 130, 50)
+    assert parse_slow("[C][component:165]: Setup lvgl took 140 ms") is None
+    assert parse_slow("[I][gameday:100]: kickoff took a long time") is None
+    stream = ["event: ping\n", 'data: {"uptime":5}\n', "\n",
+              "event: log\n", f"data: {warn}\n", "\n",
+              "event: state\n", 'data: {"id":"sensor/RSSI"}\n', "\n",
+              "event: log\r\n", "data: one\r\n", "data: two\r\n", "\r\n"]
+    assert list(log_lines(iter(stream))) == [" " + warn, " one\n two"]
+    assert slow_facts([], 3600.0, 3600.0) == "slow loop: none (log read 100% of the run)"
+    assert slow_facts([("lvgl", 54, 50), ("gameday", 212, 50), ("lvgl", 81, 60), ("wled_fx", 78, 70)],
+                      1800.0, 3600.0) == (
+        "slow loop: gameday 1x, longest 212 ms; lvgl 2x, longest 81 ms; "
+        "wled_fx 1x, longest 78 ms (its limit was already 70 ms) (log read 50% of the run)")
     print("selftest ok")
 
 
@@ -257,6 +375,24 @@ def main():
     path = args.out / f"{started:%Y%m%d-%H%M}.csv"
     print(f"Logging to {path}. Ctrl+C stops early and prints the verdict.")
     rows, last = [], {}
+    slow_path = path.with_name(path.stem + "-slow.csv")
+    slow_file = slow_path.open("w", newline="", encoding="utf-8")
+    slow_csv = csv.writer(slow_file)
+    slow_csv.writerow(SLOW_FIELDS)
+    slow, lock = {host: [] for host in args.hosts}, threading.Lock()
+
+    def on_warning(host, found):
+        now = datetime.datetime.now().isoformat(timespec="seconds")
+        with lock:
+            slow[host].append(found)
+            slow_csv.writerow([now, host, *found])
+            slow_file.flush()
+        print(f"{now} {host} SLOW LOOP {found[0]} took {found[1]} ms, its limit was {found[2]} ms")
+
+    logs = {host: SlowLog(host, on_warning) for host in args.hosts}
+    for reader in logs.values():
+        reader.start()
+    began = time.monotonic()
     end = time.monotonic() + args.hours * 3600
     try:
         with path.open("w", newline="", encoding="utf-8") as f:
@@ -289,13 +425,18 @@ def main():
     except KeyboardInterrupt:
         pass
 
+    for reader in logs.values():
+        reader.stopping.set()
+    run_s = time.monotonic() - began
     elapsed = datetime.datetime.now() - started
-    print(f"\nRan {elapsed.total_seconds() / 3600:.1f} h. Log: {path}")
+    print(f"\nRan {elapsed.total_seconds() / 3600:.1f} h. Log: {path}, slow loop warnings: {slow_path}")
     failed = 0
     for host, passed, reasons, facts in summarize(rows, args.min_heap):
         failed += not passed
         verdict = "PASS" if passed else "FAIL: " + "; ".join(reasons)
         print(f"{host}  {verdict}  ({facts})")
+        with lock:
+            print(f"{host}  {slow_facts(slow[host], logs[host].read_s, run_s)}")
     return 1 if failed else 0
 
 

@@ -13,7 +13,7 @@ The panel can be the heart of game day at home. As the game it follows goes on, 
 | `esphome.gameday_start` | Kickoff, tip-off, first pitch or puck drop. |
 | `esphome.gameday_score` | Either side scores. |
 | `esphome.gameday_lead_change` | A side takes the lead, the lead changes hands, or the score comes level. |
-| `esphome.gameday_period` | A quarter, half, period or inning ends. |
+| `esphome.gameday_period` | A quarter, half, period, inning or set ends. |
 | `esphome.gameday_final` | The game is over. |
 | `esphome.gameday_test` | You pressed **Send a test event** on the device page. |
 
@@ -39,10 +39,10 @@ Every event has these fields. Every value is text, so match `"true"` and `"7"` i
 | Field | What it is |
 | --- | --- |
 | `kind` | `pregame`, `start`, `score`, `lead_change`, `period`, `final` or `test`. |
-| `league` | `nfl`, `ncaa`, `mlb`, `nba`, `wnba`, `mcbb`, `nhl`, `mls` or `epl`. |
-| `sport` | `football`, `baseball`, `basketball`, `hockey` or `soccer`. |
+| `league` | `nfl`, `ncaa`, `mlb`, `nba`, `wnba`, `mcbb`, `wcbb`, `wcvb`, `nhl`, `mls` or `epl`. |
+| `sport` | `football`, `baseball`, `basketball`, `hockey`, `soccer` or `volleyball`. |
 | `team`, `opponent` | The two sides, like `DAL` and `PHI`. `team` is the side the event is about: the side that scored, the side that leads now, or for the rest, the side on the left of the board. |
-| `team_score`, `opponent_score` | The score now, `team`'s first. |
+| `team_score`, `opponent_score` | The score now, `team`'s first. In volleyball, the sets won. |
 | `my_team` | `true` when `team` is your team. Always `false` in Live games, where neither side is yours. |
 | `team_color`, `opponent_color` | ESPN's color for each side, like `#002A5C`. |
 | `team_rgb`, `opponent_rgb` | The same colors as `0,42,92`, ready for a light's `rgb_color`. |
@@ -54,9 +54,9 @@ And each kind adds its own:
 | Event | Fields |
 | --- | --- |
 | `pregame` | `minutes`: to the start. |
-| `score`, `test` | `play`: `touchdown`, `field_goal`, `extra_point` or `two_point` (a two-point try or a safety) in football, `run` or `home_run` in baseball, `goal` in hockey and soccer, `score` in basketball and for any other football score. `points`: since the panel's last look, which in basketball can be more than one basket. |
+| `score`, `test` | `play`: `touchdown`, `field_goal`, `extra_point` or `two_point` (a two-point try or a safety) in football, `run` or `home_run` in baseball, `goal` in hockey and soccer, `set` in volleyball, `score` in basketball and for any other football score. `points`: since the panel's last look, which in basketball can be more than one basket. |
 | `lead_change` | `change`: `took_lead` from a level score, `lead_change` when it changes hands, `tied` when the score comes level. `leader` and `previous_leader`: the sides, empty when level. |
-| `period` | `period`: the number of the one that ended. `period_name`: `1st quarter`, `2nd half`, `3rd period`, `7th inning`, `overtime`, and in hockey `shootout`, in soccer `1st half of extra time`, `2nd half of extra time` and `penalties`. |
+| `period` | `period`: the number of the one that ended. `period_name`: `1st quarter`, `2nd half`, `3rd period`, `7th inning`, `2nd set`, `overtime`, and in hockey `shootout`, in soccer `1st half of extra time`, `2nd half of extra time` and `penalties`. |
 | `final` | `result`: `win`, `loss` or `draw` for `team`. `winner`: empty on a draw. |
 
 A touchdown that puts your team ahead looks like this in **Developer tools**, then **Events**, listening to `esphome.gameday_score`:
@@ -134,6 +134,7 @@ data:
 
 - The events of one moment come together and in order: a touchdown that takes the lead is a `score`, then a `lead_change`. A score on the last play arrives with the final.
 - Each one comes once. When the board takes turns between games, in Live games or with two favorites playing at once, a score in the game that's off the board arrives when the board comes back to that game.
+- Events come only while **Showing** is on the Scoreboard. On the Clock, Effects or the Smart board the panel sends none, and back on the Scoreboard the first event is the next thing that happens: a score from while it was away never fires.
 - After the panel restarts, or starts following a game already under way, the first event is the next thing that happens, not the ones before it. A panel turned on inside the heads-up window sends no heads-up for that game.
 - ESPN sometimes serves an older copy of a game for a moment. The panel ignores a score that goes down and comes back, so nothing repeats. A score ESPN takes back for good, like a touchdown overturned on review, counts after a minute and a half, without an event.
 - A period ends at the break after it, or when the next one is under way if the panel missed the break. The final ends the last period itself.
@@ -174,16 +175,16 @@ Each event is a `POST` with a small JSON body, the same fields as above with `ev
 
 ## Entities for the game
 
-These follow the same game, and change only when what they show does:
+These follow the same game, and change only when what they show does. Off the Scoreboard they keep their last state:
 
 | Entity | What it is |
 | --- | --- |
 | **Game Live** | On while the game is being played. |
-| **Team Score**, **Opponent Score** | The two scores; unknown before the start. |
+| **Team Score**, **Opponent Score** | The two scores; unknown before the start. In volleyball, the sets won. |
 | **Team**, **Opponent** | The two sides, like `DAL` and `PHI`. **Team** is your team in Favorite teams. |
 | **Team Color**, **Opponent Color** | Each side's color as `0,42,92`, so a light can follow it: `rgb_color: "{{ states('sensor.gameday_team_color').split(',') \| map('int') \| list }}"`. |
-| **Period** | Where the game is: `3rd quarter`, `Halftime`, `End of 1st`, `Top of the 5th`, `Final`. Empty before the start. |
-| **Game Clock** | The clock while it runs, like `4:32`, or `67'` in soccer. Empty between periods and in baseball. |
+| **Period** | Where the game is: `3rd quarter`, `Halftime`, `End of 1st`, `Top of the 5th`, `End of the 2nd set`, `Final`. Empty before the start. |
+| **Game Clock** | The clock while it runs, like `4:32`, or `67'` in soccer. Empty between periods, in baseball and in volleyball. |
 
 Use your panel's own entity names; Home Assistant names them after the panel.
 

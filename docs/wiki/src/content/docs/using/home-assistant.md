@@ -11,6 +11,8 @@ Nothing about the panel needs Home Assistant. It reads ESPN, runs its own device
 
 With Home Assistant on the same network, it discovers the panel as a new ESPHome device and offers to add it. The prebuilt firmware has no API encryption key, so there is no key to enter.
 
+On its device page, Home Assistant lists the panel under its own name, like **Game Day Scoreboard 2f6a70**, as **Scoreboard by Game Day**.
+
 With the panel on an IoT network or IoT VLAN and Home Assistant on your main network, Home Assistant needs TCP port 6053 to the panel. With mDNS on between the networks it discovers the panel the same way and follows it to a new IP address by itself. Without mDNS, add it by IP address under **Settings > Devices & services > Add integration > ESPHome**, and give the panel a fixed IP address in your router. See [IoT network, IoT VLAN or IoT subnet](/using/wifi/#iot-network-iot-vlan-or-iot-subnet).
 
 Picking a mode from Home Assistant counts as setting the panel up, the same as the app or the device page, so the ticker stops asking you to pick a team.
@@ -31,6 +33,7 @@ Picking a mode from Home Assistant counts as setting the panel up, the same as t
 | **Reset Wi-Fi**, **Factory Reset** | The resets. See [The boot button and resets](/using/buttons-and-resets/). |
 | **WizMote Auto-Discovery**, **WizMote MAC Address**, **WizMote Status**, **Clear WizMote Pairing** | Pairing a WizMote. See [WizMote remote](/using/remote/). |
 | **IP**, **ESPN Data** | The panel's IP address, and how much it has downloaded from ESPN since it started. |
+| **Log Level** | How much the panel writes to its log: INFO normally, DEBUG while troubleshooting. Back to INFO at every restart. See [Diagnostics](/using/device-page/#diagnostics). |
 
 The **Team** entity is gone, along with My team.
 
@@ -42,13 +45,15 @@ A **Playlist** select picks the playlist Favorite teams plays: **All favorites**
 
 With favorites in more than one sport, the select also lists **All football**, **All basketball** and so on, one for each sport, after **All favorites**. See [A row for each sport](/using/favorites/#a-row-for-each-sport).
 
-A **Chip Temperature** sensor reports the controller's temperature, the reading the panel uses to dim itself when it runs hot.
+The controller's chip temperature, the reading the panel uses to dim itself when it runs hot, is on the device page under Diagnostics rather than in Home Assistant, where it wrote a row to the database every 30 seconds. **Chip Temperature**, **Effect FPS**, **Effect Render Time** and **Effect Output Time** entities left over from an older firmware show as unavailable; delete them in Home Assistant.
 
-**Select Page** gets a third option, **Effects**, which fills the panel with a moving pattern in place of the scoreboard, with **Effect** and **Effect Palette** selects and **Effect Speed** and **Effect Intensity** numbers (0 to 255) to set it. The panel starts on the Scoreboard after every restart and puts the Scoreboard back itself when it has something to show you, so an automation that wants the pattern back after that selects Effects again. Three diagnostic sensors, **Effect FPS**, **Effect Render Time** and **Effect Output Time**, read the pattern's frame rate while one runs and are unknown otherwise. See [Effects](/using/effects/).
+**Select Page** gets a third option, **Effects**, which fills the panel with a moving pattern in place of the scoreboard, with **Effect** and **Effect Palette** selects and **Effect Speed** and **Effect Intensity** numbers (0 to 255) to set it. The panel starts on the Scoreboard after every restart and puts the Scoreboard back itself when it has something to show you, so an automation that wants the pattern back after that selects Effects again. See [Effects](/using/effects/).
 
 An **Effect playlist** select plays one of your [effect playlists](/using/effects/#effect-playlists) by name, putting the panel on Effects, and **None** stops the one playing. It shows **None** again when the playlist stops because an effect setting was changed by hand or the panel left Effects. It is separate from the **Playlist** select, which picks a playlist of teams.
 
 **Select Page** also has **Smart board**, and four text entities, **Smart board row 1** to **Smart board row 4**, fill it: set one with **Text: Set value**, from a template that reads any entity's state or attribute, with color tags like `[red]`. Picked under **Select Page**, the Smart board stays up through restarts until something picks another page. See [Smart board](/using/smart-board/).
+
+The game entities below, Game Status and Last Play come from the Scoreboard. While **Select Page** is on the Clock, Effects or the Smart board, the panel sends them nothing, and each keeps its last state until the Scoreboard is back.
 
 **Game Live** is on while the game in Game Status is being played. **Team Score** and **Opponent Score** are that game's two scores: Team is the side on the left of the board, your team in Favorite teams. They change only when a score does, and are unknown when there is no game or it hasn't started.
 
@@ -66,10 +71,10 @@ The panel sends Home Assistant an event every time either side scores in the gam
 | --- | --- |
 | `team` | The team that scored, like `DAL`. |
 | `opponent` | The other team. |
-| `play` | `touchdown`, `field_goal`, `extra_point` or `two_point` (a two-point try or a safety) in football, `run` or `home_run` in baseball, `goal` in hockey and soccer, `score` in basketball and for any other football score. |
+| `play` | `touchdown`, `field_goal`, `extra_point` or `two_point` (a two-point try or a safety) in football, `run` or `home_run` in baseball, `goal` in hockey and soccer, `set` in volleyball, `score` in basketball and for any other football score. |
 | `points` | The points since the panel's last check. In basketball that can be more than one basket. |
 | `team_score`, `opponent_score` | The score now, the scoring team's first. |
-| `sport` | `football`, `baseball`, `basketball`, `hockey` or `soccer`. |
+| `sport` | `football`, `baseball`, `basketball`, `hockey`, `soccer` or `volleyball`. |
 | `my_team` | `true` when your team scored. Always `false` in Live games, where neither side is yours. |
 
 `esphome.gameday_final` carries `team` and `opponent` (the left and right sides of the board), both scores, `result` (`win`, `loss` or `draw` for `team`), `winner` (empty on a draw), `sport` and `my_team` (`true` when `team` is your team).

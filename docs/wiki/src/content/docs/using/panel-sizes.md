@@ -17,9 +17,11 @@ The Game Day Scoreboard ships with one 128x64 panel, and its firmware starts on 
 
 ## What each layout shows
 
+Team logos on the game board are 32 LEDs square. The panel makes each one from ESPN's logo, giving every LED one of the logo's own colors, so thin outlines and letters stay whole and white lines stay white instead of turning gray.
+
 ### Wide: 128x64
 
-The logos sit at the far edges with the abbreviations and big scores between them. Under the scores is the game clock, and under that the situation row: down and distance in football, red in the red zone; the count, a diamond of the runners and the outs in baseball; the latest goal in soccer; the playoff series in basketball. The records sit under the logos, with football's timeout pips or soccer's red card marks under them. The ticker runs along the bottom.
+The logos sit at the far edges with the abbreviations and big scores between them. Under the scores is the game clock, and under that the situation row: down and distance in football, red in the red zone; the count, a diamond of the runners and the outs in baseball; the latest goal in soccer; a team and what is happening to it in basketball, with the detail on the row below ([Basketball](/using/basketball/#during-the-game)); the finished sets in volleyball. The records sit under the logos, with football's timeout pips or soccer's red card marks under them. The ticker runs along the bottom.
 
 During setup, the QR code for the Game Day app sits on the left half with the words beside it.
 
@@ -27,7 +29,7 @@ During setup, the QR code for the Game Day app sits on the left half with the wo
 
 The two logos sit side by side at the top, with the abbreviations and scores stacked under them. During play the game clock takes the abbreviations' place, and the gold possession line in football goes under the score. Baseball's diamond sits between the two scores with the outs as three dots under it.
 
-A single panel has no room for the records, the timeout pips, the red card marks or the situation row, so down and distance, the count and the soccer goals are in the ticker only, when their switches are on. See [The ticker](/using/ticker/).
+A single panel has no room for the records, the timeout pips, the red card marks or the situation row, so down and distance, the count and the soccer goals are in the ticker only, when their switches are on, and so are volleyball's finished sets. See [The ticker](/using/ticker/).
 
 Before a game, a single panel's ticker shows both teams' records after the kickoff time (after the playoff series in baseball, basketball and hockey when there is one), since the board has no room for them. A 128x64 board keeps them under the logos and leaves them out of the ticker.
 

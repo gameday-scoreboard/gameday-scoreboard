@@ -31,6 +31,8 @@ struct NightPrefs {
   uint8_t level;        // 1 to 255
   uint8_t spare[3];
 } __attribute__((packed));
+static_assert(sizeof(NightPrefs) == 10,
+              "NightPrefs is saved: a new size needs a new preference key or a migration, not a new number");
 
 inline NightPrefs night_defaults() {
   NightPrefs p{};
@@ -168,13 +170,16 @@ static const int64_t kNightRepeatSecs = 3600;
 
 // True when a skip that runs to `until` is over at `now` (local minute
 // `minute`): the schedule is off, the end has come, or the clock is outside
-// the hours. Outside them with an hour or less to go is the hour the clocks
-// go back over, between the first pass of the end and the second, and the
-// skip runs on through it.
-inline bool night_skip_over(const NightPrefs &p, int minute, int64_t now, int64_t until) {
+// the hours. Two times outside them belong to the same night when the clocks
+// go back, and the skip runs on through both: an hour or less before the end,
+// between its first pass and its second, and the repeated hour itself, where
+// the clock can read before a start it has already passed.
+inline bool night_skip_over(const NightPrefs &p, int minute, int64_t now, int64_t until, NightUtcOffset offset) {
   if (!p.on || now >= until)
     return true;
-  return !night_window(p.start, p.end, minute) && until - now > kNightRepeatSecs;
+  if (night_window(p.start, p.end, minute) || until - now <= kNightRepeatSecs)
+    return false;
+  return offset(now - kNightRepeatSecs) <= offset(now);
 }
 
 // The brightness the owner wants right now, before heat and power have their

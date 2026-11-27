@@ -12,6 +12,8 @@
 - [ ] Device page tests pass (`npm test` in tests/web)
 - [ ] `esphome compile` for firmware/gameday-waveshare.yaml, firmware/gameday.yaml and firmware/gameday-scoreboard75.yaml
 - [ ] Ran on a panel: which controller and layout, how long, what it showed
+- [ ] Bug fix on a panel: the same steps on a `dev` build showed the bug, and on this branch it's gone (or why it can't be forced)
+- Not tested:
 
 ## Checklist
 

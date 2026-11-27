@@ -28,7 +28,7 @@ namespace detail {
 
 struct Regulation {
   uint8_t periods;
-  int16_t period_s;  // 0: no clock (baseball)
+  int16_t period_s;  // 0: no clock (baseball, volleyball)
 };
 
 inline Regulation regulation(League league) {
@@ -39,6 +39,7 @@ inline Regulation regulation(League league) {
     case League::NBA:
       return {4, 720};
     case League::WNBA:
+    case League::WCBB:
       return {4, 600};
     case League::MCBB:
       return {2, 1200};
@@ -49,6 +50,8 @@ inline Regulation regulation(League league) {
     case League::MLS:
     case League::EPL:
       return {2, 2700};
+    case League::WCVB:
+      return {5, 0};
   }
   return {4, 900};
 }
@@ -97,13 +100,21 @@ inline int game_progress(League league, int period, int clock_s) {
 
 inline bool in_overtime(League league, int period) { return period > detail::regulation(league).periods; }
 
+// Late in the game: past kLateProgress, or overtime. In volleyball a side
+// with two sets is one from the match, whichever set it is.
+inline bool late_in_game(const LiveGame &g) {
+  League league = (League) g.league;
+  if (league_sport(league) == Sport::VOLLEYBALL && (g.away_score >= 2 || g.home_score >= 2))
+    return true;
+  return in_overtime(league, g.period) || game_progress(league, g.period, g.clock_s) >= kLateProgress;
+}
+
 // The better-ranked side trails late, or in overtime. Only college games
 // carry an AP rank, so the pro leagues never alert.
 inline bool upset_alert(const LiveGame &g) {
   if (g.away_rank == g.home_rank)
     return false;  // neither ranked, or (never in practice) the same rank
-  League league = (League) g.league;
-  if (!in_overtime(league, g.period) && game_progress(league, g.period, g.clock_s) < kLateProgress)
+  if (!late_in_game(g))
     return false;
   return g.away_rank < g.home_rank ? g.away_score < g.home_score : g.home_score < g.away_score;
 }
@@ -120,6 +131,9 @@ inline int live_interest(const LiveGame &g) {
       break;
     case Sport::BASKETBALL:
       units = (margin + 2) / 3;
+      break;
+    case Sport::VOLLEYBALL:
+      units = margin * 2;  // sets: two behind is nearly over
       break;
     default:
       units = margin;
@@ -168,7 +182,7 @@ inline bool at_break(const GameSnapshot &g) {
     return true;
   const std::string &d = g.short_detail;
   return d.rfind("End", 0) == 0 || d.rfind("Mid", 0) == 0 || d.rfind("Halftime", 0) == 0 || d == "HT" ||
-         hockey_late_intermission(g);
+         hockey_late_intermission(g) || volleyball_set_over(g);
 }
 
 // When Pick the best game may leave the game on the board: at a break, and

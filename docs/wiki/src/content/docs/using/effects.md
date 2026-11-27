@@ -5,9 +5,9 @@ sidebar:
   order: 13
 ---
 
-**Effects** fills the whole panel with a moving pattern, one of 52 from the [WLED](https://kno.wled.ge) project, in place of the scoreboard: a slow plasma for the shelf, falling snow in December, fireworks at a party. It is the third page under **Showing**, next to the Scoreboard and the Clock. The panel keeps following your games underneath, so the moment you go back to the Scoreboard the board is up to date, and the device page, the app, Home Assistant and the remote all keep working while a pattern runs.
+**Effects** fills the whole panel with a moving pattern, one of 52 from the [WLED](https://kno.wled.ge) project, in place of the scoreboard: a slow plasma for the shelf, falling snow in December, fireworks at a party. It is the third page under **Showing**, next to the Scoreboard and the Clock. While a pattern you picked runs, the panel stops reading scores: it shows nothing from ESPN, so it reads nothing and sends Home Assistant nothing about games. Go back to the Scoreboard and it says **Looking for** your team, or the live games it follows, for the second or two it takes to catch up. The device page, the app, Home Assistant and the remote all keep working while a pattern runs. Effects that **After the game** puts up between games keep watching for your next game, so the scoreboard comes back in time.
 
-Nothing plays an effect unless you pick it. Every time the panel starts it shows the Scoreboard, and the panel never switches to Effects on its own.
+Nothing plays an effect unless you pick it. Every time the panel starts it shows the Scoreboard, and the panel never switches to Effects on its own unless you set **After the game** to **Show effects** (see [Between games](#between-games)).
 
 ## Turning it on
 
@@ -21,6 +21,24 @@ Set **Showing** back to **Scoreboard** (or **Clock**) to get the board back. **B
 
 In [Home Assistant](/using/home-assistant/), **Select Page** has the same **Effects** option, **Page Next** and **Page Previous** step through it, and **Effect**, **Effect Palette**, **Effect Speed** and **Effect Intensity** set the pattern, so an automation can put a pattern up for a party and the Scoreboard back at bedtime. In the [Game Day app](/get-started/the-app/), the same controls show under **Showing** when it is on **Effects**.
 
+## Between games
+
+The panel can play an effect by itself whenever no game of yours is on, and go back to the scoreboard for the next one. It's off on a new panel. To turn it on:
+
+1. Set **Showing** to **Effects** and pick the effect, palette, speed and intensity you want (see [Turning it on](#turning-it-on)), then set **Showing** back to **Scoreboard**.
+2. On the device page's Display tab, under **Screen**, set **After the game** to **Show effects**.
+
+From then on, once your game's final has been up a while (30 minutes, 10 for baseball), the panel switches **Showing** to **Effects** and plays that effect. It does the same whenever no game of your team or your favorites is on and the next one isn't close, so a panel with no game coming up for months plays it instead of the off-season clock and "No upcoming game". It goes back to the scoreboard by itself:
+
+- at the **Turns on** time before your next game starts (it shows above **After the game**, 15 minutes to start), or when a game of yours goes live, and stays there through the game and its final.
+- when you pick a team, a mode or your favorites, press a [remote](/using/remote/) button that follows something or picks a page, or pick another page under **Showing**. The panel stays on what you picked, and the effect comes back after your next game's final.
+
+While it's between games, the effect steps aside for a few seconds, then comes back, for the cards you turned on under **Between games** that keep their turns: your own [countdown](/using/countdowns/), the [weather](/using/weather/) and the [message card](/using/messages/). A message card on **Whenever no game is on** keeps the board, so the effect doesn't come up. The countdown to your next game waits until the scoreboard is back.
+
+Anything on the [list below](#what-the-panel-does-while-an-effect-runs) still takes the screen. After a banner, the night schedule's screen-off, **Panel on** off, the heat or power mark, or a Wi-Fi or internet problem, the effect comes back once it's over. Starting the effect by itself never turns night mode off or lights a panel that's off.
+
+It only takes over while **Showing** is on **Scoreboard**: with the Clock, the Smart board or Effects picked under **Showing**, the panel stays on that page. In Live games, a game on the board that isn't your team's keeps the board.
+
 ## Effect playlists
 
 An effect playlist is a list of effects the panel steps through on its own, each for as long as you choose, like a playlist in WLED: a few calm patterns for an evening, or fireworks, bursts and rain for a party. You can keep up to 4 effect playlists of up to 8 effects each. They are separate from the [team playlists](/using/favorites/) on the Teams tab, which is why everything about them says **Effect playlist** in full.
@@ -28,7 +46,7 @@ An effect playlist is a list of effects the panel steps through on its own, each
 To make one, open the device page's **Customize** tab and find **Effect playlists**:
 
 1. Tap **New effect playlist** and give it a name of up to 16 characters. Any name works except one another effect playlist has and **None**, which is the choice that stops a playlist.
-2. Tap **Add an effect**. The new effect starts as whatever the panel is showing now, so you can try an effect, palette, speed and intensity on the Home tab first and then add it. Change any of them in the row after.
+2. Tap **Add an effect**. The new effect starts as whatever the panel is showing now, so you can try an effect, palette, speed and intensity on the Home tab first and then add it. Change any of them in the row after: the effect and palette from their lists, the speed and intensity with their sliders.
 3. Pick how long it stays up from **For**, from 1 second to 1 hour. A new effect stays up for 15 seconds.
 4. Use the arrows to put the effects in order, and the **✕** to take one out.
 5. Turn on **Shuffle** to play them in a random order instead. Shuffle shows every effect once before any of them comes round again, and never the same one twice in a row.
@@ -39,7 +57,9 @@ The playlist stops, and the panel stays on the effect it was showing, when:
 
 - you pick an effect, palette, speed or intensity yourself, on the device page, in the app or in Home Assistant. The panel keeps what you picked. Pick the playlist again to start it over.
 - **Showing** leaves **Effects**, whether you pick another page or the panel takes the screen back for one of the reasons below.
-- you delete the playlist or take out all its effects. Editing the one that's playing starts it over with your change; renaming it or moving it in the list doesn't interrupt it.
+- you delete the playlist or take out all its effects.
+
+Editing the one that's playing doesn't start it over. It carries on from the effect that's up: change that effect and the change shows at once, take it out and the next one comes up, and changing, adding or moving the others leaves it playing. Renaming the playlist or moving it in the list doesn't interrupt it either.
 
 Every time the panel starts it shows the Scoreboard, so a playlist never comes back on its own after a restart. The effect playlists themselves are kept, and a [settings backup](/using/backup/) saves them.
 

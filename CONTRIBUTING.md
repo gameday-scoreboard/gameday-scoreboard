@@ -102,6 +102,12 @@ set, has another value, or keeps it only under a deprecated name. Run it
 after a local build with
 `python3 scripts/sdkconfig_check.py firmware/gameday.yaml firmware/.esphome/build/gameday-moonhub75`.
 
+ESPHome builds the page a panel serves at `/`, and it can put its own there
+instead of ours with a green build. CI also runs
+`scripts/device_page_check.py` on each image: it fails when the image has no
+page that loads our `/0.js`, or when that page loads anything from another
+host.
+
 A fix we want that is only in an ESPHome beta, in order:
 
 1. Copy the component into `components/` and stay on the final release.
@@ -114,7 +120,7 @@ A fix we want that is only in an ESPHome beta, in order:
 
 ### Setup
 
-- [ESPHome](https://esphome.io/) 2026.10.2, the version CI builds with.
+- [ESPHome](https://esphome.io/) 2026.11.0, the version CI builds with.
 - g++ for the host tests.
 - Node and Python 3 for the device page tests.
 

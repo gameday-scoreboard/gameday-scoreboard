@@ -970,7 +970,7 @@ bool parse_event(TInput &input, Sport sport, uint32_t our_team_id, GameSnapshot 
                  const std::string &event_id = "") {
   JsonDocument filter(detail::json_allocator());
   detail::fill_event_filter(filter.to<JsonObject>());
-  if (sport != Sport::SOCCER)
+  if (sport != Sport::SOCCER && sport != Sport::VOLLEYBALL)
     detail::fill_leaders_filter(filter.as<JsonObject>());
   if (sport == Sport::BASEBALL)
     detail::fill_baseball_filter(filter.as<JsonObject>());

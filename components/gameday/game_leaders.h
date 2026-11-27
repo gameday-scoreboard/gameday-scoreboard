@@ -35,9 +35,9 @@ inline const char *leaders_stage_name(LeadersStage s) {
 
 // The stage the board's game is at, NONE between them. Soccer never: the
 // summary's leaders there are shots and passes, and the goal scorers are
-// already on the ticker.
+// already on the ticker. Nor volleyball: ESPN's summary has no players' stats.
 inline LeadersStage leaders_stage(const GameSnapshot &g) {
-  if (!g.valid || g.sport == Sport::SOCCER)
+  if (!g.valid || g.sport == Sport::SOCCER || g.sport == Sport::VOLLEYBALL)
     return LeadersStage::NONE;
   if (g.state == GameState::POST)
     return g.completed ? LeadersStage::FINAL : LeadersStage::NONE;

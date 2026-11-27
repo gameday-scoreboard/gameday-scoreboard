@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (c) 2026 Brandon Harvey. Game Day Scoreboard firmware; see NOTICE.md.
 #include "espn_parse.h"
+#include "flights.h"
 #include "game_leaders.h"
 #include "weather.h"
 
@@ -82,7 +83,8 @@ std::string team_day_url(League league, uint32_t group, int64_t day_epoch, const
   int y, m, d;
   civil_from_epoch(day_epoch - 5 * 3600, y, m, d);
   char buf[48];
-  if ((league == League::MCBB || league == League::NCAA) && group != 0) {
+  if ((league == League::MCBB || league == League::WCBB || league == League::NCAA || league == League::WCVB) &&
+      group != 0) {
     snprintf(buf, sizeof(buf), "groups=%u&", (unsigned) group);
     url += buf;
   }
@@ -162,7 +164,7 @@ std::string scan_url(League league, int64_t now_epoch, bool top25) {
   // ranked teams' games (17 of 132 on 2/14/2026); 50 is all of Division I.
   if (league == League::NCAA)
     snprintf(buf, sizeof(buf), "?groups=80&limit=300&dates=%04d%02d%02d", y, m, d);
-  else if (league == League::MCBB && !top25)
+  else if ((league == League::MCBB || league == League::WCBB) && !top25)
     snprintf(buf, sizeof(buf), "?groups=50&limit=300&dates=%04d%02d%02d", y, m, d);
   else
     snprintf(buf, sizeof(buf), "?dates=%04d%02d%02d", y, m, d);
@@ -170,9 +172,10 @@ std::string scan_url(League league, int64_t now_epoch, bool top25) {
   return url;
 }
 
-// Dark-background variant, shrunk to 64px by ESPN's image resizer. A 500px
+// Dark-background variant, shrunk to 128px by ESPN's image resizer. A 500px
 // logo PNG is up to 95KB and takes the ESP32 almost two seconds to decode;
-// the 64px one is about 3KB and decodes in a few milliseconds.
+// the 128px one is 3 to 10KB. The logo cache shrinks it to 32px itself
+// (logo_shrink.h): from 128px each LED has 16 source pixels to vote on.
 std::string dark_logo(const std::string &url) {
   if (url.empty())
     return url;
@@ -183,7 +186,7 @@ std::string dark_logo(const std::string &url) {
   size_t path = out.find("/i/teamlogos/");
   if (path == std::string::npos)
     return out;
-  return "https://a.espncdn.com/combiner/i?img=" + out.substr(path) + "&w=64&h=64";
+  return "https://a.espncdn.com/combiner/i?img=" + out.substr(path) + "&w=128&h=128";
 }
 
 // The same URL the scoreboard gives this team, so the logo cache downloads it
@@ -297,6 +300,10 @@ bool parse_season_str(const std::string &json, uint32_t our_team_id, SeasonRead 
 bool parse_geocode_from(WxSource &input, WxPlace &out) { return parse_geocode(input, out); }
 bool parse_forecast_from(WxSource &input, WxForecast &out) { return parse_forecast(input, out); }
 bool parse_hour_from(WxSource &input, WxHour &out) { return parse_hour(input, out); }
+bool parse_sky_from(WxSource &input, float home_lat, float home_lon, float radius_km, Sky &out) {
+  return parse_sky(input, home_lat, home_lon, radius_km, out);
+}
+bool parse_route_from(WxSource &input, Route &out) { return parse_route(input, out); }
 
 uint32_t parse_color(const std::string &hex) {
   if (hex.size() != 6)
@@ -334,6 +341,8 @@ Splash decide_splash(const GameSnapshot &prev, const GameSnapshot &cur, bool opp
     return basketball_splash(prev, cur, opponent_splashes, neutral);
   if (cur.sport == Sport::HOCKEY)
     return hockey_splash(prev, cur, opponent_splashes, neutral);
+  if (cur.sport == Sport::VOLLEYBALL)
+    return volleyball_splash(prev, cur, opponent_splashes, neutral);
   Splash none;
   if (!prev.valid || !cur.valid || prev.event_id != cur.event_id)
     return none;
@@ -507,6 +516,8 @@ std::string status_text(const GameSnapshot &s, const TickerOptions &o, const std
     return basketball_status_text(s, o, kickoff_local);
   if (s.sport == Sport::HOCKEY)
     return hockey_status_text(s, o, kickoff_local);
+  if (s.sport == Sport::VOLLEYBALL)
+    return volleyball_status_text(s, o, kickoff_local);
   std::string out;
   switch (s.state) {
     case GameState::NOT_FOUND:
@@ -775,6 +786,8 @@ std::string clock_text(const GameSnapshot &s) {
     return basketball_clock_text(s);
   if (s.sport == Sport::HOCKEY)
     return hockey_clock_text(s);
+  if (s.sport == Sport::VOLLEYBALL)
+    return volleyball_clock_text(s);
   bool has_clock = s.display_clock.find(':') != std::string::npos && s.period > 0;
   bool special = s.short_detail.find(':') == std::string::npos;  // Halftime, End of 3rd, Delayed, Final
   if (!has_clock || special) {

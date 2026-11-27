@@ -37,7 +37,7 @@ script:
     then:
       - delay: !lambda 'return (uint32_t) (ms > 0 ? ms : 4000);'
       - lambda: |-
-          lv_obj_add_flag(id(tt_splash), LV_OBJ_FLAG_HIDDEN);
+          lv_obj_set_hidden(id(tt_splash), true);
           gameday::celebration_player().stop();
 
   # Favorites: another favorite scored while this game is on ("KC TD,
@@ -50,7 +50,7 @@ script:
       - lambda: |-
           const std::string text = gameday::panel_text(id(gameday_ctl).fav_banner_text());
           if (text.empty()) {
-            lv_obj_add_flag(id(tt_fav_banner), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_fav_banner), true);
             return;
           }
           // A single panel's scores sit just above the ticker, so there the
@@ -69,30 +69,135 @@ script:
           bool light = r * 299 + g * 587 + b * 114 > 160000;
           lv_obj_set_style_bg_color(id(tt_fav_banner), lv_color_hex(c), 0);
           lv_obj_set_style_text_color(id(tt_fav_banner_lbl), lv_color_hex(light ? 0x000000 : 0xFFFFFF), 0);
-          lv_obj_clear_flag(id(tt_fav_banner), LV_OBJ_FLAG_HIDDEN);
+          lv_obj_set_hidden(id(tt_fav_banner), false);
       - delay: 5s
-      - lambda: 'lv_obj_add_flag(id(tt_fav_banner), LV_OBJ_FLAG_HIDDEN);'
+      - lambda: 'lv_obj_set_hidden(id(tt_fav_banner), true);'
 
   # The situation row's text on a wide board (components/gameday/row_text.h):
   # one line at a time, each for its own seconds, in the longest form that
   # fits the room the field strip left (gd_row_room). gd_update runs it on
-  # every read and the 1 s interval below on every turn. News (a new basket,
-  # a new down) jumps straight to the lead line.
+  # every read and the 1 s interval below on every turn. News (a new down, a
+  # run, a play) jumps straight to its line.
+  #
+  # Basketball's lines (story_rows.h) take the bottom row too: the team's
+  # name in its color and the story here, the detail under it in the
+  # ticker's place. A notice in the ticker keeps that row.
   - id: gd_row_show
     then:
       - lambda: |-
           lv_obj_t *lbl = id(tt_down_lbl);
+          lv_obj_t *const pair[4] = {id(gd_row_name), id(gd_row_name2), id(gd_row_val2), id(gd_row_more)};
+          lv_obj_t *ticker = id(tt_game_status_lbl);
           const int W = lv_disp_get_hor_res(lv_disp_get_default());
-          const ::espn::RowLines &r = id(gameday_ctl).last_update().row;
+          const gameday::UpdateFields &u = id(gameday_ctl).last_update();
+          const ::espn::RowLines &r = u.row;
+          auto hide = [](lv_obj_t *o, bool hidden) {
+            if (lv_obj_is_hidden(o) != hidden)
+              lv_obj_set_hidden(o, hidden);
+          };
+          auto put = [](lv_obj_t *o, const char *text) {
+            const char *cur = lv_label_get_text(o);
+            if (cur == nullptr || strcmp(text, cur) != 0)
+              lv_label_set_text(o, text);
+          };
+          if (W < 128 || r.n == 0 || r.line[0].side == 0) {
+            for (lv_obj_t *o : pair)
+              hide(o, true);
+            hide(ticker, false);
+            lv_obj_remove_local_style_prop(lbl, LV_STYLE_TEXT_OPA, 0);
+          }
           if (W < 128 || r.n == 0) {
-            lv_obj_add_flag(lbl, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(lbl, true);
             id(gd_row_turn) = 0;
+            id(gd_row_shape) = 0;
             return;
           }
-          if (r.news != id(gd_row_news) || id(gd_row_turn) >= r.n) {
+          // A basketball line stays up its first 2.5 s: a read that brings
+          // another one waits (the 1 s interval below tries again). Not for
+          // another game's.
+          const uint32_t teams = ::espn::row_shape(u.team_abbr) * 31 + ::espn::row_shape(u.opponent_abbr);
+          // Nor a line from before the score changed: what it says may be over.
+          const int score = u.team_score * 1000 + u.opponent_score;
+          const bool new_line = r.news != id(gd_row_news) || id(gd_row_turn) >= r.n;
+          const int want = !new_line ? id(gd_row_turn) : (r.news != id(gd_row_news) && r.jump < r.n) ? r.jump : 0;
+          if (r.line[want].side != 0) {
+            const uint32_t shape = ::espn::row_shape(r.line[want].forms) + r.line[want].side;
+            if (shape != id(gd_row_shape) && id(gd_row_shape) != 0 && teams == id(gd_row_teams) &&
+                score == id(gd_row_score) && millis() - id(gd_row_since) < 2500) {
+              id(gd_row_wait) = true;
+              // The read moved the label for football; it is still this line's.
+              lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_LEFT, 0);
+              lv_obj_set_pos(lbl, id(gd_row_x), 47);
+              lv_obj_set_width(lbl, W);
+              return;
+            }
+            if (shape != id(gd_row_shape)) {
+              id(gd_row_shape) = shape;
+              id(gd_row_since) = millis();
+            }
+            id(gd_row_score) = score;
+          } else {
+            id(gd_row_shape) = 0;
+          }
+          id(gd_row_teams) = teams;
+          if (new_line) {
+            id(gd_row_turn) = r.news != id(gd_row_news) && r.jump < r.n ? r.jump : 0;
             id(gd_row_news) = r.news;
-            id(gd_row_turn) = 0;
-            id(gd_row_left) = r.line[0].secs;
+            id(gd_row_left) = r.line[id(gd_row_turn)].secs;
+          }
+          const ::espn::RowLine &two = r.line[id(gd_row_turn)];
+          if (two.side != 0) {
+            // Everything on the row is one run of 5 px letters, centered.
+            const lv_font_t *pf = lv_obj_get_style_text_font(lbl, LV_PART_MAIN);
+            // The forms go into buffers here: this runs on every read and turn.
+            auto width = [&](const char *s) {
+              lv_point_t sz;
+              lv_text_get_size(&sz, s, pf, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+              return (int) sz.x;
+            };
+            const bool both = two.side == 3, ours = two.side != 2;
+            const char *name = (ours ? u.team_abbr : u.opponent_abbr).c_str();
+            char text[64], val2[32], more[64];
+            two.form_to(0, text);
+            val2[0] = '\0';
+            if (both)
+              two.form_to(1, val2);
+            two.form_to(both ? 2 : 1, more);
+            const int sp = width("0");  // LVGL measures a lone space as nothing
+            int wide_px = width(name) + sp + width(text);
+            if (both)
+              wide_px += (val2[0] == '\0' ? 1 : 2) * sp + width(u.opponent_abbr.c_str()) + (val2[0] == '\0' ? 0 : sp + width(val2));
+            int x = (W - wide_px) / 2;
+            if (x < 0)
+              x = 0;
+            auto place = [&](lv_obj_t *o, const char *s, uint32_t rgb) {
+              put(o, s);
+              lv_obj_set_style_text_color(o, lv_color_hex(rgb), 0);
+              lv_obj_set_style_text_opa(o, LV_OPA_COVER, 0);
+              lv_obj_set_pos(o, x, 47);
+              hide(o, s[0] == '\0');
+              x += width(s);
+            };
+            place(pair[0], name, ::espn::row_name_rgb((uint32_t) (ours ? u.team_color : u.opponent_color)));
+            x += sp;
+            lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_LEFT, 0);
+            lv_obj_set_width(lbl, W);
+            id(gd_row_x) = x;
+            place(lbl, text, two.rgb);
+            if (both) {
+              x += (val2[0] == '\0' ? 1 : 2) * sp;
+              place(pair[1], u.opponent_abbr.c_str(), ::espn::row_name_rgb((uint32_t) u.opponent_color));
+              x += sp;
+              place(pair[2], val2, two.rgb);
+            } else {
+              hide(pair[1], true);
+              hide(pair[2], true);
+            }
+            put(pair[3], more);
+            lv_obj_set_width(pair[3], W);
+            hide(pair[3], r.notice);
+            hide(ticker, !r.notice);
+            return;
           }
           const lv_font_t *f = lv_obj_get_style_text_font(lbl, LV_PART_MAIN);
           // The forms are '\n'-separated, longest first: the first that
@@ -123,14 +228,14 @@ script:
           }
           const ::espn::RowLine &l = r.line[shown];
           if (pick.empty()) {
-            lv_obj_add_flag(lbl, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(lbl, true);
             return;
           }
           const char *cur = lv_label_get_text(lbl);
           if (cur == nullptr || pick != cur)
             lv_label_set_text(lbl, pick.c_str());
           lv_obj_set_style_text_color(lbl, lv_color_hex(l.rgb), 0);
-          lv_obj_clear_flag(lbl, LV_OBJ_FLAG_HIDDEN);
+          lv_obj_set_hidden(lbl, false);
 
   - id: tt_apply_layout
     then:
@@ -206,15 +311,15 @@ script:
             // While the field strip has their row, they sit one pixel tall
             // under each record instead (row 46, a row clear of the strip);
             // gd_update keeps them in step.
-            const bool strip = !lv_obj_has_flag(id(tt_viz_canvas), LV_OBJ_FLAG_HIDDEN);
+            const bool strip = !lv_obj_is_hidden(id(tt_viz_canvas));
             for (int i = 0; i < 3; i++) {
               // Timeout pips are football's.
               if (id(gd_sport) == 0) {
-                lv_obj_clear_flag(abars[i], LV_OBJ_FLAG_HIDDEN);
-                lv_obj_clear_flag(hbars[i], LV_OBJ_FLAG_HIDDEN);
+                lv_obj_set_hidden(abars[i], false);
+                lv_obj_set_hidden(hbars[i], false);
               } else {
-                lv_obj_add_flag(abars[i], LV_OBJ_FLAG_HIDDEN);
-                lv_obj_add_flag(hbars[i], LV_OBJ_FLAG_HIDDEN);
+                lv_obj_set_hidden(abars[i], true);
+                lv_obj_set_hidden(hbars[i], true);
               }
               lv_obj_set_pos(abars[i], acx - 9 + i * 7, strip ? 46 : 48);
               lv_obj_set_pos(hbars[i], hcx - 9 + i * 7, strip ? 46 : 48);
@@ -248,19 +353,19 @@ script:
             lv_obj_set_width(id(tt_away_score_lbl), W / 2);
             lv_obj_set_pos(id(tt_home_score_lbl), W / 2, 42);
             lv_obj_set_width(id(tt_home_score_lbl), W / 2);
-            lv_obj_add_flag(id(tt_down_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_down_lbl), true);
             // No room for records or pips on a single panel
-            lv_obj_add_flag(id(tt_away_rec_lbl), LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(id(tt_home_rec_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_away_rec_lbl), true);
+            lv_obj_set_hidden(id(tt_home_rec_lbl), true);
             for (int i = 0; i < 3; i++) {
-              lv_obj_add_flag(abars[i], LV_OBJ_FLAG_HIDDEN);
-              lv_obj_add_flag(hbars[i], LV_OBJ_FLAG_HIDDEN);
+              lv_obj_set_hidden(abars[i], true);
+              lv_obj_set_hidden(hbars[i], true);
             }
             lv_obj_set_pos(id(tt_game_status_lbl), 0, 56);
             lv_obj_set_style_text_font(id(tt_splash_lbl), id(spleen_12), 0);
             lv_obj_set_pos(id(tt_splash_lbl), 0, 18);
             // No room for the field strip on a single panel
-            lv_obj_add_flag(id(tt_viz_canvas), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_viz_canvas), true);
           }
           // Baseball's bases, drawn as a small diamond (first base on the
           // right), and the outs. gd_update shows them during a half inning.
@@ -281,7 +386,7 @@ script:
             lv_obj_set_pos(id(tt_outs_lbl), cx + 9, 48);
             lv_obj_set_width(id(tt_outs_lbl), 28);  // "2 OUT" is 25 px in spleen_8
             for (int i = 0; i < 3; i++)
-              lv_obj_add_flag(outs[i], LV_OBJ_FLAG_HIDDEN);
+              lv_obj_set_hidden(outs[i], true);
           } else {
             // Between the two scores, with the outs as dots underneath
             for (int i = 0; i < 3; i++) {
@@ -291,8 +396,8 @@ script:
             lv_obj_set_pos(bases[1], cx - 1, 43);
             lv_obj_set_pos(bases[2], cx - 5, 47);
             lv_obj_set_pos(bases[0], cx + 3, 47);
-            lv_obj_add_flag(id(tt_count_lbl), LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(id(tt_outs_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_count_lbl), true);
+            lv_obj_set_hidden(id(tt_outs_lbl), true);
           }
 
   - id: gd_update
@@ -345,17 +450,17 @@ script:
           // place, in its team color on black (badge.h, badge_text).
           auto slot = [](lv_obj_t *img, lv_obj_t *box, lv_obj_t *lbl, const std::string &abbr, bool badge,
                          uint32_t rgb) {
-            if (abbr.empty() || badge) lv_obj_add_flag(img, LV_OBJ_FLAG_HIDDEN);
-            else lv_obj_clear_flag(img, LV_OBJ_FLAG_HIDDEN);
+            if (abbr.empty() || badge) lv_obj_set_hidden(img, true);
+            else lv_obj_set_hidden(img, false);
             if (abbr.empty() || !badge) {
-              lv_obj_add_flag(box, LV_OBJ_FLAG_HIDDEN);
+              lv_obj_set_hidden(box, true);
               return;
             }
             lv_obj_set_style_text_color(lbl, lv_color_hex(rgb), 0);
             const char *cur = lv_label_get_text(lbl);
             if (cur == nullptr || abbr != cur)
               lv_label_set_text(lbl, abbr.c_str());
-            lv_obj_clear_flag(box, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(box, false);
           };
           slot(id(gd_team_logo_img), id(gd_team_badge), id(gd_team_badge_lbl), team_abbr, team_badge,
                (uint32_t) team_badge_rgb);
@@ -392,7 +497,7 @@ script:
           const lv_font_t *f8 = id(spleen_8)->get_lv_font();
           for (int i = 0; i < 2; i++) {
             if (ranks[i] < 1 || ranks[i] > 25) {
-              lv_obj_add_flag(boxes[i], LV_OBJ_FLAG_HIDDEN);
+              lv_obj_set_hidden(boxes[i], true);
               continue;
             }
             const std::string rk = std::to_string(ranks[i]);
@@ -404,7 +509,7 @@ script:
             lv_obj_set_pos(boxes[i], i == 0 ? lx : lx + 32 - tw - 2, ly);
             lv_obj_set_size(boxes[i], tw + 2, 9);
             lv_label_set_text(lbls[i], rk.c_str());
-            lv_obj_clear_flag(boxes[i], LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(boxes[i], false);
           }
       - lambda: |-
           // Update the ticker only when its text changed: rewriting the label
@@ -455,7 +560,7 @@ script:
           const bool under_scores = lv_disp_get_hor_res(lv_disp_get_default()) < 128 && live && !clock_text.empty();
           auto underline = [](lv_obj_t *lbl, lv_obj_t *bar, bool on) {
             if (!on) {
-              lv_obj_add_flag(bar, LV_OBJ_FLAG_HIDDEN);
+              lv_obj_set_hidden(bar, true);
               return;
             }
             const lv_font_t *f = lv_obj_get_style_text_font(lbl, LV_PART_MAIN);
@@ -467,7 +572,7 @@ script:
             int32_t lx = lv_obj_get_x(lbl), lw = lv_obj_get_width(lbl), ly = lv_obj_get_y(lbl);
             lv_obj_set_size(bar, tw, 2);
             lv_obj_set_pos(bar, lx + (lw - tw) / 2, ly + lv_font_get_line_height(f));
-            lv_obj_clear_flag(bar, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(bar, false);
           };
           underline(under_scores ? id(tt_away_score_lbl) : id(tt_away_team_lbl), id(tt_away_poss), live && possession == 1);
           underline(under_scores ? id(tt_home_score_lbl) : id(tt_home_team_lbl), id(tt_home_poss), live && possession == 2);
@@ -482,11 +587,11 @@ script:
             const char *cur = lv_label_get_text(id(tt_no_game_msg_lbl));
             if (cur == nullptr || strcmp(cur, msg) != 0)
               lv_label_set_text(id(tt_no_game_msg_lbl), msg);
-            lv_obj_add_flag(id(tt_game_container), LV_OBJ_FLAG_HIDDEN);
-            lv_obj_clear_flag(id(tt_no_game_container), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_game_container), true);
+            lv_obj_set_hidden(id(tt_no_game_container), false);
           } else {
-            lv_obj_clear_flag(id(tt_game_container), LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(id(tt_no_game_container), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_game_container), false);
+            lv_obj_set_hidden(id(tt_no_game_container), true);
           }
           // The off-season clock, the countdown and the weather take the
           // message's place, and borrow the ticker from the hidden game
@@ -496,38 +601,38 @@ script:
           if (lv_obj_get_parent(id(tt_game_status_lbl)) != ticker_parent)
             lv_obj_set_parent(id(tt_game_status_lbl), ticker_parent);
           if (!weather_card)
-            lv_obj_add_flag(id(gd_wx), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(gd_wx), true);
           if (weather_card) {
             // gd_wx_card draws the forecast; with none to draw, the card's
             // words ("Set a town on the device page") are the message.
-            lv_obj_add_flag(id(gd_clock_time_lbl), LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(id(gd_clock_sub_lbl), LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(id(gd_countdown_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(gd_clock_time_lbl), true);
+            lv_obj_set_hidden(id(gd_clock_sub_lbl), true);
+            lv_obj_set_hidden(id(gd_countdown_lbl), true);
             id(gd_clock_date) = false;
             if (id(gameday_ctl).last_update().wx_text.empty()) {
-              lv_obj_add_flag(id(tt_no_game_msg_lbl), LV_OBJ_FLAG_HIDDEN);
+              lv_obj_set_hidden(id(tt_no_game_msg_lbl), true);
               id(gd_wx_card).execute();
             } else {
-              lv_obj_add_flag(id(gd_wx), LV_OBJ_FLAG_HIDDEN);
-              lv_obj_clear_flag(id(tt_no_game_msg_lbl), LV_OBJ_FLAG_HIDDEN);
+              lv_obj_set_hidden(id(gd_wx), true);
+              lv_obj_set_hidden(id(tt_no_game_msg_lbl), false);
             }
           } else if (countdown_card) {
             // gd_clock_tick writes the digits from gd_countdown_at.
-            lv_obj_add_flag(id(tt_no_game_msg_lbl), LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(id(gd_clock_time_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_no_game_msg_lbl), true);
+            lv_obj_set_hidden(id(gd_clock_time_lbl), true);
             lv_obj_set_style_text_color(id(gd_countdown_lbl), lv_color_hex((uint32_t) team_color), 0);
             id(gd_clock_date) = false;
             const char *cur = lv_label_get_text(id(gd_clock_sub_lbl));
             if (cur == nullptr || next_line != cur)
               lv_label_set_text(id(gd_clock_sub_lbl), next_line.c_str());
             lv_obj_set_y(id(gd_clock_sub_lbl), W >= 128 ? 38 : 34);
-            lv_obj_clear_flag(id(gd_countdown_lbl), LV_OBJ_FLAG_HIDDEN);
-            lv_obj_clear_flag(id(gd_clock_sub_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(gd_countdown_lbl), false);
+            lv_obj_set_hidden(id(gd_clock_sub_lbl), false);
             id(gd_clock_tick).execute();
           } else if (clock_card) {
-            lv_obj_add_flag(id(gd_countdown_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(gd_countdown_lbl), true);
             lv_obj_set_y(id(gd_clock_sub_lbl), W >= 128 ? 26 : 34);
-            lv_obj_add_flag(id(tt_no_game_msg_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_no_game_msg_lbl), true);
             lv_obj_set_style_text_color(id(gd_clock_time_lbl), lv_color_hex((uint32_t) team_color), 0);
             id(gd_clock_date) = W < 128 || next_line.empty();
             if (!id(gd_clock_date)) {
@@ -535,23 +640,23 @@ script:
               if (cur == nullptr || next_line != cur)
                 lv_label_set_text(id(gd_clock_sub_lbl), next_line.c_str());
             }
-            lv_obj_clear_flag(id(gd_clock_time_lbl), LV_OBJ_FLAG_HIDDEN);
-            lv_obj_clear_flag(id(gd_clock_sub_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(gd_clock_time_lbl), false);
+            lv_obj_set_hidden(id(gd_clock_sub_lbl), false);
             id(gd_clock_tick).execute();
           } else {
-            lv_obj_clear_flag(id(tt_no_game_msg_lbl), LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(id(gd_clock_time_lbl), LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(id(gd_clock_sub_lbl), LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(id(gd_countdown_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_no_game_msg_lbl), false);
+            lv_obj_set_hidden(id(gd_clock_time_lbl), true);
+            lv_obj_set_hidden(id(gd_clock_sub_lbl), true);
+            lv_obj_set_hidden(id(gd_countdown_lbl), true);
           }
           // Records are pre/post-game info; hide them while the game is live
           // (the layout also hides them entirely on narrow displays).
           if (W < 128) {
-            lv_obj_add_flag(id(tt_away_rec_lbl), LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(id(tt_home_rec_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_away_rec_lbl), true);
+            lv_obj_set_hidden(id(tt_home_rec_lbl), true);
           } else {
-            lv_obj_clear_flag(id(tt_away_rec_lbl), LV_OBJ_FLAG_HIDDEN);
-            lv_obj_clear_flag(id(tt_home_rec_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_away_rec_lbl), false);
+            lv_obj_set_hidden(id(tt_home_rec_lbl), false);
           }
           // The text under the clock (down and distance, the last basket,
           // the win chance, ...) is gd_row_show's, after the field strip
@@ -564,37 +669,37 @@ script:
           lv_obj_t *out_objs[3] = {id(tt_out1), id(tt_out2), id(tt_out3)};
           for (int i = 0; i < 3; i++) {
             if (!diamond) {
-              lv_obj_add_flag(base_objs[i], LV_OBJ_FLAG_HIDDEN);
-              lv_obj_add_flag(out_objs[i], LV_OBJ_FLAG_HIDDEN);
+              lv_obj_set_hidden(base_objs[i], true);
+              lv_obj_set_hidden(out_objs[i], true);
               continue;
             }
             const bool on = (bases >> i) & 1;
             lv_obj_set_style_bg_color(base_objs[i], on ? lv_color_hex(highlight ? 0xFF3030 : 0xFFD000) : lv_color_hex(0x303030), 0);
-            lv_obj_clear_flag(base_objs[i], LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(base_objs[i], false);
             lv_obj_set_style_bg_color(out_objs[i], i < outs ? lv_color_hex(0xFFD000) : lv_color_hex(0x303030), 0);
             if (W < 128)
-              lv_obj_clear_flag(out_objs[i], LV_OBJ_FLAG_HIDDEN);
+              lv_obj_set_hidden(out_objs[i], false);
           }
           if (W >= 128 && diamond && !situation.empty()) {
             lv_label_set_text(id(tt_count_lbl), situation.c_str());
-            lv_obj_clear_flag(id(tt_count_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_count_lbl), false);
           } else {
-            lv_obj_add_flag(id(tt_count_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_count_lbl), true);
           }
           if (W >= 128 && diamond) {
             lv_label_set_text(id(tt_outs_lbl), (to_string(outs) + " OUT").c_str());
-            lv_obj_clear_flag(id(tt_outs_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_outs_lbl), false);
           } else {
-            lv_obj_add_flag(id(tt_outs_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_outs_lbl), true);
           }
           if (W >= 128) {
             lv_obj_t *pips[6] = {id(tt_away_to1), id(tt_away_to2), id(tt_away_to3),
                                  id(tt_home_to1), id(tt_home_to2), id(tt_home_to3)};
             for (int i = 0; i < 6; i++) {
               if (sport == 0)
-                lv_obj_clear_flag(pips[i], LV_OBJ_FLAG_HIDDEN);
+                lv_obj_set_hidden(pips[i], false);
               else
-                lv_obj_add_flag(pips[i], LV_OBJ_FLAG_HIDDEN);
+                lv_obj_set_hidden(pips[i], true);
             }
           }
           // Soccer: red cards as red marks in the pips' places under the
@@ -606,9 +711,9 @@ script:
               lv_obj_set_style_bg_color(amarks[i], lv_color_hex(0xFF2020), 0);
               lv_obj_set_style_bg_color(hmarks[i], lv_color_hex(0xFF2020), 0);
               if (i < team_marks)
-                lv_obj_clear_flag(amarks[i], LV_OBJ_FLAG_HIDDEN);
+                lv_obj_set_hidden(amarks[i], false);
               if (i < opp_marks)
-                lv_obj_clear_flag(hmarks[i], LV_OBJ_FLAG_HIDDEN);
+                lv_obj_set_hidden(hmarks[i], false);
             }
           }
           // Big game clock while live: its own row on wide displays, the
@@ -616,16 +721,16 @@ script:
           const bool show_clock = game_state == "IN" && !clock_text.empty();
           if (show_clock) {
             lv_label_set_text(id(tt_clock_lbl), clock_text.c_str());
-            lv_obj_clear_flag(id(tt_clock_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_clock_lbl), false);
           } else {
-            lv_obj_add_flag(id(tt_clock_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_clock_lbl), true);
           }
           if (W < 128 && show_clock) {
-            lv_obj_add_flag(id(tt_away_team_lbl), LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(id(tt_home_team_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_away_team_lbl), true);
+            lv_obj_set_hidden(id(tt_home_team_lbl), true);
           } else {
-            lv_obj_clear_flag(id(tt_away_team_lbl), LV_OBJ_FLAG_HIDDEN);
-            lv_obj_clear_flag(id(tt_home_team_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_away_team_lbl), false);
+            lv_obj_set_hidden(id(tt_home_team_lbl), false);
           }
       - lambda: |-
           // Football's field strip on a wide board's situation row
@@ -698,14 +803,14 @@ script:
                 }
               }
               lv_obj_invalidate(cv);
-              lv_obj_clear_flag(cv, LV_OBJ_FLAG_HIDDEN);
+              lv_obj_set_hidden(cv, false);
               drawn = true;
               // The pips' row is the strip's, so they move up under the
               // records, one pixel tall, a row clear of the strip.
               for (int i = 0; i < 6; i++) {
                 lv_obj_set_pos(pips[i], (i < 3 ? 18 : W - 18) - 9 + (i % 3) * 7, 46);
                 lv_obj_set_height(pips[i], 1);
-                lv_obj_clear_flag(pips[i], LV_OBJ_FLAG_HIDDEN);
+                lv_obj_set_hidden(pips[i], false);
               }
               // "3rd & 4" in the clear part of the strip, between an end
               // zone and the nearest marker, never across one.
@@ -717,12 +822,13 @@ script:
             }
           }
           if (!drawn)
-            lv_obj_add_flag(cv, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(cv, true);
           if (!drawn && wide) {
             // The row between the logos' columns, where football's timeout
-            // pips and soccer's red cards sit; basketball and hockey have
-            // nothing under the logos, so their text gets the full width.
-            const bool full = sport == 2 || sport == 3;
+            // pips and soccer's red cards sit; basketball, hockey and
+            // volleyball have nothing under the logos, so their text gets the
+            // full width.
+            const bool full = sport == 2 || sport == 3 || sport == 5;
             lv_obj_set_style_text_align(id(tt_down_lbl), LV_TEXT_ALIGN_CENTER, 0);
             lv_obj_set_pos(id(tt_down_lbl), full ? 0 : 32, 48);
             lv_obj_set_width(id(tt_down_lbl), full ? W : W - 64);
@@ -745,8 +851,8 @@ script:
           const gameday::UpdateFields &u = id(gameday_ctl).last_update();
           lv_obj_t *icon = id(gd_kick_icon), *lbl = id(gd_kick_lbl);
           if (game_state != "PRE" || u.kick_temp.empty()) {
-            lv_obj_add_flag(icon, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(lbl, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(icon, true);
+            lv_obj_set_hidden(lbl, true);
             return;
           }
           const int W = lv_disp_get_hor_res(lv_disp_get_default());
@@ -781,12 +887,12 @@ script:
           if (with_icon) {
             lv_image_set_src(icon, (wide ? big : small)[u.kick_icon]);
             lv_obj_set_pos(icon, x, y);
-            lv_obj_clear_flag(icon, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(icon, false);
           } else {
-            lv_obj_add_flag(icon, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(icon, true);
           }
           lv_obj_set_pos(lbl, x + (with_icon ? isz + gap : 0), wide ? y + 2 : y);
-          lv_obj_clear_flag(lbl, LV_OBJ_FLAG_HIDDEN);
+          lv_obj_set_hidden(lbl, false);
       - lambda: |-
           // Halftime and the final: the line score takes turns with the board
           // above the ticker, 10 s each (gd_card_turn, stepped by the interval
@@ -808,7 +914,7 @@ script:
             id(gd_line_ready) = false;
             if (id(gd_card_turn) == 1)
               id(gd_card_turn) = 0;
-            lv_obj_add_flag(id(tt_line), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_line), true);
             return;
           }
           id(gd_line_ready) = true;
@@ -845,8 +951,8 @@ script:
             // A single panel: the teams in two columns of five characters
             // under their abbreviations, the periods down the left.
             const int x0 = (W - 12 * cw) / 2;
-            lv_obj_add_flag(id(tt_line_head_lbl), LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(id(tt_line_title_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_line_head_lbl), true);
+            lv_obj_set_hidden(id(tt_line_title_lbl), true);
             lv_obj_set_style_text_align(team, LV_TEXT_ALIGN_RIGHT, 0);
             lv_obj_set_style_text_align(opp, LV_TEXT_ALIGN_RIGHT, 0);
             lv_obj_set_pos(team, x0 + 2 * cw, 0);
@@ -868,7 +974,7 @@ script:
             put(id(tt_line_head_lbl), ls.head);
             lv_obj_set_pos(id(tt_line_head_lbl), x0 + abbr_w, y0);
             lv_obj_set_width(id(tt_line_head_lbl), cols_w);
-            lv_obj_clear_flag(id(tt_line_head_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_line_head_lbl), false);
             lv_obj_set_style_text_align(team, LV_TEXT_ALIGN_LEFT, 0);
             lv_obj_set_style_text_align(opp, LV_TEXT_ALIGN_LEFT, 0);
             lv_obj_set_pos(team, x0, y0 + pitch);
@@ -881,12 +987,12 @@ script:
             put(id(tt_line_title_lbl), ls.title);
             lv_obj_set_width(id(tt_line_title_lbl), W);
             lv_obj_set_pos(id(tt_line_title_lbl), 0, y0 + 3 * pitch + 1);
-            lv_obj_clear_flag(id(tt_line_title_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_line_title_lbl), false);
           }
           if (id(gd_card_turn) == 1)
-            lv_obj_clear_flag(id(tt_line), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_line), false);
           else
-            lv_obj_add_flag(id(tt_line), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_line), true);
       - lambda: |-
           // Halftime and the final: this game's leaders, a third card in the
           // turns with the board and the line score (gd_card_turn 2). The
@@ -900,7 +1006,7 @@ script:
             id(gd_leaders_ready) = false;
             if (id(gd_card_turn) == 2)
               id(gd_card_turn) = 0;
-            lv_obj_add_flag(id(tt_leaders), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_leaders), true);
             return;
           }
           id(gd_leaders_ready) = true;
@@ -949,7 +1055,7 @@ script:
             for (lv_obj_t *img : {team_img, opp_img}) {
               lv_image_set_pivot(img, 0, 0);
               lv_image_set_scale(img, 128);
-              lv_obj_clear_flag(img, LV_OBJ_FLAG_HIDDEN);
+              lv_obj_set_hidden(img, false);
             }
             lv_obj_set_pos(team_img, 2, y0);
             lv_obj_set_pos(opp_img, 2, y1);
@@ -967,8 +1073,8 @@ script:
             // A single panel: the abbreviation on one row, the top line under it.
             const int y0 = (55 - 2 * lc.block_h) / 2;
             const int y1 = y0 + lc.block_h;
-            lv_obj_add_flag(team_img, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(opp_img, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(team_img, true);
+            lv_obj_set_hidden(opp_img, true);
             lv_obj_set_style_text_align(team, LV_TEXT_ALIGN_CENTER, 0);
             lv_obj_set_style_text_align(opp, LV_TEXT_ALIGN_CENTER, 0);
             lv_obj_set_pos(team, 0, y0);
@@ -981,9 +1087,9 @@ script:
             lv_obj_set_width(opp_body, W);
           }
           if (id(gd_card_turn) == 2)
-            lv_obj_clear_flag(id(tt_leaders), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_leaders), false);
           else
-            lv_obj_add_flag(id(tt_leaders), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_leaders), true);
       - if:
           condition:
             lambda: 'return !splash_text.empty();'
@@ -1019,11 +1125,11 @@ script:
                   plan.text = splash_text;
                   plan.line2 = celeb_line2;
                   plan.duration_ms = (uint32_t) celeb_ms;
-                  lv_obj_clear_flag(id(tt_fx_canvas), LV_OBJ_FLAG_HIDDEN);
+                  lv_obj_set_hidden(id(tt_fx_canvas), false);
                   gameday::celebration_player().start(id(tt_fx_canvas), plan);
                 } else {
                   gameday::celebration_player().stop();
-                  lv_obj_add_flag(id(tt_fx_canvas), LV_OBJ_FLAG_HIDDEN);
+                  lv_obj_set_hidden(id(tt_fx_canvas), true);
                   // White on the team color, unless the color is too light for it.
                   uint32_t c = (uint32_t) splash_color;
                   uint32_t r = (c >> 16) & 0xFF, g = (c >> 8) & 0xFF, b = c & 0xFF;
@@ -1034,7 +1140,7 @@ script:
                 // Over everything, including the no-game screen should the
                 // board change under a long celebration.
                 lv_obj_move_foreground(id(tt_splash));
-                lv_obj_clear_flag(id(tt_splash), LV_OBJ_FLAG_HIDDEN);
+                lv_obj_set_hidden(id(tt_splash), false);
             - script.execute:
                 id: tt_hide_splash
                 ms: !lambda 'return celeb_ms;'
@@ -1047,14 +1153,68 @@ script:
       - lambda: |-
           const std::string &page = id(gameday_ctl).msg_card();
           if (page.empty()) {
-            lv_obj_add_flag(id(tt_msg), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_msg), true);
             return;
           }
           const lv_font_t *fonts[3] = {id(spleen_16)->get_lv_font(), id(spleen_12)->get_lv_font(),
                                        id(spleen_8)->get_lv_font()};
           id(gameday_ctl).set_msg_roll_ms(gameday::board_text(id(tt_msg), id(tt_msg_lbl), page.c_str(), fonts, 3));
           lv_obj_move_foreground(id(tt_msg));
-          lv_obj_clear_flag(id(tt_msg), LV_OBJ_FLAG_HIDDEN);
+          lv_obj_set_hidden(id(tt_msg), false);
+
+  # The Game Day card (components/gameday/gameday_card.h): a wording, or
+  # nothing. The component decides when, between games, and sends
+  # "gameday_card" for each change. On one panel the words go first, then
+  # the code takes over.
+  - id: gd_gameday_card
+    mode: restart
+    then:
+      - lambda: |-
+          const int wording = id(gameday_ctl).gameday_card();
+          if (wording < 0) {
+            lv_obj_set_hidden(id(tt_gdcard), true);
+            return;
+          }
+          const int32_t W = lv_display_get_horizontal_resolution(lv_display_get_default());
+          const bool two = W >= 128;
+          lv_obj_set_size(id(tt_gdcard), W, 64);
+          lv_obj_t *lbl[::espn::kGamedayCardLinesMax] = {id(tt_gdcard_l0), id(tt_gdcard_l1), id(tt_gdcard_l2),
+                                                         id(tt_gdcard_l3), id(tt_gdcard_l4), id(tt_gdcard_l5)};
+          int n = 0;
+          const ::espn::GamedayCardLine *lines = ::espn::gameday_card_lines(wording, n);
+          for (int i = 0; i < ::espn::kGamedayCardLinesMax; i++) {
+            if (i >= n) {
+              lv_obj_set_hidden(lbl[i], true);
+              continue;
+            }
+            const lv_font_t *f = lines[i].px >= 16   ? id(spleen_16)->get_lv_font()
+                                 : lines[i].px >= 12 ? id(spleen_12)->get_lv_font()
+                                                     : id(spleen_8)->get_lv_font();
+            lv_obj_set_style_text_font(lbl[i], f, 0);
+            lv_obj_set_style_text_color(
+                lbl[i], lv_color_hex(lines[i].accent ? ::espn::kGamedayCardAccent : 0xFFFFFF), 0);
+            lv_label_set_text(lbl[i], lines[i].s);
+            lv_obj_set_pos(lbl[i], two ? 64 + (W - 128) / 2 : 0, lines[i].y);
+            lv_obj_set_hidden(lbl[i], false);
+          }
+          lv_obj_set_x(id(tt_gdcard_qr), two ? (W - 128) / 2 : 0);
+          lv_obj_set_hidden(id(tt_gdcard_qr), !two);
+          lv_obj_move_foreground(id(tt_gdcard));
+          lv_obj_set_hidden(id(tt_gdcard), false);
+      - if:
+          condition:
+            lambda: |-
+              return id(gameday_ctl).gameday_card() >= 0 &&
+                     lv_display_get_horizontal_resolution(lv_display_get_default()) < 128;
+          then:
+            - delay: !lambda 'return ::espn::kGamedayCardWordsMs;'
+            - lambda: |-
+                if (id(gameday_ctl).gameday_card() < 0)
+                  return;
+                for (lv_obj_t *l : {id(tt_gdcard_l0), id(tt_gdcard_l1), id(tt_gdcard_l2), id(tt_gdcard_l3),
+                                    id(tt_gdcard_l4), id(tt_gdcard_l5)})
+                  lv_obj_set_hidden(l, true);
+                lv_obj_set_hidden(id(tt_gdcard_qr), false);
 
   # The Top 25 card (components/gameday/rankings.h): a page of the poll, or
   # nothing. The component turns the pages and sends "top25" for each.
@@ -1063,7 +1223,7 @@ script:
       - lambda: |-
           const std::string &head = id(gameday_ctl).top25_head();
           if (head.empty()) {
-            lv_obj_add_flag(id(tt_top25), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_top25), true);
             return;
           }
           // Two columns of 12 characters (60 px in spleen_8) from 128 px up.
@@ -1077,12 +1237,12 @@ script:
           if (two) {
             lv_obj_set_x(id(tt_top25_col1_lbl), W / 2 + 4);
             lv_label_set_text(id(tt_top25_col1_lbl), id(gameday_ctl).top25_col(1).c_str());
-            lv_obj_clear_flag(id(tt_top25_col1_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_top25_col1_lbl), false);
           } else {
-            lv_obj_add_flag(id(tt_top25_col1_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_top25_col1_lbl), true);
           }
           lv_obj_move_foreground(id(tt_top25));
-          lv_obj_clear_flag(id(tt_top25), LV_OBJ_FLAG_HIDDEN);
+          lv_obj_set_hidden(id(tt_top25), false);
 
   # The news card (components/gameday/news.h): its top line ("DAL NEWS")
   # and one headline under it, or nothing. Sent as "news", like "msg".
@@ -1091,7 +1251,7 @@ script:
       - lambda: |-
           const std::string &headline = id(gameday_ctl).news_card();
           if (headline.empty()) {
-            lv_obj_add_flag(id(tt_news), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_news), true);
             return;
           }
           const int32_t W = lv_display_get_horizontal_resolution(lv_display_get_default());
@@ -1102,7 +1262,7 @@ script:
           id(gameday_ctl).set_news_roll_ms(
               gameday::board_text(id(tt_news_body), id(tt_news_lbl), headline.c_str(), fonts, 2, 54));
           lv_obj_move_foreground(id(tt_news));
-          lv_obj_clear_flag(id(tt_news), LV_OBJ_FLAG_HIDDEN);
+          lv_obj_set_hidden(id(tt_news), false);
 
   # The schedule and season recap cards (components/gameday/season.h): the
   # top line ("DAL SCHEDULE", "DAL 2025") and the lines under it, or
@@ -1112,7 +1272,7 @@ script:
       - lambda: |-
           const std::string &head = id(gameday_ctl).season_head();
           if (head.empty()) {
-            lv_obj_add_flag(id(tt_season), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_season), true);
             return;
           }
           const int32_t W = lv_display_get_horizontal_resolution(lv_display_get_default());
@@ -1124,7 +1284,7 @@ script:
           id(gameday_ctl).set_season_roll_ms(gameday::board_text(id(tt_season_body), id(tt_season_lbl),
                                                                  id(gameday_ctl).season_body().c_str(), fonts, 3, 54));
           lv_obj_move_foreground(id(tt_season));
-          lv_obj_clear_flag(id(tt_season), LV_OBJ_FLAG_HIDDEN);
+          lv_obj_set_hidden(id(tt_season), false);
 
   # The weather card (components/gameday/weather.h), from the board's last
   # update: the icon and the temperature now, today's high and low, the
@@ -1174,7 +1334,7 @@ script:
             lv_obj_set_pos(id(gd_wx_hi_lbl), x0 + 80, 4);
             lv_obj_set_width(id(gd_wx_hi_lbl), 46);
             lv_obj_set_pos(id(gd_wx_lo_lbl), x0 + 80, 18);
-            lv_obj_clear_flag(id(gd_wx_lo_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(gd_wx_lo_lbl), false);
             lv_obj_set_style_text_font(id(gd_wx_words_lbl), id(spleen_12)->get_lv_font(), 0);
             lv_obj_set_y(id(gd_wx_words_lbl), 33);
             lv_obj_set_pos(id(gd_wx_d1_lbl), x0 + 2, 46);
@@ -1195,7 +1355,7 @@ script:
             lv_obj_set_style_text_align(id(gd_wx_hi_lbl), LV_TEXT_ALIGN_CENTER, 0);
             lv_obj_set_pos(id(gd_wx_hi_lbl), 0, 27);
             lv_obj_set_width(id(gd_wx_hi_lbl), W);
-            lv_obj_add_flag(id(gd_wx_lo_lbl), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(gd_wx_lo_lbl), true);
             lv_obj_set_style_text_font(id(gd_wx_words_lbl), id(spleen_8)->get_lv_font(), 0);
             lv_obj_set_y(id(gd_wx_words_lbl), 18);
             lv_obj_set_pos(id(gd_wx_d1_lbl), x0 + 2, 37);
@@ -1205,7 +1365,7 @@ script:
             lv_obj_set_pos(id(gd_wx_d2_icon), x0 + 19, 46);
             lv_obj_set_pos(id(gd_wx_d2_hilo_lbl), x0 + 29, 46);
           }
-          lv_obj_clear_flag(id(gd_wx), LV_OBJ_FLAG_HIDDEN);
+          lv_obj_set_hidden(id(gd_wx), false);
 
   # The picture card (components/gameday/picture.h): the owner's picture,
   # centered on black, at half size when it is wider than the display, or
@@ -1217,7 +1377,7 @@ script:
       - lambda: |-
           static lv_image_dsc_t dsc;
           if (!id(gameday_ctl).picture_shown()) {
-            lv_obj_add_flag(id(tt_picture), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_picture), true);
             lv_image_set_src(id(tt_picture_img), id(gd_logo_blank)->get_lv_image_dsc());
             return;
           }
@@ -1238,7 +1398,7 @@ script:
           lv_image_set_scale(id(tt_picture_img), ::espn::pic_scale(w, W));
           lv_obj_center(id(tt_picture_img));
           lv_obj_move_foreground(id(tt_picture));
-          lv_obj_clear_flag(id(tt_picture), LV_OBJ_FLAG_HIDDEN);
+          lv_obj_set_hidden(id(tt_picture), false);
 
   # The off-season clock's time, and the date when that line has no next
   # game, in the panel's time zone; or the countdown card's digits. A label
@@ -1246,8 +1406,8 @@ script:
   - id: gd_clock_tick
     then:
       - lambda: |-
-          bool countdown = !lv_obj_has_flag(id(gd_countdown_lbl), LV_OBJ_FLAG_HIDDEN);
-          if (!countdown && lv_obj_has_flag(id(gd_clock_time_lbl), LV_OBJ_FLAG_HIDDEN))
+          bool countdown = !lv_obj_is_hidden(id(gd_countdown_lbl));
+          if (!countdown && lv_obj_is_hidden(id(gd_clock_time_lbl)))
             return;
           ESPTime now = id(ha_time).now();
           if (!now.is_valid())
@@ -1274,6 +1434,10 @@ interval:
       # The situation row's next line when this one's time is up.
       - lambda: |-
           const ::espn::RowLines &r = id(gameday_ctl).last_update().row;
+          if (id(gd_row_wait)) {
+            id(gd_row_wait) = false;
+            id(gd_row_show).execute();
+          }
           if (r.n < 2 || --id(gd_row_left) > 0)
             return;
           id(gd_row_turn) = (id(gd_row_turn) + 1) % r.n;
@@ -1298,13 +1462,13 @@ interval:
           }
           id(gd_card_turn) = next;
           if (next == 1)
-            lv_obj_clear_flag(id(tt_line), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_line), false);
           else
-            lv_obj_add_flag(id(tt_line), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_line), true);
           if (next == 2) {
-            lv_obj_clear_flag(id(tt_leaders), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_leaders), false);
           } else {
-            lv_obj_add_flag(id(tt_leaders), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_hidden(id(tt_leaders), true);
             if (prev == 2)
               id(gameday_ctl).leaders_turn_taken();
           }
@@ -1339,6 +1503,33 @@ globals:
     type: uint32_t
     restore_value: no
     initial_value: '0'
+  # Basketball's line up now: what it says but for its digits, whose game it
+  # is, the score it came up at, when, and whether a read waits for it
+  # (gd_row_show).
+  - id: gd_row_shape
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: gd_row_teams
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: gd_row_score
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: gd_row_since
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
+  - id: gd_row_x
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: gd_row_wait
+    type: bool
+    restore_value: no
+    initial_value: 'false'
   - id: gd_row_room
     type: int
     restore_value: no
@@ -1599,6 +1790,46 @@ lvgl:
                   width: 64
                   text_align: CENTER
                   long_mode: CLIP
+                  hidden: true
+                  text: ""
+                  styles: ["tt_st_status_text"]
+
+              # Basketball's two rows (gd_row_show places them): the names in
+              # their colors and the second number, around tt_down_lbl, and the
+              # detail on the bottom row.
+              - label:
+                  id: gd_row_name
+                  x: 0
+                  y: 47
+                  text_font: spleen_8
+                  hidden: true
+                  text: ""
+
+              - label:
+                  id: gd_row_name2
+                  x: 0
+                  y: 47
+                  text_font: spleen_8
+                  hidden: true
+                  text: ""
+
+              - label:
+                  id: gd_row_val2
+                  x: 0
+                  y: 47
+                  text_font: spleen_8
+                  hidden: true
+                  text: ""
+
+              - label:
+                  id: gd_row_more
+                  x: 0
+                  y: 56
+                  width: 128
+                  text_align: CENTER
+                  long_mode: CLIP
+                  text_font: spleen_8
+                  text_color: 0xFFFFFF
                   hidden: true
                   text: ""
                   styles: ["tt_st_status_text"]
@@ -2130,6 +2361,92 @@ lvgl:
                         text_font: spleen_8
                         text: ""
                         styles: ["tt_st_status_text"]
+
+        # The Game Day card, over the board between games (gd_gameday_card):
+        # the code on the left with the words beside it from 128 px up; on
+        # one panel the words, then the code.
+        - obj:
+            id: tt_gdcard
+            scrollbar_mode: "OFF"
+            x: 0
+            y: 0
+            width: 64
+            height: 64
+            hidden: true
+            bg_opa: COVER
+            bg_color: 0x000000
+            radius: 0
+            pad_all: 0
+            border_width: 0
+            widgets:
+              - qrcode:
+                  id: tt_gdcard_qr
+                  x: 0
+                  y: 0
+                  size: 64
+                  light_color: 0xA0A0A0
+                  dark_color: 0x000000
+                  text: "https://gameday-scoreboard.com"
+              - label:
+                  id: tt_gdcard_l0
+                  x: 0
+                  y: 0
+                  width: 64
+                  text_align: CENTER
+                  long_mode: CLIP
+                  text: ""
+                  text_font: spleen_8
+                  text_color: 0xFFFFFF
+              - label:
+                  id: tt_gdcard_l1
+                  x: 0
+                  y: 0
+                  width: 64
+                  text_align: CENTER
+                  long_mode: CLIP
+                  text: ""
+                  text_font: spleen_8
+                  text_color: 0xFFFFFF
+              - label:
+                  id: tt_gdcard_l2
+                  x: 0
+                  y: 0
+                  width: 64
+                  text_align: CENTER
+                  long_mode: CLIP
+                  text: ""
+                  text_font: spleen_8
+                  text_color: 0xFFFFFF
+              - label:
+                  id: tt_gdcard_l3
+                  x: 0
+                  y: 0
+                  width: 64
+                  text_align: CENTER
+                  long_mode: CLIP
+                  text: ""
+                  text_font: spleen_8
+                  text_color: 0xFFFFFF
+              - label:
+                  id: tt_gdcard_l4
+                  x: 0
+                  y: 0
+                  width: 64
+                  text_align: CENTER
+                  long_mode: CLIP
+                  text: ""
+                  text_font: spleen_8
+                  text_color: 0xFFFFFF
+              - label:
+                  id: tt_gdcard_l5
+                  x: 0
+                  y: 0
+                  width: 64
+                  text_align: CENTER
+                  long_mode: CLIP
+                  text: ""
+                  text_font: spleen_8
+                  text_color: 0xFFFFFF
 
         # The owner's message card, over the board between games (gd_msg_card)
         - obj:

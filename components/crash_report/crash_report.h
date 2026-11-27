@@ -50,6 +50,8 @@ struct Record {
   char version[VERSION_SIZE];
   char report[REPORT_SIZE];  // the crash handler's lines, one per line; empty for a brownout
 };
+static_assert(sizeof(Record) == 1576,
+              "Record is saved: a new size needs a new preference key or a migration, not a new number");
 
 class CrashReport : public Component {
  public:

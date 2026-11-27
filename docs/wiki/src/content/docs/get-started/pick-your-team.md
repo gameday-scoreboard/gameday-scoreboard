@@ -1,6 +1,6 @@
 ---
 title: "Pick your team"
-description: "Choose the teams your panel follows, from the Game Day app or the panel's device page, in any of the nine leagues."
+description: "Choose the teams your panel follows, from the Game Day app or the panel's device page, in any of the leagues."
 sidebar:
   order: 3
 ---
@@ -34,6 +34,8 @@ Lost the address? Hold the button on the controller for about 1.5 seconds and th
 | NBA | Every team |
 | WNBA | Every team |
 | Men's college basketball (NCAAM) | Every Division I team |
+| Women's college basketball (NCAAW) | Every Division I team |
+| Women's college volleyball (NCAAVB) | Every Division I team |
 | NHL | Every team |
 | MLS | Every team |
 | Premier League (EPL) | Every team |
