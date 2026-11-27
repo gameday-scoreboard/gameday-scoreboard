@@ -204,7 +204,7 @@ void test_round_trip() {
         break;
       case SettingType::CARDS:
         text = "next:1,clock:0,countdown:1,custom:1,message:1,picture:1,gameleaders:1,top25:1,schedule:1,"
-               "seasonrecap:1,news:0,weather:1";
+               "seasonrecap:1,news:0,weather:1,gamedaycard:0";
         break;
       case SettingType::FX_PLAYLISTS:
         text = "Party=Matrix|Party|200|100|30,Plasma Ball|Sunset|128|128|15,@shuffle;Calm=Drift|Ocean|64|128|300";

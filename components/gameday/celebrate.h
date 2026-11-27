@@ -19,8 +19,8 @@
 namespace espn {
 
 // Whether a basketball read's last play was a made three by this side.
-// ESPN's scoreValue is 3 only for a made three (a miss is 0), and its team
-// says whose play it was; score_log.h reads the same pair. Only a document
+// A play's value is 3 only for a made three (the parser makes a miss 0), and
+// its team says whose play it was; score_log.h reads the same pair. Only a document
 // with no scoreValue falls back to the words, and then a make only: ESPN
 // writes "misses 26-foot three point jumper" and "missed Three Point Jumper"
 // with the same words as a make.
@@ -193,6 +193,10 @@ inline CelebPlan decide_celebration(const GameSnapshot &prev, const GameSnapshot
     case Sport::HOCKEY:
       p.kind = CelebKind::GOAL_LAMP;
       p.duration_ms = kCelebGoalMs;
+      return p;
+    case Sport::VOLLEYBALL:  // a set
+      p.kind = CelebKind::WAVE;
+      p.duration_ms = kCelebWaveMs;
       return p;
     case Sport::BASKETBALL:
     default:

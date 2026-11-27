@@ -157,6 +157,8 @@ size_t render(const GameSnapshot &prev, const GameSnapshot &g, int64_t now) {
   }
   if (g.sport == Sport::BASKETBALL)
     n += basketball_series(g).size();
+  n += volleyball_sets(g).size() + (size_t) board_team_score(g) + (size_t) board_opp_score(g);
+  n += volleyball_match_point(g) ? 1 : 0;
   // The halftime and final boards: the line score at both widths, and the
   // scoring log from the two reads.
   for (int width : {64, 128, 256}) {
@@ -210,7 +212,8 @@ size_t recap(FinalList finals, PendingList pending, int64_t next_kickoff, int64_
   return n;
 }
 
-const Sport kSports[] = {Sport::FOOTBALL, Sport::BASEBALL, Sport::BASKETBALL, Sport::HOCKEY, Sport::SOCCER};
+const Sport kSports[] = {Sport::FOOTBALL, Sport::BASEBALL,   Sport::BASKETBALL,
+                         Sport::HOCKEY,   Sport::SOCCER,     Sport::VOLLEYBALL};
 
 // The schedule and season recap cards from one season read (season.h).
 size_t season(const SeasonRead &r, int64_t now) {

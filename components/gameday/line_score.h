@@ -3,7 +3,7 @@
 #pragma once
 
 // The line score at halftime and at the final: each side's points by
-// quarter, period or inning, and the total. Pure, so the host tests check
+// quarter, period, inning or set, and the total. Pure, so the host tests check
 // the text; firmware/pages/gameday-live.yaml draws it in the Spleen fonts,
 // which are monospaced, so columns are made of spaces.
 
@@ -95,6 +95,8 @@ inline uint8_t line_regulation(const GameSnapshot &g) {
       return 3;
     case Sport::BASKETBALL:
       return g.nba.regulation;
+    case Sport::VOLLEYBALL:  // the sets played, 3 to 5
+      return std::max<uint8_t>(3, std::max(g.team_line_count, g.opp_line_count));
     default:
       return 4;
   }
@@ -131,7 +133,7 @@ inline std::vector<LineCol> line_period_cols(const GameSnapshot &g) {
     cols.push_back(c);
   }
   LineCol t;
-  t.head = "T";
+  t.head = g.sport == Sport::VOLLEYBALL ? "S" : "T";  // a volleyball score is sets
   t.a = std::to_string(g.team_score);
   t.b = std::to_string(g.opp_score);
   t.gap = 2;
@@ -216,9 +218,13 @@ inline std::vector<LineRow> line_rows(const GameSnapshot &g) {
     rows.push_back({"E", std::to_string(g.mlb.team_errors), std::to_string(g.mlb.opp_errors)});
     return rows;
   }
-  if (g.sport == Sport::HOCKEY) {
+  if (g.sport == Sport::HOCKEY || g.sport == Sport::VOLLEYBALL) {
     for (uint8_t p = 0; p < reg; p++)
       add(std::to_string(p + 1), p, p + 1);
+    // Six rows don't fit over the ticker: a five set match has no total row,
+    // and the board that takes turns with this says 3-2.
+    if (g.sport == Sport::VOLLEYBALL && reg >= 5)
+      return rows;
   } else if (reg == 4) {
     // Quarters by halves: six rows don't fit over the ticker
     add("1H", 0, 2);
@@ -229,7 +235,8 @@ inline std::vector<LineRow> line_rows(const GameSnapshot &g) {
   }
   if (periods > reg)
     add(line_extra_name(g, periods), reg, GameSnapshot::kLinesMax);
-  rows.push_back({"T", std::to_string(g.team_score), std::to_string(g.opp_score)});
+  rows.push_back({g.sport == Sport::VOLLEYBALL ? "S" : "T", std::to_string(g.team_score),
+                  std::to_string(g.opp_score)});
   return rows;
 }
 

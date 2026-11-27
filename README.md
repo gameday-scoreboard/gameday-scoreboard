@@ -2,7 +2,7 @@
 
 ![A final score on the panel: HBR 24, IRN 10, HBR WINS!](docs/wiki/src/assets/final-hbr-irn.jpg)
 
-A standalone scoreboard for HUB75 LED matrix panels. Install it from your browser, join it to WiFi, pick your team on the panel's own web page, and it follows the game from ESPN by itself. Nothing else to run. It covers the NFL, college football, MLB, the NBA, the WNBA, men's and women's college basketball, the NHL, MLS and the Premier League.
+A standalone scoreboard for HUB75 LED matrix panels. Install it from your browser, join it to WiFi, pick your team on the panel's own web page, and it follows the game from ESPN by itself. Nothing else to run. It covers the NFL, college football, MLB, the NBA, the WNBA, men's and women's college basketball, women's college volleyball, the NHL, MLS and the Premier League.
 
 Watch the [full demo](https://install.gameday-scoreboard.com/) on the installer page. The [docs](https://docs.gameday-scoreboard.com/) cover setup, every setting, each sport's board, troubleshooting and running the firmware on your own board.
 
@@ -25,7 +25,7 @@ If you already use Home Assistant and want room lighting to celebrate too, [game
 
 Building your own? [Runs on your own panel](https://install.gameday-scoreboard.com/diy/) lists the boards and panels it runs on, how to wire a bare ESP32-S3, and what differs from a Game Day Scoreboard.
 
-- The [Waveshare ESP32-S3-RGB-Matrix](https://www.waveshare.com/esp32-s3-rgb-matrix.htm), the board in ready-made Game Day Scoreboards (build `gameday-waveshare.yaml`; not yet run on hardware), or
+- The [Waveshare ESP32-S3-RGB-Matrix](https://www.waveshare.com/esp32-s3-rgb-matrix.htm), the board in ready-made Game Day Scoreboards (build `gameday-waveshare.yaml`; no fuse or reverse-polarity protection, so check the power leads before you plug them in), or
 - An ESP32-S3 HUB75 controller on the [MoonHub75](https://github.com/MoonModules/Hardware/tree/main/MOONHUB75) pinout, with 16MB flash, octal PSRAM, and a button on GPIO0 (build `gameday.yaml`)
 - One 64x64 HUB75 panel, or a 128x64 display: one 128x64 panel or two 64x64 side by side (one firmware; pick the size on the device page)
 
@@ -50,7 +50,7 @@ The device serves its own page: a live board that mirrors the panel (logos, scor
 | Setting | What it does |
 | --- | --- |
 | Show | Favorite teams, or Live games: a game in progress picked at random from the leagues you choose, switching every minute unless you change Switch every (1 to 30 minutes) |
-| Favorites | Up to 16 teams in your order, from all 32 NFL teams, every FBS college football team, every MLB, NBA, WNBA, NHL, MLS and Premier League team and every Division I men's and women's college basketball team, a tab per league, plus an "On now" tab |
+| Favorites | Up to 16 teams in your order, from all 32 NFL teams, every FBS college football team, every MLB, NBA, WNBA, NHL, MLS and Premier League team and every Division I men's and women's college basketball and women's college volleyball team, a tab per league, plus an "On now" tab |
 | Timezone | Follows the browser's zone unless you pick one by hand; used for kickoff times |
 | Ticker: Down and distance, Count and at-bat, Match stats, Last play, "Odds, TV and win chance", Pre-game season leaders | Choose what scrolls along the bottom. One switch per sport for the game situation: down and distance in football, the count, outs, pitcher and batter in baseball, and goals, cards, possession and shots in soccer. Before kickoff in football, each team's passing leader, and during the game who is favored to win. The page shows only the ones for sports your panel follows |
 | Opponent scores too | Turn the opponent's scoring splashes off if you only want yours |

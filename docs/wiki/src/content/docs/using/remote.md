@@ -46,7 +46,7 @@ To change what a button does, reorder your favorites on the device page or in th
 
 **Set each button yourself.** **Remote** on the device page's Device tab, and Remote in the Game Day app, has a picker for each of buttons 1 to 4. A button starts on its own favorite (button 1 is favorite 1, and so on) and stays there until you change it; making a playlist no longer moves the buttons.
 
-The picker lists your playlists first, then a group for each sport, with every league the panel follows: football (NFL and college), baseball, basketball (NBA, WNBA and men's college), hockey and soccer (MLS and Premier League). Under each sport, in this order:
+The picker lists your playlists first, then a group for each sport, with every league the panel follows: football (NFL and college), baseball, basketball (NBA, WNBA and men's and women's college), hockey, soccer (MLS and Premier League) and volleyball (women's college). Under each sport, in this order:
 
 - **All NFL live games** (one for each league in the sport): Live games in that league only. See [One league's live games](#one-leagues-live-games).
 - **My football teams**: your favorites in that sport, the same as that sport's row under Playing. It's listed when you have two or more favorites in the sport and favorites in another sport too.

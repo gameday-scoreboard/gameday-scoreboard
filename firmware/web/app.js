@@ -48,11 +48,12 @@
     mcbb: { prefix: "NCAAM", tab: "NCAAM", name: "Men's college basketball", path: "basketball/mens-college-basketball", logo: "ncaa", byId: true, scan: "groups=50&limit=300&" },
     wcbb: { prefix: "NCAAW", tab: "NCAAW", name: "Women's college basketball", path: "basketball/womens-college-basketball", logo: "ncaa", byId: true, scan: "groups=50&limit=300&" },
     nhl: { prefix: "NHL", tab: "NHL", name: "NHL", path: "hockey/nhl", logo: "nhl", byId: false, scan: "" },
+    wcvb: { prefix: "NCAAVB", tab: "NCAAVB", name: "Women's college volleyball", path: "volleyball/womens-college-volleyball", logo: "ncaa", byId: true, scan: "" },
   };
   const lgInfo = (lg) => LEAGUES[lg] || LEAGUES.nfl;
   // The league's name in "All NFL live games": its short name, or the long one
   // where the short one is an abbreviation owners don't use.
-  const liveName = (lg) => ({ ncaa: "college football", mcbb: "men's college basketball", wcbb: "women's college basketball", epl: "Premier League" }[lg] || lgInfo(lg).name);
+  const liveName = (lg) => ({ ncaa: "college football", mcbb: "men's college basketball", wcbb: "women's college basketball", wcvb: "women's college volleyball", epl: "Premier League" }[lg] || lgInfo(lg).name);
   // "NFL", "NFL and NHL", "NFL, NBA and NHL".
   const andJoin = (a) => (a.length > 1 ? a.slice(0, -1).join(", ") + " and " + a[a.length - 1] : a[0] || "");
   const logoUrl = (league, id, abbr) => {
@@ -132,6 +133,10 @@
           <p class="hint">Flights stays up, through restarts too, until you pick another page.</p>
           <p class="hint" id="flNow" hidden></p>
           <button class="linkbtn" id="flGo">Flights settings under Customize</button>
+        </div>
+        <div id="wxpCtls" hidden>
+          <p class="hint" id="wxpHint"></p>
+          <button class="linkbtn" id="wxpTown">Change your town</button>
         </div>
       </div>
     </div>
@@ -241,7 +246,7 @@
               <option value="30">30 minutes before</option><option value="60">1 hour before</option><option value="120">2 hours before</option>
             </select></div>
             <div class="ctl"><label for="afterGame">After the game<small id="afterHint"></small></label><select id="afterGame">
-              <option value="scoreboard">Stay on the scoreboard</option><option value="off">Turn off</option><option value="clock">Show the clock</option><option value="smartboard">Show the Smart board</option><option value="effects">Show effects</option><option value="flights">Show flights</option>
+              <option value="scoreboard">Stay on the scoreboard</option><option value="off">Turn off</option><option value="clock">Show the clock</option><option value="smartboard">Show the Smart board</option><option value="effects">Show effects</option><option value="flights">Show flights</option><option value="weather">Show the weather</option>
             </select></div>
           </div>
         </div>
@@ -1231,6 +1236,7 @@
     top25: "The AP poll, a page at a time, every 10 minutes.",
     news: "ESPN's latest headlines for your teams, or your leagues on Live games, one every 3 minutes. Read once an hour.",
     weather: "Your town's forecast for 10 seconds every minute: the temperature now, today's high and low, and the next two days.",
+    gamedaycard: "A QR code for gameday-scoreboard.com with a few words on getting a scoreboard, for 10 seconds every 20 minutes. For a panel that other people see, like one in a shop or an office.",
   };
   const OWN_CARDS = { custom: "the date countdown", message: "the message card", picture: "your pictures" };
   const CARD_GROUPS = [["Game info", ["next", "countdown", "clock", "gameleaders"]], ["Sports news", ["top25", "news"]]];
@@ -1241,6 +1247,7 @@
     gameleaders: '<path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8 20h8"/>',
     top25: '<path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/>',
     news: '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M7 9h10M7 12.5h10M7 16h6"/>',
+    gamedaycard: '<rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6"/><rect x="4" y="14" width="6" height="6"/><path d="M14 14h2v2h-2zM18 18h2v2h-2zM14 18h2M18 14h2"/>',
     weather: '<circle cx="9" cy="9" r="3.5"/><path d="M9 2.5v1.5M2.5 9H4M4.4 4.4l1 1M13.6 4.4l-1 1M8 20h9a3.5 3.5 0 0 0 0-7 5 5 0 0 0-9.6 1.4A2.8 2.8 0 0 0 8 20z"/>',
   };
   const cardIcon = (id) => '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">' + (CARD_ICONS[id] || '<circle cx="12" cy="12" r="8"/>') + "</svg>";
@@ -1475,7 +1482,7 @@
   flKey.onkeydown = (e) => { if (e.key === "Enter") postKey(); };
   $("#flKeyClear").onclick = () => setGD({ flkey: "" }).then((ok) => { if (ok) toast("Key cleared"); });
   // The town is the Weather card's: open its row on Display, or the sheet that adds it.
-  $("#flTown").onclick = () => {
+  const openTown = () => {
     showPane("display");
     const row = $('#cardList .xrow[data-card="weather"]');
     if (!row) {
@@ -1485,6 +1492,17 @@
     }
     if (!row.classList.contains("open")) row.querySelector(".xbtn").click();
     $("#town").focus();
+  };
+  $("#flTown").onclick = openTown;
+  $("#wxpTown").onclick = openTown;
+  // Under Showing while Weather is up: what it shows, or that it needs a town.
+  const renderWeatherPage = () => {
+    if (!S) return;
+    const noTown = !S.town;
+    $("#wxpHint").textContent = noTown
+      ? "Weather shows the forecast for your town. Set your town first."
+      : "Weather stays up, through restarts too, until you pick another page." + (S.wx && S.wx.place ? " The forecast for " + S.wx.place + "." : "");
+    $("#wxpTown").textContent = noTown ? "Set your town" : "Change your town";
   };
   $("#flGo").onclick = () => { showPane("customize"); $("#flCard").scrollIntoView({ block: "start" }); };
   const flAgo = (s) => (s < 60 ? s + " s ago" : mins(s) + " min ago");
@@ -2141,7 +2159,7 @@
     ? { mode: 4, list: 0, sport: listPick.value.slice(2) }
     : { mode: 4, list: listPick.value, sport: "none" });
   // The Remote card's four pickers, one per button: its own favorite and the
-  // playlists, then a group per sport, all nine leagues: its leagues' live
+  // playlists, then a group per sport, every league: its leagues' live
   // games, the sport row (My football teams), its favorites and "Another
   // NFL team", which opens a second list with every team in that league.
   // Then All favorites, Live games, Nothing, and the pages under Showing. A
@@ -2152,7 +2170,7 @@
   // which change the button, not what the panel is playing.
   let remoteSig = "";
   const SPORTS = [["football", "Football"], ["baseball", "Baseball"], ["basketball", "Basketball"],
-    ["hockey", "Hockey"], ["soccer", "Soccer"]];
+    ["hockey", "Hockey"], ["soccer", "Soccer"], ["volleyball", "Volleyball"]];
   // A team's league, from a target or key ("team:nfl:6", "nfl:6").
   const keyLeague = (k) => k.replace(/^team:/, "").split(":")[0];
   // Which league's team list a button shows ("" for none): one picked with
@@ -2170,7 +2188,7 @@
       const mine = real.filter((k) => lgs.includes(keyLeague(k)));
       if (rows.includes(sp) && mine.length >= 2) opts.push(["sport:" + sp, "My " + sp + " teams"]);
       for (const k of mine) { const t = teamByKey(k); opts.push(["team:" + k, t ? t[3] : k]); }
-      for (const lg of lgs) opts.push(["pick:" + lg, "Another " + (lg === "ncaa" || lg === "mcbb" || lg === "wcbb" ? liveName(lg) : lgInfo(lg).name) + " team..."]);
+      for (const lg of lgs) opts.push(["pick:" + lg, "Another " + (lg === "ncaa" || lg === "mcbb" || lg === "wcbb" || lg === "wcvb" ? liveName(lg) : lgInfo(lg).name) + " team..."]);
       groups.push([title, opts]);
     }
     groups.push(["", [["all", "All favorites"], ["live", "Live games"], ["none", "Nothing"]]]);
@@ -2433,6 +2451,7 @@
     $("#cdClear").hidden = !S.cdname && !S.cddate;
     renderWeather();
     renderFlights();
+    renderWeatherPage();
     // Firmware that can't install updates (older, or the demo build) leaves it out.
     $("#autoupdRow").hidden = S.autoupd === undefined;
     // Older firmware and the demo build have no beta to follow.
@@ -2602,6 +2621,9 @@
     // Firmware from before the Flights page doesn't take it.
     const flOpt = after.querySelector('option[value="flights"]');
     flOpt.hidden = flOpt.disabled = S.fl === undefined;
+    // Nor from before the Weather page.
+    const wxOpt = after.querySelector('option[value="weather"]');
+    wxOpt.hidden = wxOpt.disabled = S.wxpage === undefined;
     if (S.after !== wakeSeen.after && document.activeElement !== after) {
       wakeSeen.after = S.after;
       if (![...after.options].some((o) => o.value === S.after)) after.add(new Option(S.after, S.after));
@@ -2615,7 +2637,8 @@
         : S.after === "smartboard" ? "Once the final has been up a while, the panel shows the Smart board until your next game is close."
           : S.after === "effects" ? "Once the final has been up a while, and whenever no game of yours is on, the panel plays the effect Showing's Effects page is set to, until your next game is close."
             : S.after === "flights" ? "Once the final has been up a while, the panel shows the planes near your town until your next game is close."
-              : "The final, then your next game, as before.";
+              : S.after === "weather" ? "Once the final has been up a while, the panel shows the weather for your town until your next game is close."
+                : "The final, then your next game, as before.";
   };
   $("#wakeLead").onchange = () => {
     wakeSeen.lead = null;
@@ -2632,12 +2655,32 @@
   // is one as uploaded). A still image is fitted to the panel here and sent
   // as a PNG; a GIF can't be redrawn in the browser, so it goes as it is.
   const PIC_MAX = 64 * 1024;
-  const picNote = (t) => { const n = $("#picNote"); n.textContent = t; n.hidden = !t; };
+  // The note after an upload is up: it follows the message card's settings.
+  let picAdded = false;
+  const picNote = (t) => { picAdded = false; const n = $("#picNote"); n.textContent = t; n.hidden = !t; };
+  // A message card on Whenever no game is on never comes down between games
+  // (msg_turn in message.h), so a picture gets no turn. A list that couldn't
+  // be read, or is empty, leaves the board free.
+  const msgHolds = () => {
+    const card = (S.cards || []).find((c) => c.id === "message");
+    if (S.msgevery !== 0 || (card && !card.on)) return false;
+    if (!S.msgurl) return !!(S.msg || "").trim();
+    const read = S.msgread || {};
+    if (read.entries !== undefined) return read.entries > 0;
+    return read.status === undefined || read.status === 200;
+  };
+  const picAddedNote = () => {
+    picNote(msgHolds()
+      ? "Added, but the message card holds the board between games, so the picture won't come up. Under Message card, change Show it from Whenever no game is on to a time, like Every 2 minutes, to give pictures a turn."
+      : "Added. It's up next between games.");
+    picAdded = true;
+  };
   let picShown = null;
   const renderPics = () => {
     // Older firmware has no picture card.
     $("#picCard").hidden = S.pics === undefined;
     if (S.pics === undefined) return;
+    if (picAdded) picAddedNote();
     const pics = S.pics || [];
     $("#picAdd").disabled = !S.picroom;
     $("#picAdd").textContent = pics.length >= 4 ? "4 pictures kept" : "Add a picture";
@@ -2731,7 +2774,7 @@
       return;
     }
     if (!r.ok) { picNote("Not added: " + (j.error || "the panel answered " + r.status + ".")); return; }
-    picNote("Added. It's up next between games.");
+    picAddedNote();
     scheduleState(APPLY_MS + 100);
   };
 
@@ -2933,6 +2976,8 @@
       $("#fxCtls").hidden = v !== "Effects";
       $("#sbCtls").hidden = v !== "Smart board";
       $("#flCtls").hidden = v !== "Flights";
+      $("#wxpCtls").hidden = v !== "Weather";
+      if (v === "Weather") renderWeatherPage();
     } },
     { name: "Effect", into: "#fxCtls", label: "Effect" },
     { name: "Smart board row 1", into: "#sbRows", label: "Row 1", sbRow: true },

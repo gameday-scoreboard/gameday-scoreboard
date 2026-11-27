@@ -280,8 +280,7 @@ inline FxNames &fx_names() {
 }
 
 inline const char *remote_sport_key(uint8_t sport) {
-  static const char *const kWords[] = {"football", "baseball", "basketball", "hockey", "soccer"};
-  return sport < 5 ? kWords[sport] : "";
+  return sport < kSportCount ? kSportKeys[sport] : "";
 }
 
 inline std::string remote_name(const RemoteTarget &t) {

@@ -638,7 +638,7 @@ test("Showing Effects reveals the effect controls, and they post", async ({ page
   // Showing and the effect controls are on the Home tab, under the panel's power and brightness.
   const showing = page.getByRole("combobox", { name: "Showing" });
   await expect(showing).toHaveValue("Scoreboard");
-  await expect(showing.locator("option")).toHaveText(["Scoreboard", "Clock", "Effects", "Smart board", "Flights"]);
+  await expect(showing.locator("option")).toHaveText(["Scoreboard", "Clock", "Effects", "Smart board", "Flights", "Weather"]);
   await expect(page.locator("#fxCtls")).toBeHidden();
   // The Panel card's own controls are untouched by the hidden effect rows.
   await expect(page.locator("#quickCtls .ctl")).toHaveCount(2);
@@ -864,7 +864,7 @@ test("a screen reader gets each control's name, role and state", async ({ page, 
   await expect(tabs.getByRole("tab", { name: "NCAAF" })).toBeFocused();
   await expect(page.getByRole("tabpanel").locator(".tile .a").first()).toContainText("NCAAF");
   await page.keyboard.press("End");
-  await expect(tabs.getByRole("tab", { selected: true })).toHaveText("NHL");
+  await expect(tabs.getByRole("tab", { selected: true })).toHaveText("NCAAVB");
   await page.keyboard.press("ArrowRight");
   await expect(tabs.getByRole("tab", { selected: true })).toHaveText("On now");
   await expect(tabs.locator('[tabindex="0"]')).toHaveText("On now");
@@ -1071,12 +1071,12 @@ test("the Remote card sets each button: a favorite, a sport, a playlist, all, Li
   const btns = page.locator("#remoteBtns .rbtn");
   await expect(btns).toHaveCount(4);
   const b1 = btns.nth(0).locator("select");
-  // Grouped by sport, all ten leagues: each league's live games, the sport
+  // Grouped by sport, every league: each league's live games, the sport
   // row with two favorites in it, the favorites, then another team of each
   // league; the pages under Showing last.
-  await expect(b1.locator("optgroup")).toHaveCount(7);
+  await expect(b1.locator("optgroup")).toHaveCount(8);
   expect(await b1.locator("optgroup").evaluateAll((gs) => gs.map((g) => g.label))).toEqual(
-    ["Your playlists", "Football", "Baseball", "Basketball", "Hockey", "Soccer", "Showing"]);
+    ["Your playlists", "Football", "Baseball", "Basketball", "Hockey", "Soccer", "Volleyball", "Showing"]);
   await expect(b1.locator("optgroup[label=Football] option")).toHaveText(["All NFL live games", "All college football live games",
     "My football teams", "Dallas Cowboys", "Texas Longhorns", "Another NFL team...", "Another college football team..."]);
   // One basketball favorite: no row of its own.
@@ -1085,6 +1085,8 @@ test("the Remote card sets each button: a favorite, a sport, a playlist, all, Li
     "Another NBA team...", "Another WNBA team...", "Another men's college basketball team...",
     "Another women's college basketball team..."]);
   await expect(b1.locator("optgroup[label=Hockey] option")).toHaveText(["All NHL live games", "Another NHL team..."]);
+  await expect(b1.locator("optgroup[label=Volleyball] option")).toHaveText(["All women's college volleyball live games",
+    "Another women's college volleyball team..."]);
   await expect(b1.locator("optgroup[label=Showing] option")).toHaveText(["Scoreboard", "Clock", "Smart board", "Effects"]);
   await expect(b1.locator(":scope > option")).toHaveText(["Its own favorite", "All favorites", "Live games", "Nothing"]);
   await expect(b1).toHaveValue("fav");
@@ -1417,7 +1419,7 @@ test("a playlist's sports post as @lg tokens beside its teams, and the bar says 
   const sports = box.getByRole("group", { name: "Sports in Sunday" }).getByRole("button");
   // Every league the panel knows, in kLeagues order.
   await expect(sports).toHaveText(["NFL", "College football", "MLB", "MLS", "Premier League", "NBA", "WNBA",
-    "Men's college basketball", "Women's college basketball", "NHL"]);
+    "Men's college basketball", "Women's college basketball", "NHL", "Women's college volleyball"]);
   await expect(box.locator(".psports small")).toHaveCount(0);
   await expect(box.getByRole("switch", { name: "Only this list's games Sunday" })).toBeVisible();
   await box.getByRole("button", { name: "NFL", exact: true }).click();
@@ -1602,7 +1604,7 @@ test("Live games chips post the leagues, and move an old live mode to mode 5", a
   await page.goto("/");
   await expect(page.locator("#livebar")).toBeVisible();
   await expect(page.locator("#modes button.on")).toHaveText(/^Live games/);
-  await expect(page.locator("#liveChips .chip")).toHaveText(["NFL", "NCAAF", "MLB", "MLS", "EPL", "NBA", "WNBA", "NCAAM", "NCAAW", "NHL"]);
+  await expect(page.locator("#liveChips .chip")).toHaveText(["NFL", "NCAAF", "MLB", "MLS", "EPL", "NBA", "WNBA", "NCAAM", "NCAAW", "NHL", "NCAAVB"]);
   await expect(page.locator("#liveChips .chip.on")).toHaveText(["MLB", "NHL"]);
   await page.locator("#liveChips .chip", { hasText: /^NBA$/ }).click();
   await expectSet(request, { live: "mlb,nhl,nba" });
@@ -1856,8 +1858,8 @@ test("between games: a row per card that is on, in the panel's order, the rest b
   await expect(page.locator("#cdCard")).toBeVisible();
   await expect(page.locator("#cardsOld")).toBeHidden();
   const want = (await deviceState(request)).cards;
-  // Every card on to start but news and weather (on once a town is set).
-  expect(want.filter((c) => !c.on).map((c) => c.id)).toEqual(["news", "weather"]);
+  // Every card on to start but news and weather (on once a town is set) and the Game Day card.
+  expect(want.filter((c) => !c.on).map((c) => c.id)).toEqual(["news", "weather", "gamedaycard"]);
   // The cards you make are switched on the Customize tab, so the list only names them.
   const own = ["custom", "message", "picture"];
   const shown = want.filter((c) => c.on && !own.includes(c.id));
@@ -1880,14 +1882,14 @@ test("between games: a row per card that is on, in the panel's order, the rest b
 
   // The cards that are off wait in the sheet, a row each with its Add button.
   const sheet = page.locator(".lsheet");
-  await expect(page.locator("#cardAdd")).toHaveText("Add a card (3 more)");
+  await expect(page.locator("#cardAdd")).toHaveText("Add a card (4 more)");
   await page.locator("#cardAdd").click();
   await expect(sheet).toBeVisible();
-  await expect(sheet.locator(".laddrow .ln")).toHaveText(["Clock", "News headlines", "Weather"]);
+  await expect(sheet.locator(".laddrow .ln")).toHaveText(["Clock", "News headlines", "Weather", "Game Day card"]);
   await sheet.getByRole("button", { name: "Add News headlines" }).click();
   await expectSet(request, { cards: "news:1" });
   await expect.poll(async () => (await deviceState(request)).news).toBe(true);
-  await expect(sheet.locator(".laddrow .ln")).toHaveText(["Clock", "Weather"]);
+  await expect(sheet.locator(".laddrow .ln")).toHaveText(["Clock", "Weather", "Game Day card"]);
   await sheet.getByRole("button", { name: "Done" }).click();
   await expect(sheet).toBeHidden();
   await expect(row("news")).toHaveCount(1);
@@ -2118,6 +2120,63 @@ test("pictures: adds a PNG and a GIF as they are, fits a big still, refuses a wi
   await tab(page, "customize");
   await expect(page.locator("#hostname")).not.toBeEmpty();
   await expect(page.locator("#picCard")).toBeHidden();
+});
+
+// message.h msg_turn: every 0 never hides the card between games, so the
+// picture card never gets a turn. Every other Show it does.
+const PIC_NEXT = "Added. It's up next between games.";
+const PIC_HELD = "Added, but the message card holds the board between games, so the picture won't come up. Under Message card, change Show it from Whenever no game is on to a time, like Every 2 minutes, to give pictures a turn.";
+
+const LIST = "http://192.168.1.5/names.txt";
+for (const [what, state, note] of [
+  ["a message on Every minute", { msg: "Wings $5", msgevery: 1 }, PIC_NEXT],
+  ["a message on Whenever no game is on", { msg: "Wings $5", msgevery: 0 }, PIC_HELD],
+  ["no message on Whenever no game is on", { msg: "", msgevery: 0 }, PIC_NEXT],
+  ["the message card off on Whenever no game is on", { msg: "Wings $5", msgevery: 0, off: "message" }, PIC_NEXT],
+  ["a list that was read", { msgurl: LIST, msgevery: 0, msgread: { status: 200, entries: 412 } }, PIC_HELD],
+  ["a list on its first page", { msgurl: LIST, msgevery: 0, msgread: { status: 200 } }, PIC_HELD],
+  ["a list read before whose last read failed", { msgurl: LIST, msgevery: 0, msgread: { status: 0, entries: 412 } }, PIC_HELD],
+  ["a list not read yet", { msgurl: LIST, msgevery: 0 }, PIC_HELD],
+  ["a list that can't be reached, with old text behind it", { msg: "Wings $5", msgurl: LIST, msgevery: 0, msgread: { status: 0 } }, PIC_NEXT],
+  ["a list that answers an error", { msgurl: LIST, msgevery: 0, msgread: { status: 404 } }, PIC_NEXT],
+  ["an empty list", { msgurl: LIST, msgevery: 0, msgread: { status: 200, entries: 0 } }, PIC_NEXT],
+  ["a list on Every 5 minutes", { msgurl: LIST, msgevery: 5, msgread: { status: 200, entries: 412 } }, PIC_NEXT],
+]) {
+  test("pictures: the note after adding one, with " + what, async ({ page, request }) => {
+    const { off, ...set } = state;
+    await reset(request, set);
+    if (off) await request.post("/gameday/set?cards=" + off + ":0");
+    await page.goto("/");
+    await tab(page, "customize");
+    await expect(page.locator("#picCard")).toBeVisible();
+    await page.setInputFiles("#picFile", { name: "blue.png", mimeType: "image/png",
+      buffer: fs.readFileSync(require("path").join(__dirname, "../fixtures/pictures/blue.png")) });
+    await expect(page.locator("#picNote")).toHaveText(note);
+    await expect(page.locator("#picList .pic")).toHaveCount(1);
+    await expect(page.locator("#picNote")).toHaveText(note);
+  });
+}
+
+test("pictures: the note follows Show it, and no other note does", async ({ page, request }) => {
+  await reset(request, { msg: "Wings $5", msgevery: 0 });
+  await page.goto("/");
+  await tab(page, "customize");
+  const pic = (name, mimeType) => ({ name, mimeType,
+    buffer: fs.readFileSync(require("path").join(__dirname, "../fixtures/pictures", name)) });
+  await page.setInputFiles("#picFile", pic("blue.png", "image/png"));
+  await expect(page.locator("#picNote")).toHaveText(PIC_HELD);
+  await page.locator("#msgEvery").selectOption("2");
+  await page.locator("#msgSave").click();
+  await expect(page.locator("#picNote")).toHaveText(PIC_NEXT);
+
+  // A refused file's note stays as it is when the setting changes.
+  const wide = "That GIF is 129 by 64 pixels. A GIF can be up to 128 by 64; resize it first.";
+  await page.setInputFiles("#picFile", pic("wide.gif", "image/gif"));
+  await expect(page.locator("#picNote")).toHaveText(wide);
+  await page.locator("#msgEvery").selectOption("0");
+  await page.locator("#msgSave").click();
+  await expect.poll(async () => (await deviceState(request)).msgevery).toBe(0);
+  await expect(page.locator("#picNote")).toHaveText(wide);
 });
 
 test("pictures: the add button says when the panel keeps 4", async ({ page, request }) => {
@@ -2511,7 +2570,7 @@ test("the picker has a tab per league and adds a team from another sport", async
   await page.goto("/");
   await tab(page, "teams");
   await page.locator("#favAdd").click();
-  await expect(page.locator(".tabs button")).toHaveText(["On now", "NFL", "NCAAF", "MLB", "MLS", "EPL", "NBA", "WNBA", "NCAAM", "NCAAW", "NHL"]);
+  await expect(page.locator(".tabs button")).toHaveText(["On now", "NFL", "NCAAF", "MLB", "MLS", "EPL", "NBA", "WNBA", "NCAAM", "NCAAW", "NHL", "NCAAVB"]);
   await page.locator(".tabs button", { hasText: "NHL" }).click();
   await expect(page.locator(".tabs button.on")).toHaveText("NHL");
   await expect(page.locator("#tiles .tile")).toHaveCount(32);
@@ -3477,6 +3536,9 @@ test("game-day wake: off by default, its lead and after the game post, hidden on
   await page.locator("#afterGame").selectOption("flights");
   await expectSet(request, { after: "flights" });
   await expect(page.locator("#afterHint")).toContainText("the panel shows the planes near your town until your next game is close");
+  await page.locator("#afterGame").selectOption("weather");
+  await expectSet(request, { after: "weather" });
+  await expect(page.locator("#afterHint")).toContainText("the panel shows the weather for your town until your next game is close");
 
   // Off with the wake off says how to bring it back, and asleep says so.
   await reset(request, { after: "off", wake_now: "asleep" });
@@ -3727,6 +3789,40 @@ test("flights: no card or After the game choice on firmware without the Flights 
   await tab(page, "display");
   await expect(page.locator('#afterGame option[value="flights"]')).toBeDisabled();
   await expect(page.locator('#afterGame option[value="flights"]')).toHaveJSProperty("hidden", true);
+});
+
+test("weather page: no After the game choice on firmware without it", async ({ page, request }) => {
+  await reset(request, { wxpage: null });
+  await page.goto("/");
+  await tab(page, "display");
+  await expect(page.locator('#afterGame option[value="flights"]')).toBeEnabled();
+  await expect(page.locator('#afterGame option[value="weather"]')).toBeDisabled();
+  await expect(page.locator('#afterGame option[value="weather"]')).toHaveJSProperty("hidden", true);
+});
+
+test("weather page: under Showing it says whose forecast, or asks for a town", async ({ page, request }) => {
+  await reset(request);
+  await page.goto("/");
+  const showing = page.getByRole("combobox", { name: "Showing" });
+  await expect(page.locator('#afterGame option[value="weather"]')).toHaveJSProperty("hidden", false);
+  await showing.selectOption("Weather");
+  await expect(page.locator("#wxpCtls")).toBeVisible();
+  await expect(page.locator("#flCtls")).toBeHidden();
+  await expect(page.locator("#wxpHint")).toHaveText("Weather shows the forecast for your town. Set your town first.");
+  await expect(page.locator("#wxpTown")).toHaveText("Set your town");
+
+  await reset(request, flTown);
+  await page.goto("/");
+  await showing.selectOption("Weather");
+  await expect(page.locator("#wxpHint")).toHaveText(
+    "Weather stays up, through restarts too, until you pick another page. The forecast for Coppell, Texas.");
+  await expect(page.locator("#wxpTown")).toHaveText("Change your town");
+  // The link opens the Weather card's town
+  await page.locator("#wxpTown").click();
+  await expect(page.locator("#town")).toBeVisible();
+  await tab(page, "board");
+  await showing.selectOption("Scoreboard");
+  await expect(page.locator("#wxpCtls")).toBeHidden();
 });
 
 test("flights: Within and Facing post, in the weather's units, and the card says where home is", async ({ page, request }) => {

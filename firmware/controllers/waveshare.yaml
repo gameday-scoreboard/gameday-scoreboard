@@ -5,7 +5,7 @@
 #   LAT 40, OE 2, CLK 41
 # Derived from hub75-studio's controller packages (MIT, Wade Edwards). The
 # board's ES8311 speaker codec, RTC, IMU, temperature sensor and TF slot are
-# not used. Not yet run on hardware.
+# not used. The board has no fuse and no reverse-polarity protection.
 
 esp32:
   board: esp32-s3-devkitc-1
