@@ -183,15 +183,11 @@ On iPhone and Android, **After the game** also has **Show effects**: the effect 
 :::
 
 :::note[Coming in the next app update]
-On iPhone, with **After the game** on **Show effects**, a **Holiday effects** switch shows under it, as on the device page. On July 4, Halloween and December 24 to 26, the effect between games is the holiday's: fireworks, ghosts or falling snow. Your own effect comes back the next day. It's on until you turn it off, and the switch shows once the panel runs firmware with holiday effects. See [Holiday effects](/using/effects/#holiday-effects).
+On iPhone and Android, with **After the game** on **Show effects**, a **Holiday effects** switch shows under it, as on the device page. On July 4, Halloween and December 24 to 26, the effect between games is the holiday's: fireworks, ghosts or falling snow. Your own effect comes back the next day. It's on until you turn it off, and the switch shows once the panel runs firmware with holiday effects. See [Holiday effects](/using/effects/#holiday-effects).
 :::
 
 :::note[Coming in the next app update]
 On Android, **After the game** also has **Show flights** and **Show the weather**: the [Flights](/using/flights/) page or the [Weather](/using/weather/) page between games, until the **Turns on** time before your next game. **Turns on** shows with them too. Each shows once the panel runs firmware with that page.
-:::
-
-:::note[Coming in the next app update]
-On Android, with **After the game** on **Show effects**, a **Holiday effects** switch shows under it, as on the device page. On July 4, Halloween and December 24 to 26, the effect between games is the holiday's: fireworks, ghosts or falling snow. Your own effect comes back the next day. It's on until you turn it off, and the switch shows once the panel runs firmware with holiday effects. See [Holiday effects](/using/effects/#holiday-effects).
 :::
 
 On iPhone and Android, **Customize** has **Pictures** after the message card, like the device page: the pictures on your panel, each with **Delete**, and **Add a picture**, which picks from your phone's photos. A photo is shrunk to fit the panel and a GIF up to 128 by 64 pixels goes as it is (see [Pictures](/using/pictures/)). It shows once the panel runs firmware with pictures.
