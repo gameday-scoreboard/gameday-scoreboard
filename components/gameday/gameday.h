@@ -1311,7 +1311,7 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool fx_pal_set_{false};
   bool fx_theme_writing_{false};
   ::espn::HolState fx_hol_{};
-  std::string fx_saved_effect_;
+  char fx_saved_effect_[40]{};  // the longest effect name is 16 letters
   int fx_saved_palette_{-1};
   int fx_saved_speed_{-1};
   int fx_saved_intensity_{-1};

@@ -1104,22 +1104,30 @@ void GamedayComponent::set_fx_controls(select::Select *effect, select::Select *p
   // Any of the four changing while a playlist plays is somebody picking by
   // hand (the device page, the app, Home Assistant), unless the player is
   // writing them itself (the guard flag, fx_playlists.h fx_hand_pick).
-  auto hand = [this]() {
+  // palette: the pick was the palette itself.
+  auto hand = [this](bool palette) {
     // The panel's own team palette and holiday writes aren't a pick.
     if (this->fx_theme_writing_)
       return;
-    if (::espn::holiday_hand_pick(this->fx_hol_))
+    if (::espn::holiday_hand_pick(this->fx_hol_)) {
       ESP_LOGI(TAG, "Holiday effect off: an effect setting was picked by hand, so it stays until the next stretch "
                     "between games");
+      // The holiday's palette on the screen isn't the owner's pick: unless
+      // the pick was the palette, the team palette goes back on next tick.
+      if (palette)
+        this->fx_pal_auto_ = false;
+      else if (this->fx_pal_auto_)
+        this->fx_pal_set_ = false;
+    }
     if (::espn::fx_hand_pick(this->fx_player_)) {
       ESP_LOGI(TAG, "Effect playlist off: an effect setting was picked by hand");
       this->fx_changed_();
     }
   };
-  effect->add_on_state_callback([hand](size_t) { hand(); });
-  palette->add_on_state_callback([hand](size_t) { hand(); });
-  speed->add_on_state_callback([hand](float) { hand(); });
-  intensity->add_on_state_callback([hand](float) { hand(); });
+  effect->add_on_state_callback([hand](size_t) { hand(false); });
+  palette->add_on_state_callback([hand](size_t) { hand(true); });
+  speed->add_on_state_callback([hand](float) { hand(false); });
+  intensity->add_on_state_callback([hand](float) { hand(false); });
   // Showing left Effects, whoever moved it (a hand pick, or the panel taking
   // the screen back for a banner, the night or Wi-Fi): the playlist ends
   // with the effect, which never comes back on its own.
@@ -1263,7 +1271,8 @@ void GamedayComponent::fx_theme_tick_() {
     case ::espn::HolStep::START: {
       // What the owner had, to put back after
       auto e = f->effect->active_index(), p = f->palette->active_index();
-      this->fx_saved_effect_ = e.has_value() ? f->effect->option_at(*e) : "";
+      snprintf(this->fx_saved_effect_, sizeof(this->fx_saved_effect_), "%s",
+               e.has_value() ? f->effect->option_at(*e) : "");
       this->fx_saved_palette_ = p.has_value() ? (int) *p : -1;
       this->fx_saved_speed_ = f->speed != nullptr && f->speed->has_state() ? (int) f->speed->state : -1;
       this->fx_saved_intensity_ =
@@ -1279,13 +1288,16 @@ void GamedayComponent::fx_theme_tick_() {
     case ::espn::HolStep::END:
       ESP_LOGI(TAG, "Holiday effect off: %s", ours ? "the day is over or Holiday effects was turned off"
                                                    : "the effect between games is down");
-      this->fx_theme_write_(this->fx_saved_effect_.empty() ? nullptr : this->fx_saved_effect_.c_str(), nullptr,
+      this->fx_theme_write_(this->fx_saved_effect_[0] == '\0' ? nullptr : this->fx_saved_effect_, nullptr,
                             this->fx_saved_palette_, this->fx_saved_speed_, this->fx_saved_intensity_);
       break;
     default:
       break;
   }
   const bool team = this->fallback_team_() != nullptr;
+  // Live games with a game on the board that isn't the owner's: that game's
+  // colors are someone else's (the countdown screen goes neutral for it).
+  const bool others = this->live_mode_() && !this->live_fallback_;
   // The team palette, until somebody picks another (it then stays theirs).
   if (this->fx_pal_auto_ && this->fx_hol_.up < 0) {
     auto p = f->palette->active_index();
@@ -1314,11 +1326,12 @@ void GamedayComponent::fx_theme_tick_() {
       want.c[i] = ::espn::kHolidays[this->fx_hol_.up].c[i];
   } else if (team) {
     const GameSnapshot &g = this->game_;
-    const bool live = g.valid && g.state == GameState::IN;
+    const bool owners = g.valid && !others;
+    const bool live = owners && g.state == GameState::IN;
     // The board's game, else the team's schedule, else (Favorites) the
     // favorite on the board, as the countdown screen picks it.
-    const std::string *color = g.valid ? &g.team_color : &this->schedule_.team_color;
-    if (!g.valid && this->favorites_mode_() && !this->fav_.empty())
+    const std::string *color = owners ? &g.team_color : &this->schedule_.team_color;
+    if (!owners && this->favorites_mode_() && !this->fav_.empty())
       color = &this->fav_[this->fav_shown_ >= 0 && (size_t) this->fav_shown_ < this->fav_.size() ? this->fav_shown_ : 0]
                    .sched.team_color;
     // No color until ESPN's first read: keep what the slots have rather

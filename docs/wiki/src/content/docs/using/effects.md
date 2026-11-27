@@ -25,9 +25,9 @@ In [Home Assistant](/using/home-assistant/), **Select Page** has the same **Effe
 
 On a panel with a team (or favorites), effects play in your team's colors. The panel gives the effect two colors: your team's, and during a live game your opponent's (between games, white, or gold for a team whose color is close to white). A team color too dark to see on the panel, like navy or black, is brightened, the same as on the board.
 
-The palette starts on **\* Colors Only**, which uses only those two colors, so a pattern like **Plasma Ball** or **Metaballs** glows in your team's colors and nothing in between. The other palettes that start with **\*** use them too: **\* Color 1** is your team's color alone, **\* Colors 1&2** and **\* Color Gradient** blend between them. Patterns with a background, like **Fireworks**, **Rain** and **Snow Fall**, keep it black.
+The palette starts on **\* Colors Only**, which uses only those two colors, so a pattern like **Plasma Ball** or **Metaballs** glows in your team's colors and nothing in between. The other palettes that start with **\*** use them too: **\* Color 1** is your team's color alone, **\* Colors 1&2** and **\* Color Gradient** blend between them. Patterns with a background, like **Fireworks**, **Rain** and **Snow Fall**, keep it black, so on those **\* Colors 1&2** blends your team's color with black.
 
-Pick any other palette and the effect keeps it until the panel restarts. Every restart starts on your team's colors again. With no team or favorite picked, effects play in their own colors, as they were designed.
+Pick any other palette and the effect keeps it until the panel restarts. Every restart starts on your team's colors again. With no team or favorite picked, effects play in their own colors, as they were designed. In Live games, a game on the board that isn't your team's doesn't change them.
 
 ## Between games
 
@@ -55,7 +55,7 @@ With **After the game** on **Show effects**, the effect between games changes fo
 - **Halloween**, October 31: ghosts swirling in orange and purple (**PS Ghost Rider**).
 - **Christmas**, December 24 to 26: falling snow (**Snow Fall**).
 
-The holiday's effect plays all day, from midnight to midnight on the panel's own clock. The next day, or once your next game is near, your own effect, palette, speed and intensity come back as you had them. If you pick an effect, palette, speed or intensity during a holiday, the panel keeps yours, and the holiday's effect comes back the next time the panel plays effects between games.
+The holiday's effect plays all day, from midnight to midnight on the panel's own clock. The next day, or once your next game is near, your own effect, palette, speed and intensity come back as you had them. If you pick an effect, palette, speed or intensity during a holiday, the panel keeps yours, in your team's colors unless you picked a palette, and the holiday's effect comes back the next time the panel plays effects between games.
 
 **Holiday effects** is on by default. It shows under **After the game** on the device page's Display tab when **Show effects** is picked; turn it off to keep your own effect on holidays too. Holiday effects never play unless **After the game** is on **Show effects**, and an effect you put up yourself under **Showing** is never changed for a holiday.
 

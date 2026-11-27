@@ -37,7 +37,7 @@ through `update_important` in the panel's state.
 
 ## Unreleased
 
-Effects play in your team's colors, and holiday effects come on by themselves for July 4, Halloween and Christmas.
+Effects play in your team's colors, and with After the game on Show effects, holiday effects come on for July 4, Halloween and Christmas.
 
 ### ✨ New
 
