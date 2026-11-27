@@ -131,6 +131,10 @@ On Android, **Forget** on the network the panel is on says what happens before y
 :::
 
 :::note[Coming in the next app update]
+On Android, **Add network** under Wi-Fi networks in **Device** lists the networks the panel can see, strongest first, with how strong each signal is, as on the device page. It leaves out the network the panel is on, marks the ones it already knows **Saved** and an open one **Open**. Tap one to fill in its name, then enter the password, or leave it blank for an open one. Type the name of a hidden network instead. **Look again** looks once more. The list shows once the panel runs firmware that sends it. See [Wi-Fi](/using/wifi/#add-a-network-from-the-device-page).
+:::
+
+:::note[Coming in the next app update]
 The iPhone app gets the **Celebrations** choice too, so it's in both apps: **Full**, **Subtle** or **Off**, above **Opponent scores too** in **Celebrations** under **Display**, as on Android. It shows once the panel runs firmware with that setting.
 :::
 
