@@ -44,6 +44,10 @@ Effects play in your team's colors, and with After the game on Show effects, hol
 - 🎨 Effects start on your team's colors, with your opponent's during a live game
 - 🎄 **Holiday effects** under **After the game**: fireworks on July 4, ghosts on Halloween and snow December 24 to 26 when **Show effects** is picked
 
+### 🐛 Fixes
+
+- 🔁 The Clock and Effects pages come back after a restart or a power cut, as the Smart board, Flights and Weather do, with the effect playlist that was playing
+
 ## v2026.11.6
 
 A new Flights page shows the planes over your home, women's college basketball and volleyball join in, it can play an effect whenever no game of yours is on, a Game Day card shows a QR code between games, and Add network lists nearby Wi-Fi.
