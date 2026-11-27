@@ -20,7 +20,7 @@ These show on the start-up screen, under **GAME DAY**. On the 128x64 panel the Q
 | **JOINING** and a network name | The app sent the panel a network, and it's joining it. | Wait. If the name is wrong, pick again in the app. |
 | A QR code with **Scan for Game Day app** | The panel joined your Wi-Fi. | Scan it to open the app, or wait for the address. |
 | **Open gameday-2f6a70.local** | The panel's device page address. | Open it in a browser on the same Wi-Fi. |
-| **Looking for** a team, **live games** or **your teams** | The panel is loading its first scoreboard: at start-up, after you change the team, or back on the Scoreboard from the Clock, Effects or the Smart board. It shows for up to 10 seconds. | Wait. |
+| **Looking for** a team, **live games** or **your teams** | The panel is loading its first scoreboard: at start-up, after you change the team, or back on the Scoreboard after an hour or more on another page or turned off, with no game on. It shows for up to 10 seconds. | Wait. |
 
 | The panel says | What it means | What to do |
 | --- | --- | --- |

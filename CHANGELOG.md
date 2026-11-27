@@ -47,6 +47,7 @@ Effects play in your team's colors, and with After the game on Show effects, hol
 ### 🐛 Fixes
 
 - 🔁 The Clock and Effects pages come back after a restart or a power cut, as the Smart board, Flights and Weather do, with the effect playlist that was playing
+- 📺 Turned back on, or back on the Scoreboard from another page, the panel stays on the game it was showing with the score current, instead of looking for a game again; in Live games a restart mid-game comes back to it too
 
 ## v2026.11.6
 

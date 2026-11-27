@@ -538,6 +538,10 @@ void GamedayComponent::setup() {
   this->settle_update_mark_();
   this->team_cache_pref_ =
       global_preferences->make_preference<::espn::TeamCache>(fnv1_hash("gameday_team_cache_v1"));
+  this->live_cache_pref_ =
+      global_preferences->make_preference<::espn::LiveCache>(fnv1_hash("gameday_live_cache_v1"));
+  if (!this->live_cache_pref_.load(&this->live_saved_))
+    this->live_saved_ = ::espn::LiveCache{};
   this->load_wake_();
   this->rebuild_favorites_(false);
   this->apply_timezone_();
@@ -2697,10 +2701,20 @@ void GamedayComponent::loop() {
   // A picked Weather page reads the owner's games for its bottom row, as
   // seldom as a dark screen does (standby_read_due_()).
   const bool watch = picked && this->wxp_watch_() && !this->standby_;
-  if ((picked && !watch) || ((this->standby_ || watch) && !this->standby_read_due_()))
+  const bool away = picked || this->standby_;
+  // A picked page other than Weather reads nothing for night mode or Wake.
+  const bool due = !(picked && !watch) && (this->standby_ || watch) && this->standby_read_due_();
+  // Away with the board's game live: that game once a minute, so the
+  // Scoreboard is current when it is back (showing.h, kAwayWatchMs). The
+  // Weather page's own reads already cover its games.
+  const bool keep = away && !watch && this->away_watch_due_();
+  if (away && !due && !keep)
     return;
-  if (this->standby_ || watch)
+  if (due)
     this->standby_ms_ = millis();
+  if (away)
+    this->away_read_ms_ = millis();
+  this->job_away_ = keep && !due;
   this->start_job_();
 }
 
@@ -3782,6 +3796,7 @@ void GamedayComponent::apply_timezone_() {
 }
 
 void GamedayComponent::reset_game_() {
+  this->live_restored_ = false;  // the board follows something else now
   this->rebuild_favorites_(true);
   this->lingered_event_.clear();
   this->linger_backoff_ms_ = 0;
@@ -3863,10 +3878,20 @@ void GamedayComponent::showing_tick_() {
   const ::espn::Showing was = this->showing_;
   this->showing_ = now;
   if (now == ::espn::Showing::PICKED) {
-    ESP_LOGI(TAG, "Showing %s: no ESPN reads and no game states to Home Assistant until the Scoreboard is back",
+    ESP_LOGI(TAG,
+             "Showing %s: no ESPN reads but a live game's once a minute, and no game states to Home "
+             "Assistant, until the Scoreboard is back",
              ::espn::showing_word(now));
+    if (this->away_ms_ == 0) {
+      this->away_ms_ = millis() == 0 ? 1 : millis();
+      this->away_read_ms_ = millis();
+    }
     return;
   }
+  // A page After the game put up keeps the board's reads, so the board is
+  // current again unless the screen is dark.
+  if ((now == ::espn::Showing::AUTO || was != ::espn::Showing::PICKED) && !this->standby_)
+    this->away_ms_ = 0;
   if (now == ::espn::Showing::AUTO) {
     ESP_LOGI(TAG, "Showing %s: no game states to Home Assistant until the Scoreboard is back",
              ::espn::showing_word(now));
@@ -3876,14 +3901,52 @@ void GamedayComponent::showing_tick_() {
     ESP_LOGI(TAG, "Back on the Scoreboard from %s", ::espn::showing_word(was));
     return;
   }
-  // Nothing was read while the picked page was up, so every card is as old as
-  // the page: start over as a team change does, the boot screen's "Looking
-  // for" up until the first fresh read, and no old score on the board.
-  ESP_LOGI(TAG, "Back on the Scoreboard from a picked page: reading everything again");
+  this->back_on_board_("a picked page");
+}
+
+// The board follows a game that was live at its last read.
+bool GamedayComponent::board_live_() const {
+  if (this->game_.valid && this->game_.state == GameState::IN)
+    return true;
+  if (this->favorites_mode_())
+    for (const auto &e : this->fav_)
+      if (!this->fav_off_(e) && e.game.valid && e.game.state == GameState::IN)
+        return true;
+  return false;
+}
+
+bool GamedayComponent::away_watch_due_() const {
+  return this->away_ms_ != 0 && this->board_live_() && millis() - this->away_read_ms_ >= ::espn::kAwayWatchMs;
+}
+
+// Lit again, or back from a picked page (showing.h, board_resumes): the same
+// game, read now, or a fresh start after a long time away with nothing live.
+void GamedayComponent::back_on_board_(const char *from) {
+  const uint32_t now = millis();
+  const uint32_t away = this->away_ms_ == 0 ? 0 : now - this->away_ms_;
+  this->away_ms_ = 0;
+  // No game event for a score from while it was away.
   this->ha_tracker_.clear();
-  this->board_ready_ = false;
-  this->board_pending_ms_ = millis() == 0 ? 1 : millis();
-  this->restart_board_(false, false);
+  if (!this->board_ready_)
+    return;  // the board's first read is still to come
+  if (!::espn::board_resumes(away, this->board_live_())) {
+    // Every card is as old as the time away: start over as a team change
+    // does, the boot screen's "Looking for" up until the first fresh read.
+    ESP_LOGI(TAG, "Back on the Scoreboard from %s after %u min: reading everything again", from,
+             (unsigned) (away / MINUTE));
+    this->board_ready_ = false;
+    this->board_pending_ms_ = now == 0 ? 1 : now;
+    this->restart_board_(false, false);
+    return;
+  }
+  ESP_LOGI(TAG, "Back on the Scoreboard from %s after %u min: the same board, reading it now", from,
+           (unsigned) (away / MINUTE));
+  // Live games: the game it follows gets a full Switch every from here,
+  // rather than moving on the moment the board is back.
+  if (this->live_mode_() && this->schedule_.valid && !this->live_none_ && !this->live_fallback_ && !this->recap_on_)
+    this->live_started_ms_ = now == 0 ? 1 : now;
+  this->end_backoff_wait_();
+  this->schedule_next_(0);
 }
 
 std::string GamedayComponent::looking_for() const {
@@ -3915,24 +3978,27 @@ void GamedayComponent::standby_tick_() {
   this->fire_action_("screen");  // pages/guard.yaml pauses or resumes LVGL
   if (dark) {
     this->standby_ms_ = now;  // what the panel knew was fresh a moment ago
+    if (this->away_ms_ == 0) {
+      this->away_ms_ = now == 0 ? 1 : now;
+      this->away_read_ms_ = now;
+    }
     ESP_LOGI(TAG, "Screen dark: no cards, side reads or game states to Home Assistant, and only the reads "
-                  "that could light it again");
+                  "that could light it again or keep a live game current");
     return;
   }
-  // The board is as old as the dark: start over as a team change does, with
-  // the boot screen's "Looking for", no old score on the board, and no event
-  // for a score from while it was dark. A return from a picked page this
-  // same loop already did (showing_tick_), and a page After the game put
-  // up has no board to show.
-  if (this->showing_ != ::espn::Showing::BOARD || !this->board_ready_) {
+  // Under a picked page the board waits for that page to go (showing_tick_),
+  // which this same loop may already have done. A page After the game put
+  // up keeps its reads, so its board is current when it goes.
+  if (this->showing_ == ::espn::Showing::PICKED || this->away_ms_ == 0) {
     ESP_LOGI(TAG, "Screen lit");
     return;
   }
-  ESP_LOGI(TAG, "Screen lit: reading everything again");
-  this->ha_tracker_.clear();
-  this->board_ready_ = false;
-  this->board_pending_ms_ = now == 0 ? 1 : now;
-  this->restart_board_(false, false);
+  if (this->showing_ == ::espn::Showing::AUTO) {
+    this->away_ms_ = 0;
+    ESP_LOGI(TAG, "Screen lit");
+    return;
+  }
+  this->back_on_board_("a dark screen");
 }
 
 // While dark, a read only when it could light the screen again (showing.h,
@@ -3949,10 +4015,7 @@ bool GamedayComponent::standby_read_due_() const {
   const int64_t kick = this->owner_next_kick_(epoch);
   // A game last read live, however long ago: the next read says whether it
   // still is.
-  bool live = this->game_.valid && this->game_.state == GameState::IN;
-  if (this->favorites_mode_())
-    for (const auto &e : this->fav_)
-      live = live || (!this->fav_off_(e) && e.game.valid && e.game.state == GameState::IN);
+  const bool live = this->board_live_();
   if (watch) {
     // The Weather page counts from the last game read that came in, so one
     // put up (or back after a restart) with nothing read lately reads at
@@ -4465,6 +4528,33 @@ void GamedayComponent::start_job_() {
   }
   if (this->start_scan_rest_(j))
     return;
+  // After a restart, Live games reads the game it followed before first
+  // (startup.h, LiveCache), the way a scan's pick is read: the first read
+  // says whether it is still on (apply_job_).
+  if (this->live_mode_() && !this->live_cache_tried_ && !this->schedule_.valid && this->clock_set_()) {
+    this->live_cache_tried_ = true;
+    Schedule s;
+    uint32_t away = 0;
+    bool listed = false;
+    if (::espn::live_cache_load(this->live_saved_, (int64_t) this->time_->timestamp_now(), s, away))
+      for (League l : this->live_leagues_())
+        listed = listed || (uint8_t) l == s.league;
+    if (listed) {
+      ESP_LOGI(TAG, "Live games: reading game %s first, the one it followed before the restart", s.event_id.c_str());
+      this->schedule_ = s;
+      this->schedule_fetched_ms_ = now == 0 ? 1 : now;
+      this->live_away_id_ = away;
+      this->live_fav_ = -1;
+      this->live_none_ = false;
+      this->live_fallback_ = false;
+      this->recap_on_ = false;
+      this->live_started_ms_ = now == 0 ? 1 : now;
+      this->live_restored_ = true;
+      // The read names its side from live_away_id_, taken above before it
+      // was set: without the side the game doesn't parse.
+      j.our_id = this->orient_id_();
+    }
+  }
   if (this->live_mode_() && this->recap_on_) {
     // The finals rotation is up: read the days it still needs one by one,
     // then rescan for a live game when the wait is over.
@@ -4510,7 +4600,9 @@ void GamedayComponent::start_job_() {
         bool brk = ::espn::pick_break(this->game_);
         if (!brk)
           this->break_looked_ = false;  // play is on again: the next break gets its look
-        bool rotate = this->live_started_ms_ != 0 &&
+        // Nobody sees a move to another game while it is away, so the board
+        // keeps the one it follows until it is back (back_on_board_).
+        bool rotate = this->away_ms_ == 0 && this->live_started_ms_ != 0 &&
                       ::espn::rotate_due(now - this->live_started_ms_,
                                          (uint32_t) this->prefs2_.rotate_minutes * MINUTE, held, on_fav,
                                          this->best_game(), brk, this->break_looked_);
@@ -4905,7 +4997,10 @@ void GamedayComponent::run_job_() {
 void GamedayComponent::apply_job_() {
   Job &j = this->job_;
   const ::espn::JobKind kind = this->job_kind_();
-  if (kind == ::espn::JobKind::BOARD || kind == ::espn::JobKind::FAV_TEAM)
+  // The once-a-minute read while away (job_away_) keeps the board current,
+  // but doesn't make a game the owner left count as on for night mode or
+  // the automatic update (followed_game_live_).
+  if ((kind == ::espn::JobKind::BOARD || kind == ::espn::JobKind::FAV_TEAM) && !this->job_away_)
     this->game_read_ms_ = millis();
   if (j.need_msg) {
     this->apply_msg_job_();  // whatever the board follows, the card is the same
@@ -5039,6 +5134,7 @@ void GamedayComponent::apply_job_() {
         this->live_none_ = true;
         this->live_fallback_ = true;
         this->live_started_ms_ = now == 0 ? 1 : now;  // start the rescan clock
+        this->save_live_cache_();  // nothing live to come back to
         // No freshness marking here on purpose. What is on the board in the
         // fallback is favorite #1's card, and only a poll of that card can
         // say how old it is. Marking a scan good here reset misses_ every
@@ -5075,6 +5171,7 @@ void GamedayComponent::apply_job_() {
       this->live_fallback_ = false;
       this->live_started_ms_ = now == 0 ? 1 : now;
       this->schedule_ = Schedule{};
+      this->save_live_cache_();  // nothing live to come back to
       ::espn::reset_in_place(this->prev_);
       // The scan itself came back clean, so there is no run of failures to
       // report: clear the miss count. last_good_ms_ stays where it was,
@@ -5174,6 +5271,7 @@ void GamedayComponent::apply_job_() {
     this->live_started_ms_ = now == 0 ? 1 : now;
     ::espn::reset_in_place(this->game_);
     ::espn::reset_in_place(this->prev_);
+    this->save_live_cache_();  // a restart during it comes back to it
     this->schedule_next_(0);  // poll the chosen game right away
     return;
   }
@@ -5224,6 +5322,21 @@ void GamedayComponent::apply_job_() {
       this->schedule_next_(0);
       return;
     }
+  }
+  // The game Live games followed before a restart (start_job_): still on, it
+  // keeps the board; over, or not read, the scan picks as at any start.
+  if (this->live_restored_) {
+    this->live_restored_ = false;
+    if (!j.game_ok || j.game.state != GameState::IN) {
+      ESP_LOGI(TAG, "The game from before the restart is %s: scanning", j.game_ok ? "over" : "not read");
+      this->schedule_ = Schedule{};
+      this->schedule_fetched_ms_ = 0;
+      this->live_away_id_ = 0;
+      this->schedule_next_(0);
+      return;
+    }
+    ESP_LOGI(TAG, "Back on %s vs %s, the game it followed before the restart", j.game.team_abbr.c_str(),
+             j.game.opp_abbr.c_str());
   }
   if (!j.game_ok) {
     this->count_miss_();
@@ -5491,6 +5604,11 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
                                                        this->opponent_splashes(), this->big_plays());
   // Only a fresh read shows a three or a big play; this emit_ also runs for redraws.
   if (::espn::celeb_latched(celeb.kind) && !this->celeb_latch_.take(g, celeb.kind, millis()))
+    celeb = ::espn::CelebPlan{};
+  // A score read while the screen is dark or another page is up (the watch
+  // while away) is one nobody saw: no celebration for it when the board is
+  // back. The picked Weather page shows the owner's games, so it keeps them.
+  if (this->standby_ || (this->showing_ == ::espn::Showing::PICKED && !this->wxp_watch_()))
     celeb = ::espn::CelebPlan{};
   // A walk-off in the same read as the final: the walk-off plays now and the
   // win screen when it ends (loop() calls back with walk_off_release_ set).
@@ -7065,6 +7183,22 @@ void GamedayComponent::save_team_cache_(const ::espn::Team *team) {
                                                   (int64_t) this->time_->timestamp_now(), c))
     return;
   this->team_cache_pref_.save(&c);
+}
+
+// Live games: the game the board follows now, or a blank record when it
+// follows none. Written only when that changes, at most once a Switch every
+// (1 minute at the least), and ESPHome batches the flash writes.
+void GamedayComponent::save_live_cache_() {
+  const bool following = this->live_mode_() && !this->live_none_ && !this->live_fallback_ && !this->recap_on_;
+  const ::espn::LiveCache c =
+      following && this->time_ != nullptr
+          ? ::espn::live_cache_save(this->schedule_, this->live_away_id_, (int64_t) this->time_->timestamp_now())
+          : ::espn::LiveCache{};
+  if (memcmp(c.event_id, this->live_saved_.event_id, sizeof(c.event_id)) == 0 && c.league == this->live_saved_.league)
+    return;
+  this->live_saved_ = c;
+  this->live_cache_pref_.save(&c);
+  ESP_LOGD(TAG, "Live games: kept game %.16s for a restart", c.event_id[0] != '\0' ? c.event_id : "(none)");
 }
 
 // ---- device page routes -----------------------------------------------------

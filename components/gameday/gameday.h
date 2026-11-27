@@ -1344,6 +1344,24 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t game_read_ms_{0};  // millis() of the last board or favorite game read applied
   void standby_tick_();
   bool standby_read_due_() const;
+  // Away from the Scoreboard, a dark screen or a picked page (showing.h,
+  // kAwayWatchMs): away_ms_ is millis() it went away, 0 while it is on the
+  // Scoreboard; away_read_ms_ the last read while away. job_away_ marks the
+  // job in flight as only that watch, which doesn't count as a game read for
+  // night mode or the automatic update (game_read_ms_). All main loop only.
+  uint32_t away_ms_{0};
+  uint32_t away_read_ms_{0};
+  bool job_away_{false};
+  bool board_live_() const;      // the game the board follows was live at its last read
+  bool away_watch_due_() const;  // away, that game live, and a minute since the last read
+  void back_on_board_(const char *from);  // keep the board, or start over (board_resumes)
+  // Live games: the followed game kept across a restart (startup.h,
+  // LiveCache). live_restored_ until the first read of it says if it's on.
+  ESPPreferenceObject live_cache_pref_;
+  ::espn::LiveCache live_saved_{};
+  bool live_cache_tried_{false};
+  bool live_restored_{false};
+  void save_live_cache_();
   // Somebody picked a team, a mode or the favorites: the effect between
   // games ends until after the next game's final, as a remote press does.
   void fx_between_end_(const char *why);
