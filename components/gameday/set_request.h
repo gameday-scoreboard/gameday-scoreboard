@@ -40,7 +40,7 @@ constexpr const char *kSetKeys[] = {"mode",   "rotate",   "fav1",   "fav2",    "
                                     "nick",   "lists",    "list",   "sport",   "hook",    "pregame",
                                     "news",   "town",     "wxon",     "wxunit",   "flrad",   "flface",  "flrx",
                                     "flkey",  "cards",    "wake",     "wakelead",
-                                    "after",   "remote1", "remote2", "remote3", "remote4", "celebrate",
+                                    "after",   "holidayfx", "remote1", "remote2", "remote3", "remote4", "celebrate",
                                     "field",   "winbar",  "spark",   "bigplays", "keepfav", "fxlists", "fxlist"};
 
 // Set keys that do something once rather than hold a setting, so the
@@ -500,6 +500,7 @@ enum class SetKind : uint8_t {
   WAKE,         // on, Game-day wake (wake.h)
   WAKE_LEAD,    // value, minutes before the start, kWakeLeadMin to kWakeLeadMax
   AFTER,        // value, After the game: an After
+  HOLIDAYFX,    // on, Holiday effects inside After the game: Effects (fx_theme.h)
   NEWS,         // on, the news card between games (news.h)
   TOWN,         // text, the weather card's town (weather.h); "" clears it and turns the card off
   WXON,         // on, the weather card between games
@@ -758,6 +759,8 @@ inline bool parse_set(const std::string &k, const std::string &v, SetOp &op, siz
   }
   if (k == "wake")
     return on(SetKind::WAKE);
+  if (k == "holidayfx")
+    return on(SetKind::HOLIDAYFX);
   if (k == "town") {
     op.kind = SetKind::TOWN;
     op.text = town_clean(v);

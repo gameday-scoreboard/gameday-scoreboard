@@ -70,6 +70,7 @@
 #include "settings_change.h"
 #include "startup.h"
 #include "wake.h"
+#include "fx_theme.h"
 #include "smart_board.h"
 #include "showing.h"
 #include "update_nudge.h"
@@ -1298,6 +1299,24 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   bool fx_yielding_{false};
   uint32_t fx_between_ms_{0};
   void fx_between_tick_();  // from loop(), four times a second
+  void fx_between_check_(uint32_t now);
+  // Team colors and holiday effects (fx_theme.h), ticked with the effect
+  // between games. fx_slots_ is what the color slots were last loaded with;
+  // fx_pal_auto_ stays true until somebody picks a palette, fx_pal_set_
+  // says the team palette is on; fx_theme_writing_ marks the panel's own
+  // writes, which aren't a pick. fx_saved_* is the owner's effect, palette,
+  // speed and intensity while a holiday has them.
+  ::espn::FxSlots fx_slots_{::espn::fx_wled_slots()};
+  bool fx_pal_auto_{true};
+  bool fx_pal_set_{false};
+  bool fx_theme_writing_{false};
+  ::espn::HolState fx_hol_{};
+  char fx_saved_effect_[40]{};  // the longest effect name is 16 letters
+  int fx_saved_palette_{-1};
+  int fx_saved_speed_{-1};
+  int fx_saved_intensity_{-1};
+  void fx_theme_tick_();
+  void fx_theme_write_(const char *effect, const char *palette, int palette_index, int speed, int intensity);
   bool fx_page_is_(const char *name) const;
   void fx_set_page_(const char *name);
   // What Showing has up (showing.h). showing_ is what loop() last acted on;

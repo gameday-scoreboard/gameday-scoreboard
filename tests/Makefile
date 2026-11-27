@@ -31,7 +31,7 @@ all: build/test_parse build/test_networks build/test_api build/test_settings bui
 	./build/test_weather_page
 	./build/test_clock
 
-SRCS = test_parse.cpp golden_football.cpp test_set.cpp test_fx_playlists.cpp ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp ../components/gameday/sport_volleyball.cpp
+SRCS = test_parse.cpp golden_football.cpp test_set.cpp test_fx_playlists.cpp test_fx_theme.cpp ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp ../components/gameday/sport_volleyball.cpp
 PARSER_ONLY = ../components/gameday/espn_parse.cpp ../components/gameday/sport_baseball.cpp ../components/gameday/sport_soccer.cpp ../components/gameday/sport_basketball.cpp ../components/gameday/sport_hockey.cpp ../components/gameday/sport_volleyball.cpp
 
 build/test_parse: build/miniz.o $(SRCS) $(wildcard ../components/gameday/*.h) miniz.h

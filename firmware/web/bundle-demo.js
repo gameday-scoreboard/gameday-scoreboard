@@ -252,6 +252,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
             <div class="ctl"><label for="afterGame">After the game<small id="afterHint"></small></label><select id="afterGame">
               <option value="scoreboard">Stay on the scoreboard</option><option value="off">Turn off</option><option value="clock">Show the clock</option><option value="smartboard">Show the Smart board</option><option value="effects">Show effects</option><option value="flights">Show flights</option><option value="weather">Show the weather</option>
             </select></div>
+            <div class="ctl" id="holidayRow" hidden><label>Holiday effects<small>On July 4, Halloween and December 24 to 26, the effect between games is the holiday's: fireworks, ghosts or falling snow. Your own effect comes back the next day.</small></label><button class="sw" data-set="holidayfx" aria-label="Holiday effects"></button></div>
           </div>
         </div>
       </div>
@@ -731,7 +732,7 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
     msg: String, msgurl: String, msgevery: Number, nick: String,
     hook: String, pregame: Number,
     night: (v) => v === "1", nightscreen: (v) => v === "1", nightstart: String, nightend: String, nightlevel: Number,
-    wake: (v) => v === "1", wakelead: Number, after: String,
+    wake: (v) => v === "1", wakelead: Number, after: String, holidayfx: (v) => v === "1",
   };
   const sameForm = {
     mode: (a, b) => (a || 0) === (b || 0),
@@ -2634,6 +2635,8 @@ const LIST_LOOKS={"colors":[["red","#ff2020"],["orange","#ff8000"],["yellow","#f
       if (![...after.options].some((o) => o.value === S.after)) after.add(new Option(S.after, S.after));
       after.value = S.after;
     }
+    // Holiday effects only play inside Show effects; firmware from before has none.
+    $("#holidayRow").hidden = S.after !== "effects" || S.holidayfx === undefined;
     const back = S.wake ? " Game-day wake turns it back on before the next game."
       : " Turn on Game-day wake to bring it back before the next game.";
     $("#afterHint").textContent = S.after === "off"
