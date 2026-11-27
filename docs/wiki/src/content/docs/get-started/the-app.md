@@ -50,6 +50,10 @@ In both apps the Board follows the device page's Home tab:
 When **Showing** is on **Effects** and the panel has [effect playlists](/using/effects/#effect-playlists), **Effect playlist** shows under the effect controls, as on the device page's Home tab. Pick one to play it from the top, or **None** to stop it. While one plays, the picker names it. Picking an effect, palette, speed or intensity yourself stops it, and the panel keeps your pick. You make and change effect playlists on the device page's **Customize** tab.
 :::
 
+:::note[Coming in the next app update]
+On Android, when **Showing** is on **Weather**, the line under it says the page stays up until you pick another one and names the place its forecast is for. With no town set, it asks you to set your town first, in **Display > Weather**. It shows once the panel runs firmware with the Weather page.
+:::
+
 If the app loses its connection to the panel for a moment while the panel still answers, **Reconnecting…** shows at the top of the Board until it's back. If the panel doesn't answer at all, the Board says **Can't reach** and the panel's name, with what to check.
 
 When the panel shows its thermometer or plug in the corner, the Board shows the same words under the game, **Running warm** or **Power dipped**, with what to do. There's nothing to press: it goes when the panel's icon does. See [Icons in the corner](/help/panel-messages/#icons-in-the-corner).
@@ -168,6 +172,10 @@ On iPhone and Android, **After the game** also has **Show the Smart board**: you
 
 :::note[Coming in the next app update]
 On iPhone and Android, **After the game** also has **Show effects**: the effect the Effects page is set to, whenever no game of yours is on, until the **Turns on** time before your next game. See [Between games](/using/effects/#between-games).
+:::
+
+:::note[Coming in the next app update]
+On Android, **After the game** also has **Show flights** and **Show the weather**: the [Flights](/using/flights/) page or the [Weather](/using/weather/) page between games, until the **Turns on** time before your next game. **Turns on** shows with them too. Each shows once the panel runs firmware with that page.
 :::
 
 On iPhone and Android, **Customize** has **Pictures** after the message card, like the device page: the pictures on your panel, each with **Delete**, and **Add a picture**, which picks from your phone's photos. A photo is shrunk to fit the panel and a GIF up to 128 by 64 pixels goes as it is (see [Pictures](/using/pictures/)). It shows once the panel runs firmware with pictures.
