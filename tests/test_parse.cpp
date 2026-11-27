@@ -2187,6 +2187,46 @@ static void test_schedule_due() {
   CHECK(schedule_due(true, false, before_wrap + 1000u + kSix, before_wrap, kSix));
 }
 
+// Live games keeps the game it followed across a restart (startup.h,
+// LiveCache): the ids from recorded team documents, ages from the clock.
+static void test_live_cache() {
+  Schedule d;
+  CHECK(parse_team_str(slurp("fixtures/team_ncaa_bc.json"), d));
+  d.league = (uint8_t) League::NCAA;
+  const int64_t followed = 1'800'000'000;
+  LiveCache c = live_cache_save(d, 103, followed);
+  Schedule s;
+  uint32_t away = 0;
+  // Restarted an hour into it: the same game and side, college's group kept.
+  CHECK(live_cache_load(c, followed + 3600, s, away));
+  CHECK(s.valid);
+  CHECK_EQ(s.event_id, std::string("401856777"));
+  CHECK_EQ(s.group, (uint32_t) 1);
+  CHECK_EQ(s.league, (uint8_t) League::NCAA);
+  CHECK_EQ(away, (uint32_t) 103);
+  // Four hours is as long as a followed game can still be on.
+  CHECK(live_cache_load(c, followed + LIVE_CACHE_MAX_AGE, s, away));
+  CHECK(!live_cache_load(c, followed + LIVE_CACHE_MAX_AGE + 1, s, away));
+  // A clock that jumped back, or no clock yet.
+  CHECK(!live_cache_load(c, followed - 1, s, away));
+  CHECK(!live_cache_load(c, 0, s, away));
+  // Nothing live (a blank record), no clock at the save, an id too long for
+  // the record or none at all: nothing comes back.
+  CHECK(!live_cache_load(LiveCache{}, followed, s, away));
+  CHECK(!live_cache_load(live_cache_save(d, 103, 0), followed, s, away));
+  Schedule longid = d;
+  longid.event_id = "1234567890123456";  // 16 characters, no room for the end
+  CHECK(!live_cache_load(live_cache_save(longid, 103, followed), followed, s, away));
+  Schedule none;
+  none.valid = true;
+  CHECK(!live_cache_load(live_cache_save(none, 103, followed), followed, s, away));
+  // The longest id that fits: 15 characters.
+  Schedule fits = d;
+  fits.event_id = "123456789012345";
+  CHECK(live_cache_load(live_cache_save(fits, 103, followed), followed, s, away));
+  CHECK_EQ(s.event_id, std::string("123456789012345"));
+}
+
 static void test_team_cache() {
   Schedule d;
   CHECK(parse_team_str(slurp("fixtures/team_nfl_dal.json"), d));
@@ -10581,6 +10621,7 @@ int main() {
   test_play_blocks();
   test_live_scan_clock();
   test_team_cache();
+  test_live_cache();
   test_boot_hold();
   test_rotate_minutes();
   test_mlb_urls();

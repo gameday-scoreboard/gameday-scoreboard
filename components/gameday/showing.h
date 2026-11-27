@@ -43,6 +43,19 @@ inline const char *showing_word(Showing s) {
   return s == Showing::BOARD ? "the Scoreboard" : s == Showing::AUTO ? "a page After the game put up" : "a picked page";
 }
 
+// Away from the Scoreboard (a dark screen or a picked page) with the game the
+// board follows live: one read of it a minute, so the board is current the
+// moment it is back.
+static const uint32_t kAwayWatchMs = 60u * 1000u;
+// Away longer than this with no live game, the board starts over instead.
+static const uint32_t kAwayResumeMs = 60u * 60u * 1000u;
+
+// Back on the Scoreboard (lit again, or from a picked page) after away_ms:
+// true keeps the board and its game and reads it now; false starts over as
+// a team change does. A game that was live keeps the board however long it
+// was away: the read now says whether it still is.
+inline bool board_resumes(uint32_t away_ms, bool live) { return live || away_ms < kAwayResumeMs; }
+
 // A dark screen (Power off, or the night schedule's screen-off) reads only
 // what could light it again: night mode lights it for a live game of the
 // owner's (night_dark: the light is on, the night has the screen off), and

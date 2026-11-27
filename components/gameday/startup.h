@@ -96,6 +96,58 @@ inline bool team_cache_load(const TeamCache &c, League league, uint32_t team_id,
   return true;
 }
 
+// Live games: the game the board followed, kept in flash so a restart in the
+// middle of it goes back to it instead of to the first live game a scan
+// reads. Saved when the board starts following a game, blank when nothing
+// is live.
+struct LiveCache {
+  uint8_t league;
+  char event_id[16];
+  uint32_t group;
+  uint32_t away_id;     // the side the board names first (live_away_id_)
+  int64_t saved_epoch;  // when the board started following it
+} __attribute__((packed));
+static_assert(sizeof(LiveCache) == 33,
+              "LiveCache is saved: a new size needs a new preference key or a migration, not a new number");
+
+// Started longer ago than this, a followed game is over.
+static const int64_t LIVE_CACHE_MAX_AGE = 4 * 3600;
+
+// The record for the game just followed; a blank one for an id too long
+// for it, so an older game can't load in its place.
+inline LiveCache live_cache_save(const Schedule &s, uint32_t away_id, int64_t now_epoch) {
+  LiveCache out{};
+  if (!s.valid || now_epoch <= 0 || s.event_id.empty() || s.event_id.size() >= sizeof(out.event_id))
+    return out;
+  out.league = s.league;
+  memcpy(out.event_id, s.event_id.c_str(), s.event_id.size());
+  out.group = s.group;
+  out.away_id = away_id;
+  out.saved_epoch = now_epoch;
+  return out;
+}
+
+// The saved game, while it can still be on: followed within the last four
+// hours. The first read of it says whether it is.
+inline bool live_cache_load(const LiveCache &c, int64_t now_epoch, Schedule &out, uint32_t &away_id) {
+  char id[sizeof(c.event_id) + 1];
+  memcpy(id, c.event_id, sizeof(c.event_id));
+  id[sizeof(c.event_id)] = '\0';
+  if (id[0] == '\0' || now_epoch <= 0)
+    return false;
+  const int64_t age = now_epoch - c.saved_epoch;
+  if (age < 0 || age > LIVE_CACHE_MAX_AGE)
+    return false;
+  out = Schedule{};
+  out.valid = true;
+  out.event_id = id;
+  out.group = c.group;
+  out.kickoff_epoch = c.saved_epoch;
+  adopt_league(out, (League) c.league);
+  away_id = c.away_id;
+  return true;
+}
+
 // Once something asks the boot screen to hide, it stays up until the first
 // real scoreboard is ready, and never longer than this after that ask. Then
 // it hides over whatever the board has.

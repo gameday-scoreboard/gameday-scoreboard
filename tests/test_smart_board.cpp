@@ -179,6 +179,21 @@ static void test_standby_every() {
   CHECK(standby_every_ms(false, true, now, now + 20 * 60, 5) == 60u * 1000u);  // never under 15
 }
 
+// Back on the Scoreboard (showing.h, board_resumes): the same board after a
+// short time away or with a game that was live, a fresh start after an hour
+// away with nothing live.
+static void test_board_resumes() {
+  const uint32_t min = 60u * 1000u;
+  CHECK(board_resumes(0, false));         // off and straight back on
+  CHECK(board_resumes(20u * 1000u, true));  // the bench's 20 s off during a game
+  CHECK(board_resumes(59 * min, false));  // a pregame card, under the hour
+  CHECK(!board_resumes(60 * min, false));  // an hour on the Clock page, nothing live
+  CHECK(!board_resumes(9 * 60 * min, false));  // the night's screen-off
+  CHECK(board_resumes(3 * 60 * min, true));  // a long game the watch kept reading
+  CHECK(board_resumes(0xFFFFFFFFu, true));  // the longest millis() span still keeps a live game
+  CHECK(kAwayWatchMs == 60u * 1000u);
+}
+
 int main() {
   test_plain_rows();
   test_leading_tag();
@@ -189,6 +204,7 @@ int main() {
   test_font();
   test_showing();
   test_standby_every();
+  test_board_resumes();
   printf("%d checks, %d failures\n", checks, failures);
   return failures ? 1 : 0;
 }
