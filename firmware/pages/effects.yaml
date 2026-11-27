@@ -8,9 +8,12 @@
 #
 # The Effects page is an empty black LVGL page: its on_load starts the effect
 # (gd_fx_start), and the page select's state callback stops it (gd_fx_stop)
-# whenever the selection is anything else, whoever changed it. The page
-# manager has no saved page, so every boot starts on the Scoreboard and an
-# effect never comes back on its own, except one After the game asks for.
+# whenever the selection is anything else, whoever changed it. Effects
+# somebody picked under Showing comes back after a restart or a power cut,
+# with the effect playlist that was playing (gd_fx_pinned below), unless the
+# panel restarted from a crash or a freeze, which might be the effect's. An
+# effect After the game put up is not saved: the next check between games
+# puts it back up itself.
 #
 # After the game set to Effects (components/gameday/wake.h, After::EFFECTS;
 # off out of the box) has the gameday component put this page up over the
@@ -143,6 +146,34 @@ globals:
     type: int
     restore_value: no
     initial_value: '16'
+  # Showing is on Effects because somebody picked it there (or a playlist of
+  # theirs put it up), so it comes back after a restart. Any other page,
+  # the panel's yields included, clears it: the restart brings back what
+  # Showing had up. A firmware install's yield is the one that doesn't
+  # (gd_fx_installing).
+  - id: gd_fx_pinned
+    type: bool
+    restore_value: yes
+    initial_value: 'false'
+  # The effect playlist playing then, by its place in "Effect playlist"
+  # (0 for None), so it carries on after the restart
+  - id: gd_fx_list_at
+    type: int
+    restore_value: yes
+    initial_value: '0'
+  # A firmware install has begun: its yield and the playlist stopping with
+  # it leave gd_fx_pinned and gd_fx_list_at as they were, for the restart
+  # after it (gameday-common.yaml ota)
+  - id: gd_fx_installing
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  # The Effects page is coming back after a restart, not being picked:
+  # gd_fx_start skips the night skip, as for After the game's effect
+  - id: gd_fx_restoring
+    type: bool
+    restore_value: no
+    initial_value: 'false'
 
 esphome:
   on_boot:
@@ -204,8 +235,63 @@ esphome:
             // hand or Showing leaves Effects.
             id(gameday_ctl).set_fx_controls(id(gd_fx_effect), id(gd_fx_palette), id(gd_fx_speed),
                                             id(gd_fx_intensity), id(page_manager));
+            // After set_fx_controls, so the gameday component's callback has
+            // already said whether After the game put Effects up
+            // (fx_between_up) when this one reads it.
+            id(page_manager).add_on_state_callback([](size_t index) {
+              const char *page = id(page_manager).option_at(index);
+              const bool pin = page != nullptr && strcmp(page, "Effects") == 0 && !id(gameday_ctl).fx_between_up();
+              if (page == nullptr || strcmp(page, "Effects") != 0)
+                id(gd_fx_restoring) = false;
+              if (pin != id(gd_fx_pinned) && !id(gd_fx_installing)) {
+                id(gd_fx_pinned) = pin;
+                id(gd_fx_pin_sync).execute();
+              }
+            });
+            id(gd_fx_list_select).add_on_state_callback([](size_t index) {
+              if ((int) index != id(gd_fx_list_at) && !id(gd_fx_installing)) {
+                id(gd_fx_list_at) = (int) index;
+                id(gd_fx_pin_sync).execute();
+              }
+            });
+            if (id(gd_fx_pinned)) {
+              // A crash or a freeze may have been the effect's: back on the
+              // Scoreboard, so a bad effect can't restart the panel over and
+              // over.
+              const auto why = esp_reset_reason();
+              if (why == ESP_RST_PANIC || why == ESP_RST_INT_WDT || why == ESP_RST_TASK_WDT || why == ESP_RST_WDT) {
+                ESP_LOGW("effects", "Not back on Effects: the panel restarted from a crash or a freeze");
+                id(gd_fx_pinned) = false;
+                id(gd_fx_pin_sync).execute();
+              } else if (!id(gameday_ctl).display_on()) {
+                // Asleep after a game (the boot step at 300): Power off ends
+                // an effect, so the panel wakes on the Scoreboard.
+                id(gd_fx_pinned) = false;
+                id(gd_fx_pin_sync).execute();
+              } else {
+                id(gd_fx_restoring) = true;
+                const int at = id(gd_fx_list_at);
+                if (at > 0 && (size_t) at < id(gd_fx_list_select).size()) {
+                  ESP_LOGI("effects", "Back on Effects with its playlist, as Showing was before the restart");
+                  // Puts the Effects page up itself (play_fx_list_)
+                  id(gd_fx_list_select).make_call().set_index(at).perform();
+                }
+                const auto cur = id(page_manager).current_option();
+                if (cur.empty() || strcmp(cur.c_str(), "Effects") != 0) {
+                  ESP_LOGI("effects", "Back on Effects, as Showing was before the restart");
+                  id(page_manager).show_page("gd_fx_page");
+                }
+              }
+            }
 
 script:
+  # Into flash at once, as gd_sb_pin_sync does for the Smart board.
+  - id: gd_fx_pin_sync
+    mode: restart
+    then:
+      - delay: 1100ms
+      - lambda: 'id(gameday_ctl).sync_soon();'
+
   # The screen goes back to the scoreboard: something the owner should see,
   # or asked for, is about to show. A no-op while no effect runs. Showing
   # the page publishes Scoreboard, and the callback above stops the effect.
@@ -256,9 +342,12 @@ script:
             });
             return;
           }
-          // After the game put the page up itself, between games: nobody
-          // picked it, so the night schedule carries on.
-          if (!id(gameday_ctl).fx_between_up())
+          // After the game put the page up itself, between games, or it came
+          // back after a restart: nobody picked it just now, so the night
+          // schedule carries on.
+          const bool restoring = id(gd_fx_restoring);
+          id(gd_fx_restoring) = false;
+          if (!id(gameday_ctl).fx_between_up() && !restoring)
             id(gameday_ctl).night_skip("the Effects page");
           id(gd_fx_arm) = true;
       - if:
@@ -399,6 +488,7 @@ select:
   - platform: gameday
     gameday_id: gameday_ctl
     type: fx_playlist
+    id: gd_fx_list_select
     name: "Effect playlist"
     icon: "mdi:playlist-play"
 

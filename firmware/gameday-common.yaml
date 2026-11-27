@@ -185,6 +185,25 @@ esphome:
               - script.execute: gd_ble_grace
             else:
               - ble.enable:
+    # Showing on the Clock, as somebody picked it there, comes back after a
+    # restart or a power cut, as the Smart board, Effects, Flights and Weather
+    # do in their own pages. After the page manager has published its default
+    # page (Scoreboard).
+    - priority: -200.0
+      then:
+        - lambda: |-
+            id(page_manager).add_on_state_callback([](size_t index) {
+              const char *page = id(page_manager).option_at(index);
+              const bool clock = page != nullptr && strcmp(page, "Clock") == 0;
+              if (clock != id(gd_clock_pinned)) {
+                id(gd_clock_pinned) = clock;
+                id(gd_clock_pin_sync).execute();
+              }
+            });
+            if (id(gd_clock_pinned)) {
+              ESP_LOGI("clock", "Back on the Clock, as Showing was before the restart");
+              id(page_manager).show_page("page_time_date");
+            }
 
 external_components:
   - source:
@@ -296,18 +315,26 @@ api:
 
 ota:
   # The panel sits on its last frame through an install; make that the
-  # scoreboard, not an effect (pages/effects.yaml).
+  # scoreboard, not an effect (pages/effects.yaml). The restart after it
+  # still brings back Effects and its playlist if somebody picked them
+  # (gd_fx_installing); an install that fails lets go of that again.
   - platform: esphome
     on_begin:
+      - lambda: 'id(gd_fx_installing) = true;'
       - script.execute:
           id: gd_fx_yield
           reason: "a firmware install"
+    on_error:
+      - lambda: 'id(gd_fx_installing) = false;'
   - platform: http_request
     id: gd_ota_http
     on_begin:
+      - lambda: 'id(gd_fx_installing) = true;'
       - script.execute:
           id: gd_fx_yield
           reason: "a firmware install"
+    on_error:
+      - lambda: 'id(gd_fx_installing) = false;'
 
 # The panel remembers up to five networks (home, a phone hotspot, a friend's
 # house) and tries the last one that worked first. Setup from the app or the
@@ -391,6 +418,12 @@ wifi:
                  (unsigned) heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
 
 script:
+  # Into flash at once, as gd_sb_pin_sync does for the Smart board.
+  - id: gd_clock_pin_sync
+    mode: restart
+    then:
+      - delay: 1100ms
+      - lambda: 'id(gameday_ctl).sync_soon();'
   # The HUB75 driver turns itself off at brightness 0 and drops every pixel
   # write while it is off, LVGL's flushes included. LVGL has no idea: it marks
   # those areas clean, so when the panel comes back only what is invalidated
@@ -666,6 +699,12 @@ image:
     transparency: alpha_channel
 
 globals:
+  # Showing is on the Clock because somebody picked it there, so it comes
+  # back after a restart (the boot step at -200)
+  - id: gd_clock_pinned
+    type: bool
+    restore_value: yes
+    initial_value: 'false'
   - id: gd_update_checked
     type: bool
     restore_value: no

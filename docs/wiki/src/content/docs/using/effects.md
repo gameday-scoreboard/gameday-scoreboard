@@ -81,7 +81,7 @@ The playlist stops, and the panel stays on the effect it was showing, when:
 
 Editing the one that's playing doesn't start it over. It carries on from the effect that's up: change that effect and the change shows at once, take it out and the next one comes up, and changing, adding or moving the others leaves it playing. Renaming the playlist or moving it in the list doesn't interrupt it either.
 
-Every time the panel starts it shows the Scoreboard, so a playlist never comes back on its own after a restart. The effect playlists themselves are kept, and a [settings backup](/using/backup/) saves them.
+A playlist that was playing when the panel restarted, or lost power, carries on when it's back. The effect playlists themselves are kept, and a [settings backup](/using/backup/) saves them.
 
 A [WizMote remote](/using/remote/#a-button-that-plays-an-effect-playlist) button can start one too: set it to **Effect playlist:** and the playlist's name under **Showing**.
 
@@ -97,10 +97,12 @@ When the panel has something to tell you, or you ask it for the screen, it switc
 - The heat or power mark in the corner: **Running warm** or **Power dipped**.
 - A **banner** you send from the device page, the app or Home Assistant. It shows over the board, not over the effect.
 - Holding the button on the controller for the panel's address, and **Show on panel** under **FCC information**.
-- A firmware install, so the panel sits on the board, not a pattern, until it restarts.
+- A firmware install, so the panel sits on the board, not a pattern, until it restarts. Effects you picked comes back after that restart.
 - The night schedule's screen-off, and turning **Panel on** off. Picking Effects while the panel is dim or dark for the night turns night mode off for the rest of the night, the same as **Panel on** or a team pick.
 
 Picking Effects while the heat or power mark is up, or while the panel says its Wi-Fi wants a sign-in, leaves **Showing** on **Scoreboard**, and the panel's log says why.
+
+Effects you picked stays up through a restart or a power cut, with its playlist if one was playing. A restart from a crash or a freeze starts on the Scoreboard instead, in case the effect caused it. An effect that **After the game** put up comes back on its own at the next check between games.
 
 ## The effects
 
