@@ -2,8 +2,8 @@
 
 ESPHome firmware for a standalone sports scoreboard on an ESP32-S3
 driving HUB75 LED panels: the NFL, college football, MLB, the NBA, the
-WNBA, men's and women's college basketball, the NHL, MLS and the Premier League. It
-follows games from ESPN's public API by itself and serves its own
+WNBA, men's and women's college basketball, women's college volleyball,
+the NHL, MLS and the Premier League. It follows games from ESPN's public API by itself and serves its own
 settings page. CONTRIBUTING.md has the same ground for people; this file
 is the short version.
 
@@ -16,11 +16,11 @@ is the short version.
   only names itself and picks a pin map from `firmware/controllers/`;
   everything else is in `firmware/gameday-common.yaml`.
   `firmware/gameday-2panel.yaml` is gameday.yaml booting two panels wide.
-  The installer offers the Waveshare and both MoonHub75 builds; the
-  Waveshare build hasn't run on hardware yet.
-  `firmware/gameday-demo.yaml` and `firmware/gameday-scoreboard75-demo.yaml`
-  add the scripted demo (`firmware/pages/demo.yaml`) for test builds; they
-  are never released.
+  The installer offers the Waveshare and both MoonHub75 builds, Waveshare
+  first; the Waveshare build ran on a board for the first time on 2026-11-25.
+  `firmware/gameday-waveshare-demo.yaml`, `firmware/gameday-demo.yaml` and
+  `firmware/gameday-scoreboard75-demo.yaml` add the scripted demo
+  (`firmware/pages/demo.yaml`) for test builds; they are never released.
 - `components/gameday`: ESPN fetching, parsing and game logic (C++).
 - `components/panel_layout`: the one-panel or two-panel layout, applied at
   boot from a saved preference.

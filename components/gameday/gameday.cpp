@@ -2207,6 +2207,7 @@ void GamedayComponent::apply_fav_job_(uint32_t now) {
   std::swap(e.game, j.game);
   const GameSnapshot &old = j.game;
   this->goal_holds_.update(e.game);
+  this->stories_.read(e.game, millis());
   // A refresh that came back with the same final backs off instead of
   // retrying every minute: six hours when the look-ahead found no game in the
   // coming days, 15 minutes when a read failed or the league does not look
@@ -2808,7 +2809,7 @@ bool GamedayComponent::card_ok_(::espn::Card c) const {
       if (this->countdown_.ymd == 0)
         return false;
       // Its day is over: nothing until the owner picks another.
-      return !this->clock_set_() || (int64_t) this->time_->timestamp_now() < this->custom_start_() + ::espn::kDayS;
+      return !this->clock_set_() || (int64_t) this->time_->timestamp_now() < this->custom_end_();
     }
     case ::espn::Card::MESSAGE:
       return !this->msg_src_().empty() || !this->msg_text_.empty();
@@ -5108,6 +5109,7 @@ void GamedayComponent::apply_job_() {
   this->cache_unconfirmed_ = false;
   this->gone_event_.clear();
   this->goal_holds_.update(j.game);
+  this->stories_.read(j.game, millis());
   this->prev_ = this->game_;
   this->game_ = j.game;
   this->mark_good_poll_();
@@ -5236,9 +5238,9 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   UpdateFields f;
   f.game_state = g.valid ? ::espn::state_name(g.state) : "NOT_FOUND";
   f.team_abbr = g.team_abbr;
-  f.team_score = g.team_score;
+  f.team_score = ::espn::board_team_score(g);
   f.opponent_abbr = g.opp_abbr;
-  f.opponent_score = g.opp_score;
+  f.opponent_score = ::espn::board_opp_score(g);
   f.team_logo = g.team_logo;
   f.opponent_logo = g.opp_logo;
   f.possession = g.possession;
@@ -5295,18 +5297,34 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
     ::espn::RowOptions ro;
     ro.win_chance = this->win_chance_on() && win_due;
     ro.last_play = this->ticker_last_play();
-    ::espn::fill_row_lines(f.row, g, this->row_hold_, ro, playing);
+    // The read that filled the board may have come another way than the two
+    // polls; a repeat of the same read changes nothing.
+    if (playing)
+      this->stories_.read(g, millis());
+    const ::espn::Story *story = this->stories_.find(g);
+    if (playing && g.sport == ::espn::Sport::BASKETBALL)
+      ::espn::fill_story_rows(f.row, g, story, ro, this->row_hold_.timeout);
+    else
+      ::espn::fill_row_lines(f.row, g, ro, playing);
     // Hockey's one line (shots and the last goal, sport_hockey.cpp) on the same row.
     if (g.sport == ::espn::Sport::HOCKEY && g.state == GameState::IN && f.row.n == 0)
       f.row.add(f.situation, 0xFFFFFF);
-    std::string news = ::espn::row_news(g, this->row_hold_);
-    if (news != this->row_news_) {
-      this->row_news_ = news;
-      // A basket cleared by one it didn't name is no news.
-      if (!news.empty())
-        this->row_news_n_++;
+    // A new down, a break, a story or a play: the row turns to it at once.
+    std::string news = ::espn::row_news(g, this->row_hold_.timeout);
+    const uint32_t told = story != nullptr ? story->news() : 0;
+    const uint32_t play = story != nullptr && f.row.play_at < f.row.n ? story->play_news() : this->row_play_n_;
+    if (news != this->row_news_ || told != this->row_story_n_) {
+      this->row_jump_ = 0;
+      this->row_news_n_++;
+    } else if (play != this->row_play_n_) {
+      this->row_jump_ = f.row.play_at;
+      this->row_news_n_++;
     }
+    this->row_news_ = news;
+    this->row_story_n_ = told;
+    this->row_play_n_ = play;
     f.row.news = this->row_news_n_;
+    f.row.jump = this->row_jump_;
   }
   f.team_color = ::espn::parse_color(g.team_color);
   f.opponent_color = ::espn::parse_color(g.opp_color);
@@ -5373,6 +5391,7 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   opts.row_win = wide && this->win_chance_on();
   opts.win_due = playing && this->win_swing_.ticker;
   opts.row_timeout = wide;
+  opts.row_sets = wide;
   if (this->row_hold_.event_id == g.event_id) {
     opts.held_play = this->row_hold_.play.c_str();
     opts.held_break = this->row_hold_.timeout;
@@ -5443,6 +5462,7 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
       f.message = this->recap_message_;
     } else if (this->live_fallback_ && saved != nullptr) {
       showing = "No live " + league_word + "games, showing " + saved->abbr + " | ";
+      f.row.notice = true;
       f.status_text = showing + f.status_text;
       f.ha_status_text = showing + f.ha_status_text;
     } else if (!g.valid || g.state == GameState::NOT_FOUND) {
@@ -5459,14 +5479,17 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   if (!why.empty()) {
     f.status_text = showing + why;
     f.ha_status_text = showing + why;
+    f.row.notice = true;
     f.message = why;
   }
   if (this->prefs2_.mode == (uint8_t) Mode::FAVORITES && this->fav_.empty() && this->sport_list_() == 0 &&
       !this->demo_playing_()) {
+    f.row.notice = true;
     f.status_text = "Favorites: add teams in the app or on the page | " + f.status_text;
     f.ha_status_text = "Favorites: add teams in the app or on the page | " + f.ha_status_text;
   }
   if (this->misses_ >= 3 && !this->demo_playing_()) {
+    f.row.notice = true;
     if (!this->ever_polled_good_()) {
       // Nothing has ever come back, so there is no age to quote. Saying "no
       // update for 1 min" here was wrong however long the panel had been
@@ -5485,6 +5508,7 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
   // Once a day while a release waits (update_nudge.h). A game going live
   // takes it off at once, not at the next tick.
   if (this->nudge_on_ && !this->followed_game_live_() && !this->demo_playing_()) {
+    f.row.notice = true;
     std::string ready = std::string(::espn::update_nudge_text(this->update_important_)) + " | ";
     f.status_text = ready + f.status_text;
   }
@@ -5502,6 +5526,7 @@ void GamedayComponent::emit_(const ::espn::Splash &splash) {
       }
     }
     if (!ip.empty()) {
+      f.row.notice = true;
       std::string pick = "Pick a team in the Game Day app or at " + ip + " | ";
       f.status_text = pick + f.status_text;
       f.ha_status_text = pick + f.ha_status_text;
@@ -5687,8 +5712,7 @@ void GamedayComponent::clock_next_line_(UpdateFields &f, const GameSnapshot &g) 
   const GameSnapshot &g = this->game_;
   if (g.valid && g.state == GameState::IN)
     return CountdownCard::NONE;
-  int64_t start = this->custom_start_();
-  bool custom = this->card_on(::espn::Card::CUSTOM) && start != 0 && now < start + ::espn::kDayS;
+  bool custom = this->card_on(::espn::Card::CUSTOM) && this->countdown_.ymd != 0 && now < this->custom_end_();
   // After the game's clock keeps the screen between games; the owner's own
   // countdown and the weather still get their turns.
   bool next = this->countdown_on() && !this->wake_clock_ && !this->wake_fx_ && g.valid && g.state == GameState::PRE && !g.time_tbd &&
@@ -5715,15 +5739,11 @@ void GamedayComponent::clock_next_line_(UpdateFields &f, const GameSnapshot &g) 
 }
 
 int64_t GamedayComponent::custom_start_() const {
-  uint32_t ymd = this->countdown_.ymd;
-  if (ymd == 0)
-    return 0;
-  ESPTime t{};
-  t.year = ymd / 10000;
-  t.month = ymd / 100 % 100;
-  t.day_of_month = ymd % 100;
-  t.recalc_timestamp_local();
-  return t.timestamp > 0 ? (int64_t) t.timestamp : 0;
+  return ::espn::countdown_day_start(this->countdown_.ymd, utc_offset_at);
+}
+
+int64_t GamedayComponent::custom_end_() const {
+  return ::espn::countdown_day_end(this->countdown_.ymd, utc_offset_at);
 }
 
 void GamedayComponent::countdown_fields_(UpdateFields &f) {
@@ -5753,7 +5773,7 @@ void GamedayComponent::countdown_fields_(UpdateFields &f) {
     color = g.team_color;
   } else {
     f.countdown_at = this->custom_start_();
-    f.countdown_end = f.countdown_at + ::espn::kDayS;
+    f.countdown_end = this->custom_end_();
     std::string name = panel_text(this->countdown_.name);
     f.next_line = name.empty() ? ::espn::countdown_day_label(this->countdown_.ymd) : name;
   }
@@ -6648,7 +6668,7 @@ bool GamedayComponent::recap_job_(Job &j, int64_t tnow) {
   for (uint8_t i = 0; i < ::espn::kLeagueCount; i++) {
     if (!(leagues & ::espn::recap_bit(i)))
       continue;
-    if (this->recap_back_[i].back_due(::espn::espn_day(tnow, i), ::espn::recap_count(this->recap_days_, i),
+    if (this->recap_back_[::espn::game_league_slot(i)].back_due(::espn::espn_day(tnow, i), ::espn::recap_count(this->recap_days_, i),
                                       j.recap_day)) {
       j.need_recap = true;
       j.recap_forward = false;
@@ -6661,7 +6681,8 @@ bool GamedayComponent::recap_job_(Job &j, int64_t tnow) {
   for (uint8_t i = 0; i < ::espn::kLeagueCount; i++) {
     if (!(leagues & ::espn::recap_bit(i)))
       continue;
-    if (this->recap_fwd_[i].fwd_due(::espn::espn_day(tnow, i), this->recap_fwd_next_[i], tnow, j.recap_day)) {
+    const size_t slot = ::espn::game_league_slot(i);
+    if (this->recap_fwd_[slot].fwd_due(::espn::espn_day(tnow, i), this->recap_fwd_next_[slot], tnow, j.recap_day)) {
       j.need_recap = true;
       j.recap_forward = true;
       j.recap_league = i;
@@ -6673,9 +6694,10 @@ bool GamedayComponent::recap_job_(Job &j, int64_t tnow) {
 
 void GamedayComponent::apply_recap_job_() {
   Job &j = this->job_;
-  if (j.recap_league >= ::espn::kLeagueCount)
-    return;
   uint8_t i = j.recap_league;
+  const size_t slot = ::espn::game_league_slot(i);
+  if (slot >= ::espn::kGameLeagueCount)
+    return;
   int64_t tnow = (int64_t) this->time_->timestamp_now();
   int32_t today = ::espn::espn_day(tnow, i);
   if (!j.recap_ok) {
@@ -6688,20 +6710,20 @@ void GamedayComponent::apply_recap_job_() {
   if (j.recap_forward) {
     bool found = j.next_kickoff > tnow;
     if (found) {
-      this->recap_fwd_next_[i] = j.next_kickoff;
+      this->recap_fwd_next_[slot] = j.next_kickoff;
       // The game the Next card names. The scan keeps a college day's ranked
       // games first, so the first kickoff may not be among them.
-      this->recap_fwd_match_[i].clear();
+      this->recap_fwd_match_[slot].clear();
       for (const auto &p : j.pending)
         if (p.kickoff_epoch == j.next_kickoff) {
-          this->recap_fwd_match_[i] = ::espn::recap_matchup(p);
+          this->recap_fwd_match_[slot] = ::espn::recap_matchup(p);
           break;  // the first one kept at that time: best ranked, then ESPN's order
         }
     }
-    if (!this->recap_fwd_[i].fwd_read(today, found)) {
+    if (!this->recap_fwd_[slot].fwd_read(today, found)) {
       ESP_LOGI(TAG, "No %s kickoff in the next week", ::espn::recap_league_word(i));
-      this->recap_fwd_next_[i] = 0;
-      this->recap_fwd_match_[i].clear();
+      this->recap_fwd_next_[slot] = 0;
+      this->recap_fwd_match_[slot].clear();
     }
   } else {
     ::espn::RecapDay d;
@@ -6709,8 +6731,8 @@ void GamedayComponent::apply_recap_job_() {
     d.day = j.recap_day;
     d.finals.assign(std::make_move_iterator(j.finals.begin()), std::make_move_iterator(j.finals.end()));
     ::espn::recap_merge(this->recap_days_, std::move(d));
-    this->recap_back_[i].back_read(today, ::espn::recap_count(this->recap_days_, i));
-    if (this->recap_back_[i].step == ::espn::RecapWalk::kDone)
+    this->recap_back_[slot].back_read(today, ::espn::recap_count(this->recap_days_, i));
+    if (this->recap_back_[slot].step == ::espn::RecapWalk::kDone)
       ESP_LOGI(TAG, "Recent %s finals: %u", ::espn::recap_league_word(i),
                (unsigned) ::espn::recap_count(this->recap_days_, i));
   }
@@ -6734,10 +6756,11 @@ int64_t GamedayComponent::recap_next_kickoff_(std::string *matchup) const {
   for (uint8_t i = 0; i < ::espn::kLeagueCount; i++) {
     if (!(leagues & ::espn::recap_bit(i)))
       continue;
-    int64_t k = this->recap_fwd_next_[i];
+    const size_t slot = ::espn::game_league_slot(i);
+    int64_t k = this->recap_fwd_next_[slot];
     if (k > tnow && (best == 0 || k < best)) {
       best = k;
-      match = this->recap_fwd_match_[i];
+      match = this->recap_fwd_match_[slot];
     }
   }
   if (best != 0 && best == this->recap_scan_next_)
@@ -7312,10 +7335,10 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
   game["l"] = ::espn::league_key((League) league);
   game["ta"] = g.team_abbr;
   game["ti"] = g.team_id;
-  game["ts"] = g.team_score;
+  game["ts"] = ::espn::board_team_score(g);
   game["oa"] = g.opp_abbr;
   game["oi"] = g.opp_id;
-  game["os"] = g.opp_score;
+  game["os"] = ::espn::board_opp_score(g);
   game["tr"] = g.team_record;
   game["or"] = g.opp_record;
   game["p"] = g.possession;
@@ -7387,8 +7410,8 @@ void GamedayComponent::rebuild_state_(const UpdateFields *f) {
         o["tbd"] = true;
       o["oi"] = e.game.opp_id;
       o["oa"] = e.game.opp_abbr;
-      o["ts"] = e.game.team_score;
-      o["os"] = e.game.opp_score;
+      o["ts"] = ::espn::board_team_score(e.game);
+      o["os"] = ::espn::board_opp_score(e.game);
       o["tv"] = e.game.tv;
       o["detail"] = e.game.short_detail;
       o["done"] = e.game.completed;
@@ -7744,6 +7767,10 @@ void GamedayComponent::send_test_event_() {
       case ::espn::Sport::BASKETBALL:
         e.play = "score";
         e.points = 3;
+        break;
+      case ::espn::Sport::VOLLEYBALL:
+        e.play = "set";
+        e.points = 1;
         break;
       default:
         e.play = "touchdown";

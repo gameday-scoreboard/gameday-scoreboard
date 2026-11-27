@@ -50,6 +50,10 @@ In both apps the Board follows the device page's Home tab:
 When **Showing** is on **Effects** and the panel has [effect playlists](/using/effects/#effect-playlists), **Effect playlist** shows under the effect controls, as on the device page's Home tab. Pick one to play it from the top, or **None** to stop it. While one plays, the picker names it. Picking an effect, palette, speed or intensity yourself stops it, and the panel keeps your pick. You make and change effect playlists on the device page's **Customize** tab.
 :::
 
+:::note[Coming in the next app update]
+On Android, when **Showing** is on **Weather**, the line under it says the page stays up until you pick another one and names the place its forecast is for. With no town set, it asks you to set your town first, in **Display > Weather**. It shows once the panel runs firmware with the Weather page.
+:::
+
 If the app loses its connection to the panel for a moment while the panel still answers, **Reconnecting…** shows at the top of the Board until it's back. If the panel doesn't answer at all, the Board says **Can't reach** and the panel's name, with what to check.
 
 When the panel shows its thermometer or plug in the corner, the Board shows the same words under the game, **Running warm** or **Power dipped**, with what to do. There's nothing to press: it goes when the panel's icon does. See [Icons in the corner](/help/panel-messages/#icons-in-the-corner).
@@ -74,6 +78,10 @@ In the chooser's **On now** tab, a search that matches none of today's games lis
 
 :::note[Coming in the next app update]
 Each league tab in the chooser starts with that league's games today, under the same headings as **On now**, with all of the league's teams after them under a **Teams** heading. Tap a side to add that team. **Final** and **Postponed or canceled** start folded, with a count, like **Final (3)**; tap the heading to open one. A league with no games today shows just its teams. A search still lists teams from every league, with no games.
+:::
+
+:::note[Coming in the next app update]
+On iPhone, the chooser has an **NCAAW** tab for women's college basketball and an **NCAAVB** tab for women's college volleyball, with every Division I team in each, once the panel runs firmware with them. Both leagues are in **Live games**, a playlist's **Sports** and the remote buttons' lists too. During a volleyball match the Board shows the points in the set being played, with the set and the sets won under them, like "Set 3 1-1". At the final it shows the sets, like 3-1.
 :::
 
 - **Playing** and **Playlists**, for groups of your favorites. See [Playlists](/using/favorites/#playlists).
@@ -123,6 +131,10 @@ On Android, **Forget** on the network the panel is on says what happens before y
 :::
 
 :::note[Coming in the next app update]
+On Android, **Add network** under Wi-Fi networks in **Device** lists the networks the panel can see, strongest first, with how strong each signal is, as on the device page. It leaves out the network the panel is on, marks the ones it already knows **Saved** and an open one **Open**. Tap one to fill in its name, then enter the password, or leave it blank for an open one. Type the name of a hidden network instead. **Look again** looks once more. The list shows once the panel runs firmware that sends it. See [Wi-Fi](/using/wifi/#add-a-network-from-the-device-page).
+:::
+
+:::note[Coming in the next app update]
 The iPhone app gets the **Celebrations** choice too, so it's in both apps: **Full**, **Subtle** or **Off**, above **Opponent scores too** in **Celebrations** under **Display**, as on Android. It shows once the panel runs firmware with that setting.
 :::
 
@@ -163,7 +175,15 @@ On iPhone and Android, **After the game** also has **Show the Smart board**: you
 :::
 
 :::note[Coming in the next app update]
+On iPhone, **After the game** also has **Show the weather**: the [Weather](/using/weather/) page between games, until the **Turns on** time before your next game. **Turns on** shows with it too. It shows once the panel runs firmware with the Weather page.
+:::
+
+:::note[Coming in the next app update]
 On iPhone and Android, **After the game** also has **Show effects**: the effect the Effects page is set to, whenever no game of yours is on, until the **Turns on** time before your next game. See [Between games](/using/effects/#between-games).
+:::
+
+:::note[Coming in the next app update]
+On Android, **After the game** also has **Show flights** and **Show the weather**: the [Flights](/using/flights/) page or the [Weather](/using/weather/) page between games, until the **Turns on** time before your next game. **Turns on** shows with them too. Each shows once the panel runs firmware with that page.
 :::
 
 On iPhone and Android, **Customize** has **Pictures** after the message card, like the device page: the pictures on your panel, each with **Delete**, and **Add a picture**, which picks from your phone's photos. A photo is shrunk to fit the panel and a GIF up to 128 by 64 pixels goes as it is (see [Pictures](/using/pictures/)). It shows once the panel runs firmware with pictures.

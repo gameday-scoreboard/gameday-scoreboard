@@ -24,6 +24,7 @@ You control the panel from three places. The **Game Day app** sets it up and cha
 - [Basketball: NBA, WNBA and college](/using/basketball/)
 - [Hockey: NHL](/using/hockey/)
 - [Soccer: MLS and the Premier League](/using/soccer/)
+- [Volleyball: women's college](/using/volleyball/)
 - [The ticker](/using/ticker/): the scrolling line along the bottom.
 - [Panel sizes and layouts](/using/panel-sizes/): one 64x64 panel, or a 128x64 display.
 - [WizMote remote](/using/remote/): pairing and what each button does.

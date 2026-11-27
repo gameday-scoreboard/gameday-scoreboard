@@ -45,7 +45,7 @@
 #include "flights_page.h"
 #include "fx_playlists.h"
 #include "game_leaders.h"
-#include "row_text.h"
+#include "story_rows.h"
 #include "guard.h"
 #include "ha_events.h"
 #include "board_text.h"
@@ -247,7 +247,7 @@ class GamedaySelect : public select::Select, public Component {
 //                                    beta=0/1 (follow the beta channel; release builds only)
 //                                    lists=Name=nfl:6,nba:6;Name2=... (every playlist, playlists.h)
 //                                    list=0-16 (the playlist Favorite teams plays, 0 = every favorite)
-//                                    sport=football|baseball|basketball|hockey|soccer|none (a sport row)
+//                                    sport=football|baseball|basketball|hockey|soccer|volleyball|none (a sport row)
 //                                    a playlist's teams may carry its options as @ tokens (playlists.h ListOpt)
 //                                    fxlists=Name=Matrix|Party|128|128|15,...,@shuffle;Name2=... (every
 //                                    effect playlist, fx_playlists.h) fxlist=0-4 (play one, 0 stops)
@@ -1650,8 +1650,10 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   ::espn::CountdownCard countdown_card_(int64_t now) const;
   void countdown_fields_(UpdateFields &f);
   void countdown_tick_();
-  // The custom countdown's day: when it starts, local time; 0 with none set.
+  // The custom countdown's day: the local midnights it starts and ends at.
+  // Only with a day set (countdown_.ymd not 0).
   int64_t custom_start_() const;
+  int64_t custom_end_() const;
   ::espn::CountdownCard countdown_shown_{::espn::CountdownCard::NONE};
   uint32_t countdown_tick_ms_{0};
   // A new local day redraws the board, whose kickoff labels ("Tomorrow 1:30
@@ -1756,14 +1758,19 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   // The board game's scores as they went by, for the halftime and final
   // tickers (score_log.h): about 1 KB of internal RAM for two games.
   ::espn::ScoreLog score_log_;
-  // The board game's last basket, held until the next (row_text.h), and
-  // the row's news so far: the page jumps to the lead line when it changes.
+  // The board game's last play worth reading (row_text.h), and the row's
+  // news so far: the page jumps to the news when it changes.
   ::espn::RowHold row_hold_;
+  // What is happening in each basketball game on the board or among the
+  // favorites (story.h), in PSRAM.
+  ::espn::StoryBook stories_;
   // When the board game's win chance shows (row_text.h WinSwing): after a
   // score, a turnover or a big move, not on every turn of the row.
   ::espn::WinSwing win_swing_;
   std::string row_news_;
   uint32_t row_news_n_{0};
+  uint32_t row_story_n_{0}, row_play_n_{0};
+  uint8_t row_jump_{0};
   // Hockey's latest goal per game, for the row under the clock: four games,
   // about 200 bytes (sport_hockey.cpp).
   ::espn::GoalHolds goal_holds_;
@@ -2006,14 +2013,13 @@ class GamedayComponent : public Component, public AsyncWebHandler {
   uint32_t recap_step_ms_{0};  // when the card on the board went up, 0 = none yet
   std::string recap_message_, recap_ticker_;
   int64_t recap_scan_next_{0};  // the last scan's next kickoff today, 0 for none
-  static_assert(::espn::leagues_fill_indexes(), "League values must run 0 to kLeagueCount - 1");
-  // Per league, indexed by League: the walks back and forward (recap.h,
+  // Per league, at its game_league_slot: the walks back and forward (recap.h,
   // RecapWalk), the kickoff the forward walk found (0 for none) and its
   // fwd_match: "BOS at NYR", the first game on that day.
-  ::espn::RecapWalk recap_back_[::espn::kLeagueCount];
-  ::espn::RecapWalk recap_fwd_[::espn::kLeagueCount];
-  int64_t recap_fwd_next_[::espn::kLeagueCount]{};
-  std::string recap_fwd_match_[::espn::kLeagueCount];
+  ::espn::RecapWalk recap_back_[::espn::kGameLeagueCount];
+  ::espn::RecapWalk recap_fwd_[::espn::kGameLeagueCount];
+  int64_t recap_fwd_next_[::espn::kGameLeagueCount]{};
+  std::string recap_fwd_match_[::espn::kGameLeagueCount];
   bool recap_job_(Job &j, int64_t tnow);  // fills j with the next walk step, if any
   void apply_recap_job_();
   void recap_absorb_(const Job &j, int64_t tnow);  // a scan's finals, games to come and next kickoff

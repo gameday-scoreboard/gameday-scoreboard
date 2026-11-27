@@ -26,11 +26,11 @@ Before a football game the ticker also shows each team's passing leader for the 
 
 Baseball, basketball and hockey get season leaders too, after the odds: the home run leader in baseball, like "Bauers 26 HR", with the RBIs when the same player leads both, like "Machado 30 HR 91 RBI"; points per game in basketball, like "Allen 21.0 PPG"; and points in hockey, like "McDavid 9 pts".
 
-On a single 64x64 panel, which has no room for the records on the board, the ticker shows both teams' records before the game, in football, baseball, basketball and hockey. They come after the kickoff time, or after the playoff series in baseball, basketball and hockey when there is one.
+On a single 64x64 panel, which has no room for the records on the board, the ticker shows both teams' records before the game, in football, baseball, basketball, hockey and volleyball. They come after the kickoff time, or after the playoff series in baseball, basketball and hockey when there is one.
 
 At halftime and the final, with **Last play** on, the ticker also runs the scoring plays the panel saw in football, baseball and hockey, like "Q1 7:12 Lamb 12 yd pass, DAL 7-0", and at the final ESPN's headline for the game when it has one. The board takes turns with the line score at the same time, whatever the switches say.
 
-Each sport's page has the details: [Football](/using/football/), [Baseball](/using/baseball/), [Basketball](/using/basketball/), [Hockey](/using/hockey/) and [Soccer](/using/soccer/).
+Each sport's page has the details: [Football](/using/football/), [Baseball](/using/baseball/), [Basketball](/using/basketball/), [Hockey](/using/hockey/), [Soccer](/using/soccer/) and [Volleyball](/using/volleyball/).
 
 Accented letters in names, like the é in Atlético or the ñ in Peña, show in the pre-game ticker and the panel's other small text. Two places still spell names without them, like "Martinez" for Martínez: soccer's ticker once the match starts, and the scoring plays and headline at halftime and the final.
 
@@ -52,7 +52,7 @@ On a 128-wide board the row under the clock says some things itself, so the tick
 
 - In football, while **Win chance** under **Live pictures** is on, the win chance is on the row and not in the ticker. With it off, or on a single 64x64 panel, the ticker keeps it. Either way it shows only when it's news: when the game comes up, after a touchdown, field goal or turnover, and when ESPN's number moves 10 points or more since it last showed, no more than once every 3 minutes for a move. In the ticker it then stays until the next play, so a full pass reaches it.
 - In football, the down and distance, like "3rd & 4 at FIU 31", is on the field strip (or the row under the clock with **Field strip** off), so the ticker leaves it out and goes straight to the last play. A single 64x64 panel keeps it in the ticker.
-- In basketball, a timeout as the last play, like "Official TV Timeout", isn't shown: the stopped clock already says it, and the ticker shows the series or both teams' shooting and rebounds until the next play. A single 64x64 panel keeps it in the ticker.
+- In basketball, the ticker's row belongs to the row above it during the game: the two tell one story at a time, with the team and what's happening over the detail (see [Basketball](/using/basketball/#during-the-game)). The ticker is back at halftime, before and after the game, and when it has a notice to show. A single 64x64 panel keeps the ticker.
 
 A **Pre-game season leaders** switch, on to start, adds the season leaders before the game. Like the situation switches, it shows only on a panel that follows a sport it covers: football, baseball, basketball or hockey.
 

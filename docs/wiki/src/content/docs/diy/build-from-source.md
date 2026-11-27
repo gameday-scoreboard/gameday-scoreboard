@@ -11,11 +11,11 @@ Build from the YAML when your board has its own pins, when you want to change so
 
 | Path | What it holds |
 | --- | --- |
-| `firmware/gameday.yaml` | The release build for the MoonHub75 pinout. It names the build and picks the pin map. |
+| `firmware/gameday-waveshare.yaml` | The release build for the Waveshare ESP32-S3-RGB-Matrix, the board in a Game Day Scoreboard. It names the build and picks the pin map. |
+| `firmware/gameday.yaml` | The release build for the MoonHub75 pinout. |
 | `firmware/gameday-2panel.yaml` | `gameday.yaml` starting two panels wide. The installer offers it for a 128x64 display. |
 | `firmware/gameday-scoreboard75.yaml` | The build for the early scoreboard75 test controllers. Not for DIY boards. |
-| `firmware/gameday-waveshare.yaml` | The build for the Waveshare ESP32-S3 RGB Matrix. Not tested on a panel yet. |
-| `firmware/controllers/` | One pin map per board: `moonhub75.yaml`, `scoreboard75.yaml` and `waveshare.yaml`. |
+| `firmware/controllers/` | One pin map per board: `waveshare.yaml`, `moonhub75.yaml` and `scoreboard75.yaml`. |
 | `firmware/gameday-common.yaml` | Everything else: version, update feed, Wi-Fi, the panel layout, the pages and settings. Don't build it directly. |
 | `firmware/pages/` | The pages drawn on the panel. The scoreboard is `gameday-live.yaml`. |
 | `firmware/web/` | The device page. |

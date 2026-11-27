@@ -48,11 +48,12 @@
     mcbb: { prefix: "NCAAM", tab: "NCAAM", name: "Men's college basketball", path: "basketball/mens-college-basketball", logo: "ncaa", byId: true, scan: "groups=50&limit=300&" },
     wcbb: { prefix: "NCAAW", tab: "NCAAW", name: "Women's college basketball", path: "basketball/womens-college-basketball", logo: "ncaa", byId: true, scan: "groups=50&limit=300&" },
     nhl: { prefix: "NHL", tab: "NHL", name: "NHL", path: "hockey/nhl", logo: "nhl", byId: false, scan: "" },
+    wcvb: { prefix: "NCAAVB", tab: "NCAAVB", name: "Women's college volleyball", path: "volleyball/womens-college-volleyball", logo: "ncaa", byId: true, scan: "" },
   };
   const lgInfo = (lg) => LEAGUES[lg] || LEAGUES.nfl;
   // The league's name in "All NFL live games": its short name, or the long one
   // where the short one is an abbreviation owners don't use.
-  const liveName = (lg) => ({ ncaa: "college football", mcbb: "men's college basketball", wcbb: "women's college basketball", epl: "Premier League" }[lg] || lgInfo(lg).name);
+  const liveName = (lg) => ({ ncaa: "college football", mcbb: "men's college basketball", wcbb: "women's college basketball", wcvb: "women's college volleyball", epl: "Premier League" }[lg] || lgInfo(lg).name);
   // "NFL", "NFL and NHL", "NFL, NBA and NHL".
   const andJoin = (a) => (a.length > 1 ? a.slice(0, -1).join(", ") + " and " + a[a.length - 1] : a[0] || "");
   const logoUrl = (league, id, abbr) => {
@@ -2158,7 +2159,7 @@
     ? { mode: 4, list: 0, sport: listPick.value.slice(2) }
     : { mode: 4, list: listPick.value, sport: "none" });
   // The Remote card's four pickers, one per button: its own favorite and the
-  // playlists, then a group per sport, all nine leagues: its leagues' live
+  // playlists, then a group per sport, every league: its leagues' live
   // games, the sport row (My football teams), its favorites and "Another
   // NFL team", which opens a second list with every team in that league.
   // Then All favorites, Live games, Nothing, and the pages under Showing. A
@@ -2169,7 +2170,7 @@
   // which change the button, not what the panel is playing.
   let remoteSig = "";
   const SPORTS = [["football", "Football"], ["baseball", "Baseball"], ["basketball", "Basketball"],
-    ["hockey", "Hockey"], ["soccer", "Soccer"]];
+    ["hockey", "Hockey"], ["soccer", "Soccer"], ["volleyball", "Volleyball"]];
   // A team's league, from a target or key ("team:nfl:6", "nfl:6").
   const keyLeague = (k) => k.replace(/^team:/, "").split(":")[0];
   // Which league's team list a button shows ("" for none): one picked with
@@ -2187,7 +2188,7 @@
       const mine = real.filter((k) => lgs.includes(keyLeague(k)));
       if (rows.includes(sp) && mine.length >= 2) opts.push(["sport:" + sp, "My " + sp + " teams"]);
       for (const k of mine) { const t = teamByKey(k); opts.push(["team:" + k, t ? t[3] : k]); }
-      for (const lg of lgs) opts.push(["pick:" + lg, "Another " + (lg === "ncaa" || lg === "mcbb" || lg === "wcbb" ? liveName(lg) : lgInfo(lg).name) + " team..."]);
+      for (const lg of lgs) opts.push(["pick:" + lg, "Another " + (lg === "ncaa" || lg === "mcbb" || lg === "wcbb" || lg === "wcvb" ? liveName(lg) : lgInfo(lg).name) + " team..."]);
       groups.push([title, opts]);
     }
     groups.push(["", [["all", "All favorites"], ["live", "Live games"], ["none", "Nothing"]]]);

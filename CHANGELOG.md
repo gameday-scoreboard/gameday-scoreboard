@@ -37,7 +37,7 @@ through `update_important` in the panel's state.
 
 ## Unreleased
 
-A new Flights page shows the planes over your home, women's college basketball joins the panel, it can play an effect whenever no game of yours is on, a Game Day card shows a QR code between games, and Add network lists nearby Wi-Fi.
+A new Flights page shows the planes over your home, women's college basketball and volleyball join in, it can play an effect whenever no game of yours is on, a Game Day card shows a QR code between games, and Add network lists nearby Wi-Fi.
 
 ### ⚠️ Heads up
 
@@ -54,10 +54,11 @@ A new Flights page shows the planes over your home, women's college basketball j
 - 🌤️ **Weather** under **Showing** and **After the game**: your town's weather now and the next 6 hours with the chance of rain, and a bottom line with your live game's score, rain on the way, or the next sunrise or sunset
 - ✨ **Show effects** under **After the game**: the panel plays your effect whenever no game of yours is on, between seasons too, and goes back to the scoreboard before your next game
 - 🏀 Women's college basketball joins the panel: follow any Division I women's team from the new NCAAW tab in the team picker
+- 🏐 Women's college volleyball joins the panel: the big numbers are the set's points, with the set and the sets won under them; follow any Division I team from the new NCAAVB tab in the team picker
 
 ### 🐛 Fixes
 
-- 🏀 Basketball's bottom rows say whose points they show ("USA Langsy 21 pts"), a timeout brings the team stats instead of the records again, players checking in stay off the ticker, and a missed shot no longer shows as the last basket
+- 🏀 Basketball's two bottom rows tell the story on a 128-wide board: the team in its color and what's happening ("USA on a 16-2 run", "FAMU scoreless 4:24", "FAMU three"), then the detail under it ("7 of 13 shooting", "Baker Jr. from 25 feet"). A timeout brings both teams' shooting, threes and rebounds, players checking in stay off the ticker, and a missed shot no longer shows as the last basket
 - 🏙️ A town typed for Weather while the Clock, Effects or the Smart board is up is looked up right away, instead of waiting for the Scoreboard
 - ⏱️ The device page's Weather card counts up the time since the last forecast read, where it could stay on the same number for minutes
 - 🎆 Editing the effect playlist that's playing no longer starts it over: it carries on from the effect that's up, and a change to that effect shows at once
@@ -69,6 +70,7 @@ A new Flights page shows the planes over your home, women's college basketball j
 - 🖼️ Adding a picture while a message card on **Whenever no game is on** holds the board says so, and which setting to change, instead of "It's up next"
 - 🌇 The kickoff forecast shows a sun until sunset at the stadium, where a 5 PM kickoff in early November could show a moon with the sun still up
 - 🌙 Night mode turned off for a night that starts between 1 and 2 AM stays off when the clocks go back, instead of the panel dimming again at the second start
+- 📅 **Date countdown** reads **Today** until midnight on the day the clocks go back, and is gone at midnight on the day they go forward, where it ended an hour early or late
 
 ## v2026.11.5
 
